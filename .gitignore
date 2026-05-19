@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Secrets
+.env
+
+# SSL / Certbot
+certbot/
+
+# Docker volumes
+pgdata/
+redisdata/

@@ -1,0 +1,279 @@
+@import "tailwindcss";
+
+/* ══════════════════════════════════════════════════════════════
+   JINNTELL — Система тем (CSS-переменные)
+   ══════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="noir-gold"] {
+  --bg-deep: #0a0a0a;
+  --bg-mid: #141414;
+  --bg-surface: #1a1a1a;
+  --bg-glass: rgba(255, 215, 0, 0.04);
+  --bg-glass-hover: rgba(255, 215, 0, 0.08);
+  --bg-glass-border: rgba(255, 215, 0, 0.15);
+
+  --text-primary: #f5f0e8;
+  --text-secondary: rgba(245, 240, 232, 0.65);
+  --text-muted: rgba(245, 240, 232, 0.4);
+
+  --accent: #d4a843;
+  --accent-bright: #f0c95c;
+  --accent-glow: rgba(212, 168, 67, 0.4);
+  --accent-glow-strong: rgba(212, 168, 67, 0.7);
+
+  --bubble-user: rgba(212, 168, 67, 0.15);
+  --bubble-agent: rgba(255, 255, 255, 0.07);
+  --bubble-border: rgba(255, 215, 0, 0.1);
+
+  --panel-bg: rgba(10, 10, 10, 0.92);
+  --panel-border: rgba(255, 215, 0, 0.12);
+
+  --bar-bg: rgba(20, 20, 20, 0.95);
+  --bar-border: rgba(255, 215, 0, 0.1);
+
+  --danger: #e74c3c;
+  --success: #2ecc71;
+  --online: #2ecc71;
+  --offline: #666;
+}
+
+[data-theme="cyberpunk"] {
+  --bg-deep: #0a0014;
+  --bg-mid: #120024;
+  --bg-surface: #1a0033;
+  --bg-glass: rgba(0, 255, 255, 0.04);
+  --bg-glass-hover: rgba(0, 255, 255, 0.08);
+  --bg-glass-border: rgba(0, 255, 255, 0.15);
+  --text-primary: #e0f7ff;
+  --text-secondary: rgba(224, 247, 255, 0.65);
+  --text-muted: rgba(224, 247, 255, 0.4);
+  --accent: #00e5ff;
+  --accent-bright: #40efff;
+  --accent-glow: rgba(0, 229, 255, 0.4);
+  --accent-glow-strong: rgba(0, 229, 255, 0.7);
+  --bubble-user: rgba(0, 229, 255, 0.12);
+  --bubble-agent: rgba(255, 255, 255, 0.06);
+  --bubble-border: rgba(0, 255, 255, 0.1);
+  --panel-bg: rgba(10, 0, 20, 0.92);
+  --panel-border: rgba(0, 255, 255, 0.12);
+  --bar-bg: rgba(18, 0, 36, 0.95);
+  --bar-border: rgba(0, 255, 255, 0.1);
+}
+
+[data-theme="arctic"] {
+  --bg-deep: #f0f4f8;
+  --bg-mid: #e8eef4;
+  --bg-surface: #ffffff;
+  --bg-glass: rgba(100, 160, 220, 0.06);
+  --bg-glass-hover: rgba(100, 160, 220, 0.12);
+  --bg-glass-border: rgba(100, 160, 220, 0.2);
+  --text-primary: #1a2a3a;
+  --text-secondary: rgba(26, 42, 58, 0.65);
+  --text-muted: rgba(26, 42, 58, 0.4);
+  --accent: #2e86c1;
+  --accent-bright: #3498db;
+  --accent-glow: rgba(46, 134, 193, 0.3);
+  --accent-glow-strong: rgba(46, 134, 193, 0.5);
+  --bubble-user: rgba(46, 134, 193, 0.1);
+  --bubble-agent: rgba(0, 0, 0, 0.04);
+  --bubble-border: rgba(46, 134, 193, 0.15);
+  --panel-bg: rgba(255, 255, 255, 0.95);
+  --panel-border: rgba(100, 160, 220, 0.2);
+  --bar-bg: rgba(240, 244, 248, 0.98);
+  --bar-border: rgba(100, 160, 220, 0.15);
+}
+
+[data-theme="midnight"] {
+  --bg-deep: #080c18;
+  --bg-mid: #0e1530;
+  --bg-surface: #141e40;
+  --bg-glass: rgba(100, 140, 255, 0.05);
+  --bg-glass-hover: rgba(100, 140, 255, 0.1);
+  --bg-glass-border: rgba(100, 140, 255, 0.15);
+  --text-primary: #d0d8f0;
+  --text-secondary: rgba(208, 216, 240, 0.65);
+  --text-muted: rgba(208, 216, 240, 0.4);
+  --accent: #6c8cff;
+  --accent-bright: #8ca8ff;
+  --accent-glow: rgba(108, 140, 255, 0.35);
+  --accent-glow-strong: rgba(108, 140, 255, 0.6);
+  --bubble-user: rgba(108, 140, 255, 0.12);
+  --bubble-agent: rgba(255, 255, 255, 0.06);
+  --bubble-border: rgba(100, 140, 255, 0.1);
+  --panel-bg: rgba(8, 12, 24, 0.92);
+  --panel-border: rgba(100, 140, 255, 0.12);
+  --bar-bg: rgba(14, 21, 48, 0.95);
+  --bar-border: rgba(100, 140, 255, 0.1);
+}
+
+[data-theme="sunset"] {
+  --bg-deep: #1a0a0a;
+  --bg-mid: #2a1010;
+  --bg-surface: #331818;
+  --bg-glass: rgba(255, 140, 50, 0.05);
+  --bg-glass-hover: rgba(255, 140, 50, 0.1);
+  --bg-glass-border: rgba(255, 140, 50, 0.15);
+  --text-primary: #f5e6d8;
+  --text-secondary: rgba(245, 230, 216, 0.65);
+  --text-muted: rgba(245, 230, 216, 0.4);
+  --accent: #ff8c32;
+  --accent-bright: #ffa54c;
+  --accent-glow: rgba(255, 140, 50, 0.35);
+  --accent-glow-strong: rgba(255, 140, 50, 0.6);
+  --bubble-user: rgba(255, 140, 50, 0.12);
+  --bubble-agent: rgba(255, 255, 255, 0.06);
+  --bubble-border: rgba(255, 140, 50, 0.1);
+  --panel-bg: rgba(26, 10, 10, 0.92);
+  --panel-border: rgba(255, 140, 50, 0.12);
+  --bar-bg: rgba(42, 16, 16, 0.95);
+  --bar-border: rgba(255, 140, 50, 0.1);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Базовые стили
+   ══════════════════════════════════════════════════════════════ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+}
+
+.glass {
+  background: var(--bg-glass);
+  border: 1px solid var(--bg-glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass:hover {
+  background: var(--bg-glass-hover);
+}
+
+.glow {
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.glow-strong {
+  box-shadow: 0 0 30px var(--accent-glow-strong);
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--accent-glow);
+  border-radius: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Анимации
+   ══════════════════════════════════════════════════════════════ */
+
+/* Бегущая строка ЭФИР */
+@keyframes tickerScroll {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.ticker-scroll {
+  display: inline-block;
+  animation: tickerScroll 30s linear infinite;
+  padding-left: 100%;
+}
+
+/* Появление сообщений */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Индикатор «печатает...» */
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+.typing-dot {
+  display: inline-block;
+  animation: typingBounce 1.4s ease-in-out infinite;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Placeholder для input */
+input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Пульсация микрофона (always-on) */
+@keyframes pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 25px var(--accent-glow-strong); }
+  50% { transform: scale(1.08); box-shadow: 0 0 40px var(--accent-glow-strong); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Адаптив под мобильные
+   ══════════════════════════════════════════════════════════════ */
+
+/* Мобильные устройства */
+@media (max-width: 640px) {
+  /* Нижняя панель компактнее */
+  .bottom-bar-buttons {
+    gap: 0.25rem;
+  }
+
+  /* Пузыри шире на узких экранах */
+  .chat-bubble-wrap {
+    max-width: 85% !important;
+  }
+}
+
+/* Планшеты */
+@media (max-width: 768px) {
+  /* Уменьшаем отступы чата */
+  .chat-scroll-area {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
+
+/* Safe area для iPhone (notch) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .bottom-bar-safe {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}

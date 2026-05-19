@@ -1,0 +1,1007 @@
+/**
+ * JinnTell API Client
+ * Единая точка взаимодействия фронтенда с бэкендом
+ */
+
+/**
+ * Production: NEXT_PUBLIC_API_URL="" → relative URLs (nginx проксирует /api/ и /ws/)
+ * Dev: NEXT_PUBLIC_API_URL не задан → fallback на http://localhost:8000
+ */
+const API_BASE = process.env.NEXT_PUBLIC_API_URL !== undefined
+  ? process.env.NEXT_PUBLIC_API_URL
+  : "http://localhost:8000";
+
+/** Хранение JWT токена */
+let authToken: string | null = null;
+
+export function setToken(token: string | null) {
+  authToken = token;
+  if (token) {
+    localStorage.setItem("jinntell_token", token);
+  } else {
+    localStorage.removeItem("jinntell_token");
+  }
+}
+
+export function getToken(): string | null {
+  if (authToken) return authToken;
+  if (typeof window !== "undefined") {
+    authToken = localStorage.getItem("jinntell_token");
+  }
+  return authToken;
+}
+
+/** Базовый fetch с авторизацией */
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, body.detail || "Ошибка сервера");
+  }
+
+  return res.json();
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  AUTH — Регистрация / Вход / Восстановление / OAuth
+// ═══════════════════════════════════════════════
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user_id: number;
+  display_name: string;
+  is_admin: boolean;
+}
+
+export interface MessageResponse {
+  message: string;
+  debug_code?: string;
+}
+
+export interface SendSMSResponse {
+  message: string;
+  debug_code?: string;
+}
+
+/** Регистрация (телефон + пароль + email) */
+export async function register(data: {
+  phone: string;
+  password: string;
+  email?: string;
+  display_name?: string;
+}): Promise<TokenResponse> {
+  const res = await apiFetch<TokenResponse>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  setToken(res.access_token);
+  _saveSession(res);
+  return res;
+}
+
+/** Вход (телефон + пароль) */
+export async function login(phone: string, password: string): Promise<TokenResponse> {
+  const res = await apiFetch<TokenResponse>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ phone, password }),
+  });
+  setToken(res.access_token);
+  _saveSession(res);
+  return res;
+}
+
+/** Запрос кода восстановления на email */
+export function forgotPassword(email: string): Promise<MessageResponse> {
+  return apiFetch("/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+/** Сброс пароля по коду */
+export async function resetPassword(data: {
+  email: string;
+  code: string;
+  new_password: string;
+}): Promise<TokenResponse> {
+  const res = await apiFetch<TokenResponse>("/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  setToken(res.access_token);
+  _saveSession(res);
+  return res;
+}
+
+/** OAuth: ВК */
+export function getOAuthVKUrl(): string {
+  return `${API_BASE}/api/auth/oauth/vk`;
+}
+
+/** OAuth: Яндекс */
+export function getOAuthYandexUrl(): string {
+  return `${API_BASE}/api/auth/oauth/yandex`;
+}
+
+/** OAuth: Telegram (отправка данных виджета) */
+export async function oauthTelegram(data: Record<string, unknown>): Promise<TokenResponse> {
+  const res = await apiFetch<TokenResponse>("/api/auth/oauth/telegram", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  setToken(res.access_token);
+  _saveSession(res);
+  return res;
+}
+
+/** Сохраняем сессию после успешной авторизации */
+function _saveSession(res: TokenResponse) {
+  localStorage.setItem("jinntell_session", JSON.stringify({
+    loggedIn: true,
+    userId: res.user_id,
+    displayName: res.display_name,
+    isAdmin: res.is_admin,
+    expires: Date.now() + 30 * 24 * 60 * 60 * 1000,
+  }));
+}
+
+// Legacy SMS (backward compat)
+
+/** Отправить SMS-код (legacy) */
+export function sendSMS(phone: string): Promise<SendSMSResponse> {
+  return apiFetch("/api/auth/send-sms", {
+    method: "POST",
+    body: JSON.stringify({ phone }),
+  });
+}
+
+/** Проверить SMS-код → получить JWT (legacy) */
+export async function verifySMS(phone: string, code: string): Promise<TokenResponse> {
+  const data = await apiFetch<TokenResponse>("/api/auth/verify-sms", {
+    method: "POST",
+    body: JSON.stringify({ phone, code }),
+  });
+  setToken(data.access_token);
+  _saveSession(data);
+  return data;
+}
+
+// ═══════════════════════════════════════════════
+//  AGENTS — Город Агентов
+// ═══════════════════════════════════════════════
+
+export interface AgentOut {
+  id: number;
+  uid?: string;
+  name: string;
+  profession: string;
+  brand: string;
+  agent_type: string;
+  description: string;
+  color: string;
+  jinntell_link?: string;
+  rating: number;
+  rating_count: number;
+  greeting?: string;
+  owner_id?: number;
+}
+
+export interface AgentCreate {
+  name: string;
+  profession: string;
+  brand?: string;
+  description?: string;
+  color?: string;
+  agent_type?: string;
+  system_prompt?: string;
+  llm_model?: string;
+  greeting?: string;
+}
+
+/** Полные данные агента для настройки (ЛК бизнеса + личный агент) */
+export interface AgentFullOut extends AgentOut {
+  // AI
+  system_prompt?: string;
+  llm_model: string;
+  is_active: boolean;
+  created_at?: string;
+  // Голос
+  voice_id?: string;
+  voice_speed: number;
+  voice_pitch: number;
+  // Внешность
+  appearance_preset?: string;
+  appearance_face?: string;
+  appearance_hair?: string;
+  appearance_skin?: string;
+  appearance_body?: string;
+  // Одежда
+  outfit_style?: string;
+  outfit_top?: string;
+  outfit_bottom?: string;
+  outfit_shoes?: string;
+  outfit_accessory?: string;
+  // Манеры
+  manner_style: string;
+  manner_temperament: string;
+  manner_humor: boolean;
+  manner_emoji_use: boolean;
+  // Знания (Обучение)
+  knowledge_text?: string;
+  knowledge_urls?: string;
+  knowledge_files?: string;
+  // Скилы
+  skills_text?: string;
+  // Отмена (исключения)
+  exclusions_text?: string;
+  // Режимы
+  mode_walk_enabled: boolean;
+  mode_walk_rules?: string;
+  mode_walk_context?: string;
+  mode_shopping_enabled: boolean;
+  mode_shopping_rules?: string;
+  mode_shopping_context?: string;
+  mode_drive_enabled: boolean;
+  mode_drive_rules?: string;
+  mode_drive_context?: string;
+  mode_chat_enabled: boolean;
+  mode_chat_rules?: string;
+  mode_chat_context?: string;
+  mode_work_enabled: boolean;
+  mode_work_rules?: string;
+  mode_work_context?: string;
+  // Contractor
+  contractor_id?: number;
+}
+
+/** Обновление настроек персонажа агента */
+export interface AgentPersonaUpdate {
+  // AI / текст
+  description?: string;
+  greeting?: string;
+  system_prompt?: string;
+  llm_model?: string;
+  // Голос
+  voice_id?: string;
+  voice_speed?: number;
+  voice_pitch?: number;
+  // Внешность
+  appearance_preset?: string;
+  appearance_face?: string;
+  appearance_hair?: string;
+  appearance_skin?: string;
+  appearance_body?: string;
+  // Одежда
+  outfit_style?: string;
+  outfit_top?: string;
+  outfit_bottom?: string;
+  outfit_shoes?: string;
+  outfit_accessory?: string;
+  // Манеры
+  manner_style?: string;
+  manner_temperament?: string;
+  manner_humor?: boolean;
+  manner_emoji_use?: boolean;
+  // Знания (Обучение)
+  knowledge_text?: string;
+  knowledge_urls?: string;
+  knowledge_files?: string;
+  // Скилы
+  skills_text?: string;
+  // Отмена
+  exclusions_text?: string;
+  // Режимы
+  mode_walk_enabled?: boolean;
+  mode_walk_rules?: string;
+  mode_walk_context?: string;
+  mode_shopping_enabled?: boolean;
+  mode_shopping_rules?: string;
+  mode_shopping_context?: string;
+  mode_drive_enabled?: boolean;
+  mode_drive_rules?: string;
+  mode_drive_context?: string;
+  mode_chat_enabled?: boolean;
+  mode_chat_rules?: string;
+  mode_chat_context?: string;
+  mode_work_enabled?: boolean;
+  mode_work_rules?: string;
+  mode_work_context?: string;
+}
+
+export interface AgentListResponse {
+  agents: AgentOut[];
+  total: number;
+  business_count: number;
+  citizen_count: number;
+  system_count: number;
+}
+
+/** Каталог агентов */
+export function getAgents(params?: {
+  search?: string;
+  profession?: string;
+  agent_type?: string;
+}): Promise<AgentListResponse> {
+  const query = new URLSearchParams();
+  if (params?.search) query.set("search", params.search);
+  if (params?.profession) query.set("profession", params.profession);
+  if (params?.agent_type) query.set("agent_type", params.agent_type);
+  const qs = query.toString();
+  return apiFetch(`/api/agents${qs ? `?${qs}` : ""}`);
+}
+
+/** Карточка агента */
+export function getAgent(id: number): Promise<AgentOut> {
+  return apiFetch(`/api/agents/${id}`);
+}
+
+/** Мои агенты (созданные мной) — полные данные для настройки */
+export function getMyAgents(): Promise<AgentFullOut[]> {
+  return apiFetch("/api/agents/my");
+}
+
+/** Обновить настройки агента (бизнес / личный) */
+export function updateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {
+  return apiFetch(`/api/agents/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  ADMIN API
+// ═══════════════════════════════════════════════
+
+export interface AgentDetailOut extends AgentOut {
+  system_prompt?: string;
+  llm_model: string;
+  is_active: boolean;
+  visibility: string;
+  created_at?: string;
+}
+
+export interface AdminStats {
+  agents: { total: number; core: number; system: number; business: number; citizen: number; specialist: number };
+  users: { total: number };
+}
+
+export interface AdminUser {
+  id: number;
+  phone: string;
+  display_name: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  city?: string;
+  is_admin: boolean;
+  is_online: boolean;
+  is_verified: boolean;
+  vk_linked: boolean;
+  telegram_linked: boolean;
+  yandex_linked: boolean;
+  created_at?: string;
+}
+
+/** Админ: все агенты */
+export function adminGetAgents(params?: { search?: string; agent_type?: string; include_inactive?: boolean }): Promise<AgentDetailOut[]> {
+  const q = new URLSearchParams();
+  if (params?.search) q.set("search", params.search);
+  if (params?.agent_type) q.set("agent_type", params.agent_type);
+  if (params?.include_inactive) q.set("include_inactive", "true");
+  const qs = q.toString();
+  return apiFetch(`/api/admin/agents${qs ? `?${qs}` : ""}`);
+}
+
+/** Админ: карточка агента */
+export function adminGetAgent(id: number): Promise<AgentDetailOut> {
+  return apiFetch(`/api/admin/agents/${id}`);
+}
+
+/** Админ: создать агента */
+export function adminCreateAgent(data: AgentCreate, ownerId?: number): Promise<AgentDetailOut> {
+  const q = ownerId ? `?owner_id=${ownerId}` : "";
+  return apiFetch(`/api/admin/agents${q}`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/** Админ: обновить агента */
+export function adminUpdateAgent(id: number, data: Partial<AgentCreate>): Promise<AgentDetailOut> {
+  return apiFetch(`/api/admin/agents/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/** Админ: привязать агента к бизнесу */
+export function adminAssignAgent(id: number, ownerId: number | null): Promise<AgentDetailOut> {
+  const q = ownerId !== null ? `?owner_id=${ownerId}` : "";
+  return apiFetch(`/api/admin/agents/${id}/assign${q}`, { method: "PATCH" });
+}
+
+/** Админ: удалить агента */
+export function adminDeleteAgent(id: number, hard = false): Promise<void> {
+  return apiFetch(`/api/admin/agents/${id}?hard=${hard}`, { method: "DELETE" });
+}
+
+/** Админ: восстановить агента */
+export function adminRestoreAgent(id: number): Promise<AgentDetailOut> {
+  return apiFetch(`/api/admin/agents/${id}/restore`, { method: "PATCH" });
+}
+
+/** Админ: пользователи */
+export function adminGetUsers(search?: string): Promise<AdminUser[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : "";
+  return apiFetch(`/api/admin/users${q}`);
+}
+
+/** Админ: статистика */
+export function adminGetStats(): Promise<AdminStats> {
+  return apiFetch("/api/admin/stats");
+}
+
+/** LLM статус */
+export interface LLMProviderInfo {
+  connected: boolean;
+  key: string;
+  model: string;
+}
+export interface LLMStatus {
+  active_provider: string;
+  active_model: string;
+  default_provider: string;
+  providers: {
+    openai: LLMProviderInfo;
+    gemini: LLMProviderInfo;
+    groq: LLMProviderInfo;
+  };
+}
+export function adminGetLLMStatus(): Promise<LLMStatus> {
+  return apiFetch("/api/admin/llm-status");
+}
+
+// System settings
+export interface SystemSettings {
+  sms_provider: string;
+  sms_ru_api_key: string;
+  sms_ru_api_key_set: boolean;
+  smsc_login: string;
+  smsc_password_set: boolean;
+  debug_mode: boolean;
+  embedding_provider: string;
+  jina_api_key: string;
+  jina_api_key_set: boolean;
+}
+
+export function adminGetSystemSettings(): Promise<SystemSettings> {
+  return apiFetch("/api/admin/system-settings");
+}
+
+export function adminUpdateSystemSettings(data: Record<string, unknown>): Promise<{ status: string; updated: string[] }> {
+  return apiFetch("/api/admin/system-settings", { method: "PATCH", body: JSON.stringify(data) });
+}
+
+// Butler (Дворецкий) settings
+export interface ButlerSettings {
+  provider: string;
+  model: string;
+  system_prompt: string;
+  available_models: { value: string; label: string; group: string }[];
+}
+
+export interface ButlerTestResult {
+  reply: string;
+  provider: string;
+  model: string;
+  response_time_ms: number;
+}
+
+/** Админ: настройки Дворецкого */
+export function adminGetButlerSettings(): Promise<ButlerSettings> {
+  return apiFetch("/api/admin/butler-settings");
+}
+
+/** Админ: обновить настройки Дворецкого */
+export function adminUpdateButlerSettings(data: { provider?: string; model?: string; system_prompt?: string }): Promise<ButlerSettings> {
+  return apiFetch("/api/admin/butler-settings", { method: "PATCH", body: JSON.stringify(data) });
+}
+
+/** Админ: тест Дворецкого */
+export function adminTestButler(message: string): Promise<ButlerTestResult> {
+  return apiFetch("/api/admin/butler-test", { method: "POST", body: JSON.stringify({ message }) });
+}
+
+
+// ═══════════════════════════════════════════════
+//  ADMIN: CORE AGENTS
+// ═══════════════════════════════════════════════
+
+/** Админ: core-агенты (Мэл, Агент Админ, Агент Контента, Агент Железа) */
+export function adminGetCoreAgents(): Promise<AgentDetailOut[]> {
+  return apiFetch("/api/admin/core-agents");
+}
+
+// ═══════════════════════════════════════════════
+//  ADMIN: SYSTEM INFO
+// ═══════════════════════════════════════════════
+
+export interface SystemServiceInfo {
+  status: string;
+  error?: string;
+  memory_used?: string;
+  url?: string;
+  collections?: number;
+  collection_names?: string[];
+  total_users?: number;
+  provider?: string;
+  model?: string;
+  key_set?: boolean;
+  key?: string;
+  sms_ru_key_set?: boolean;
+  smsc_configured?: boolean;
+  debug_mode?: boolean;
+}
+
+export interface SystemInfo {
+  services: {
+    redis: SystemServiceInfo;
+    qdrant: SystemServiceInfo;
+    postgres: SystemServiceInfo;
+    embedding: SystemServiceInfo;
+    sms: SystemServiceInfo;
+  };
+  llm_providers: Record<string, { connected: boolean; key: string; model: string }>;
+  default_llm_provider: string;
+}
+
+/** Админ: полная информация о системе */
+export function adminGetSystemInfo(): Promise<SystemInfo> {
+  return apiFetch("/api/admin/system-info");
+}
+
+// ═══════════════════════════════════════════════
+//  ADMIN: MEL SETTINGS (ex-Butler)
+// ═══════════════════════════════════════════════
+
+export interface MelSettings {
+  provider: string;
+  model: string;
+  system_prompt: string;
+  available_models: { value: string; label: string; group: string }[];
+}
+
+export interface MelTestResult {
+  reply: string;
+  provider: string;
+  model: string;
+  response_time_ms: number;
+}
+
+/** Админ: настройки Мэла */
+export function adminGetMelSettings(): Promise<MelSettings> {
+  return apiFetch("/api/admin/mel-settings");
+}
+
+/** Админ: обновить настройки Мэла */
+export function adminUpdateMelSettings(data: { provider?: string; model?: string; system_prompt?: string }): Promise<MelSettings> {
+  return apiFetch("/api/admin/mel-settings", { method: "PATCH", body: JSON.stringify(data) });
+}
+
+/** Админ: тест Мэла */
+export function adminTestMel(message: string): Promise<MelTestResult> {
+  return apiFetch("/api/admin/mel-test", { method: "POST", body: JSON.stringify({ message }) });
+}
+
+// ═══════════════════════════════════════════════
+//  ADMIN: CONTRACTORS
+// ═══════════════════════════════════════════════
+
+export interface ContractorOut {
+  id: number;
+  uid?: string;
+  company_name: string;
+  inn?: string;
+  legal_address?: string;
+  actual_address?: string;
+  bank_details?: string;
+  director_name?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  login: string;
+  balance_kopecks: number;
+  discount_percent: number;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface ContractorCreateData {
+  company_name: string;
+  login: string;
+  password: string;
+  inn?: string;
+  legal_address?: string;
+  actual_address?: string;
+  bank_details?: string;
+  director_name?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  discount_percent?: number;
+}
+
+export interface ContractorUpdateData {
+  company_name?: string;
+  inn?: string;
+  legal_address?: string;
+  actual_address?: string;
+  bank_details?: string;
+  director_name?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  discount_percent?: number;
+  is_active?: boolean;
+}
+
+/** Админ: список контрагентов */
+export function adminGetContractors(search?: string): Promise<ContractorOut[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : "";
+  return apiFetch(`/api/admin/contractors${q}`);
+}
+
+/** Админ: создать контрагента */
+export function adminCreateContractor(data: ContractorCreateData): Promise<ContractorOut> {
+  return apiFetch("/api/admin/contractors", { method: "POST", body: JSON.stringify(data) });
+}
+
+/** Админ: карточка контрагента */
+export function adminGetContractor(id: number): Promise<ContractorOut> {
+  return apiFetch(`/api/admin/contractors/${id}`);
+}
+
+/** Админ: обновить контрагента */
+export function adminUpdateContractor(id: number, data: ContractorUpdateData): Promise<ContractorOut> {
+  return apiFetch(`/api/admin/contractors/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+/** Админ: деактивировать контрагента */
+export function adminDeleteContractor(id: number): Promise<void> {
+  return apiFetch(`/api/admin/contractors/${id}`, { method: "DELETE" });
+}
+
+/** Админ: пополнить баланс */
+export function adminAddBalance(id: number, amountKopecks: number): Promise<ContractorOut> {
+  return apiFetch(`/api/admin/contractors/${id}/add-balance`, {
+    method: "POST",
+    body: JSON.stringify({ amount_kopecks: amountKopecks }),
+  });
+}
+
+/** Админ: привязать агента к контрагенту */
+export function adminAssignAgentToContractor(contractorId: number, agentId: number): Promise<AgentDetailOut> {
+  return apiFetch(`/api/admin/contractors/${contractorId}/assign-agent`, {
+    method: "POST",
+    body: JSON.stringify({ agent_id: agentId }),
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  CONTRACTOR AUTH (ЛК бизнеса)
+// ═══════════════════════════════════════════════
+
+export interface ContractorTokenResponse {
+  access_token: string;
+  token_type: string;
+  contractor_id: number;
+  company_name: string;
+}
+
+/** Contractor token storage */
+let contractorToken: string | null = null;
+
+export function setContractorToken(token: string | null) {
+  contractorToken = token;
+  if (token) {
+    localStorage.setItem("jinntell_contractor_token", token);
+  } else {
+    localStorage.removeItem("jinntell_contractor_token");
+  }
+}
+
+export function getContractorToken(): string | null {
+  if (contractorToken) return contractorToken;
+  if (typeof window !== "undefined") {
+    contractorToken = localStorage.getItem("jinntell_contractor_token");
+  }
+  return contractorToken;
+}
+
+/** Fetch с contractor token */
+async function contractorFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getContractorToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> || {}),
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, body.detail || "Ошибка сервера");
+  }
+  return res.json();
+}
+
+/** Контрагент: вход по логину/паролю */
+export async function contractorLogin(login: string, password: string): Promise<ContractorTokenResponse> {
+  const data = await apiFetch<ContractorTokenResponse>("/api/contractor/login", {
+    method: "POST",
+    body: JSON.stringify({ login, password }),
+  });
+  setContractorToken(data.access_token);
+  localStorage.setItem("jinntell_contractor_session", JSON.stringify({
+    contractorId: data.contractor_id,
+    companyName: data.company_name,
+  }));
+  return data;
+}
+
+/** Контрагент: профиль */
+export function contractorGetMe(): Promise<ContractorOut> {
+  return contractorFetch("/api/contractor/me");
+}
+
+/** Контрагент: мои агенты */
+export function contractorGetAgents(): Promise<AgentFullOut[]> {
+  return contractorFetch("/api/contractor/agents");
+}
+
+/** Контрагент: обновить агента */
+export function contractorUpdateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {
+  return contractorFetch(`/api/contractor/agents/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/** Контрагент: выход */
+export function contractorLogout() {
+  setContractorToken(null);
+  localStorage.removeItem("jinntell_contractor_session");
+}
+
+// ═══════════════════════════════════════════════
+//  ADMIN: RAG (Парсер + Индексация)
+// ═══════════════════════════════════════════════
+
+export interface RAGSource {
+  id: number;
+  agent_id: number;
+  source_type: string;
+  url: string;
+  title: string;
+  layer: string;
+  last_parsed_at?: string;
+  last_change_found_at?: string;
+  chunks_count: number;
+  schedule: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface RAGParseLog {
+  id: number;
+  agent_id: number;
+  source_id: number;
+  action: string;
+  article_number?: string;
+  chunks_added: number;
+  chunks_updated: number;
+  chunks_deleted: number;
+  error_message?: string;
+  parsed_at?: string;
+}
+
+export interface RAGStats {
+  total_chunks_db: number;
+  total_chunks_qdrant: number;
+  collection_exists: boolean;
+  vector_dimensions: number;
+  sources_count: number;
+}
+
+export interface RAGSearchResult {
+  text: string;
+  score: number;
+  article_number?: string;
+  layer: string;
+  source_title: string;
+}
+
+/** RAG: получить источники агента */
+export function adminGetRAGSources(agentId: number): Promise<RAGSource[]> {
+  return apiFetch(`/api/admin/rag/sources/${agentId}`);
+}
+
+/** RAG: добавить источник */
+export function adminAddRAGSource(data: {
+  agent_id: number; url: string; title?: string; source_type?: string; layer?: string; schedule?: string;
+}): Promise<RAGSource> {
+  return apiFetch("/api/admin/rag/sources", { method: "POST", body: JSON.stringify(data) });
+}
+
+/** RAG: удалить источник */
+export function adminDeleteRAGSource(sourceId: number): Promise<void> {
+  return apiFetch(`/api/admin/rag/sources/${sourceId}`, { method: "DELETE" });
+}
+
+/** RAG: запустить парсинг */
+export function adminParseSource(sourceId: number): Promise<{ status: string; chunks_parsed: number; chunks_indexed: number }> {
+  return apiFetch("/api/admin/rag/parse", { method: "POST", body: JSON.stringify({ source_id: sourceId }) });
+}
+
+/** RAG: индексировать сырой текст */
+export function adminParseRawText(data: {
+  agent_id: number; text: string; title?: string; layer?: string;
+}): Promise<{ status: string; source_id: number; chunks_parsed: number; chunks_indexed: number }> {
+  return apiFetch("/api/admin/rag/parse-text", { method: "POST", body: JSON.stringify(data) });
+}
+
+/** RAG: тестовый поиск */
+export function adminSearchRAG(data: {
+  agent_id: number; query: string; top_k?: number; layer?: string;
+}): Promise<RAGSearchResult[]> {
+  return apiFetch("/api/admin/rag/search", { method: "POST", body: JSON.stringify(data) });
+}
+
+/** RAG: статистика агента */
+export function adminGetRAGStats(agentId: number): Promise<RAGStats> {
+  return apiFetch(`/api/admin/rag/stats/${agentId}`);
+}
+
+/** RAG: лог парсинга */
+export function adminGetRAGLog(agentId: number): Promise<RAGParseLog[]> {
+  return apiFetch(`/api/admin/rag/log/${agentId}`);
+}
+
+/** RAG: удалить все chunks агента */
+export function adminDeleteAllRAGChunks(agentId: number): Promise<void> {
+  return apiFetch(`/api/admin/rag/chunks/${agentId}`, { method: "DELETE" });
+}
+
+// ═══════════════════════════════════════════════
+//  CHAT — История + отправка
+// ═══════════════════════════════════════════════
+
+export interface MessageOut {
+  id: number;
+  room: string;
+  sender_type: string;
+  sender_user_id?: number;
+  sender_agent_id?: number;
+  sender_name: string;
+  text: string;
+  created_at: string;
+}
+
+/** История сообщений */
+export function getChatHistory(room: string = "general", limit: number = 50): Promise<MessageOut[]> {
+  return apiFetch(`/api/chat/history?room=${room}&limit=${limit}`);
+}
+
+/** Отправить сообщение (HTTP fallback) */
+export function sendMessage(room: string, text: string): Promise<MessageOut> {
+  return apiFetch("/api/chat/send", {
+    method: "POST",
+    body: JSON.stringify({ room, text }),
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  USER — Профиль
+// ═══════════════════════════════════════════════
+
+export interface UserProfile {
+  id: number;
+  phone: string;
+  display_name: string;
+  jinntell_link?: string;
+  theme: string;
+  avatar_color: string;
+  is_online: boolean;
+  is_admin: boolean;
+  bio?: string;
+  // Персональные данные
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  birth_date?: string;
+  city?: string;
+  about?: string;
+  // OAuth привязки
+  vk_linked?: boolean;
+  telegram_linked?: boolean;
+  yandex_linked?: boolean;
+}
+
+/** Профиль текущего пользователя */
+export function getMe(): Promise<UserProfile> {
+  return apiFetch("/api/users/me");
+}
+
+/** Обновить профиль */
+export function updateMe(data: Partial<UserProfile>): Promise<UserProfile> {
+  return apiFetch("/api/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  WEBSOCKET — Реалтайм чат
+// ═══════════════════════════════════════════════
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function connectChat(room: string, onMessage: (msg: any) => void): WebSocket | null {
+  const token = getToken();
+  if (!token) return null;
+
+  // В production: тот же хост, wss://; в dev: ws://localhost:8000
+  let wsUrl: string;
+  if (API_BASE && API_BASE !== "") {
+    const wsBase = API_BASE.replace(/^http/, "ws");
+    wsUrl = `${wsBase}/ws/chat/${room}?token=${token}`;
+  } else if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    wsUrl = `${proto}://${window.location.host}/ws/chat/${room}?token=${token}`;
+  } else {
+    return null;
+  }
+  const ws = new WebSocket(wsUrl);
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage(data);
+    } catch { /* ignore parse errors */ }
+  };
+
+  return ws;
+}
+
+// ═══════════════════════════════════════════════
+//  HEALTH
+// ═══════════════════════════════════════════════
+
+export function healthCheck(): Promise<{ status: string; service: string; version: string }> {
+  return apiFetch("/api/health");
+}
