@@ -167,10 +167,12 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
         type={showPassword ? "text" : "password"}
         placeholder={placeholder}
         value={value}
-        onChange={(e) => { onChange(e.target.value); setError(""); }}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setError("")}
         onKeyDown={(e) => onSubmit && handleKeyDown(e, onSubmit)}
         className="flex-1 px-4 py-3.5 bg-transparent outline-none text-base"
-        style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }}
+        style={{ color: "var(--text-primary)", caretColor: "var(--accent)", WebkitAppearance: "none" }}
+        autoComplete="off"
       />
       <button
         onClick={() => setShowPassword(!showPassword)}
@@ -200,7 +202,8 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
       type={type}
       placeholder={placeholder}
       value={value}
-      onChange={(e) => { onChange(e.target.value); setError(""); }}
+      onChange={(e) => onChange(e.target.value)}
+      onFocus={() => setError("")}
       onKeyDown={(e) => onSubmit && handleKeyDown(e, onSubmit)}
       className="w-full px-4 py-3.5 rounded-xl outline-none text-base"
       style={{

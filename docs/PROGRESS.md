@@ -1034,3 +1034,33 @@ frontend/src/services/api.ts          ← MelSettings, SystemInfo, adminGetCoreA
 - jinntell.io ✅
 - jinncity.com ✅
 - jinncity.ru ✅
+
+### Сессия 21 (Май 2026)
+- [x] **Генеральная уборка сервера:**
+  - Удалены /root/aimigo/, /root/myelinks/, /root/talkie-talkie-online/
+  - Единственный проект: /root/jinntell/
+  - Новый GitHub репо: talkietalkieonline-architect/jinntell.git
+- [x] **Ребрендинг MyeLinks -> JinnTell** (массовая замена во всех файлах)
+- [x] **Домен jinntell.ru привязан + SSL** (Let's Encrypt до 17 авг 2026)
+- [x] **Docker 7 контейнеров healthy** на https://jinntell.ru
+- [x] **На Маке: ~/jinntell/start_claude.md**
+- [x] **Персонализация помощника (Backend готов):**
+  - User model: assistant_name, assistant_gender, assistant_voice, assistant_photo
+  - SQL миграции выполнены
+  - Типы: male/female/animal/other + голоса по типу
+  - Фото помощника: base64 в PostgreSQL
+- [ ] **Frontend build BROKEN** — SettingsModal.tsx нужен фикс
+
+### Безопасность (заметки):
+- Qdrant: данные разделены по agent_id, пользователи не имеют прямого доступа
+- Фото помощника: base64 в PostgreSQL (MVP), позже S3/MinIO
+- API ключи: только в .env, не в коде, не в Git
+- Рекомендация: после запуска сменить SSH пароль, ротировать ключи API
+
+### Что дальше (Сессия 22)
+1. ПОЧИНИТЬ frontend build (SettingsModal.tsx через scp)
+2. Завершить UI настроек помощника
+3. Ребрендинг UI: Агенты -> Джинны
+4. fastembed — локальные embeddings
+5. Красивые URL
+6. Коммит + пуш в GitHub

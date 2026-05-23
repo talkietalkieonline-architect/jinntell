@@ -2,7 +2,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,6 +25,13 @@ class User(Base):
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     about: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Персонализация помощника
+    assistant_name: Mapped[str] = mapped_column(String(100), default="Джим")
+    assistant_gender: Mapped[str] = mapped_column(String(20), default="male")  # male / female / animal / other
+    assistant_voice: Mapped[str] = mapped_column(String(50), default="male_low")
+    assistant_photo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # base64 data URL
+    user_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # legacy, не используется
+
     # OAuth — привязка внешних аккаунтов
     vk_id: Mapped[Optional[str]] = mapped_column(String(50), unique=True, nullable=True)
     telegram_id: Mapped[Optional[str]] = mapped_column(String(50), unique=True, nullable=True)
@@ -43,7 +50,7 @@ class User(Base):
     theme: Mapped[str] = mapped_column(String(50), default="noir-gold")
     avatar_color: Mapped[str] = mapped_column(String(20), default="#d4a843")
 
-    # SMS-верификация (legacy, оставлено для совместимости)
+    # SMS-верификация (legacy)
     sms_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     sms_code_expires: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

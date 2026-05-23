@@ -45,9 +45,11 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 AVAILABLE_MODELS = [
     {"value": "deepseek-chat", "label": "DeepSeek V3 (рекомендуемый)", "group": "DeepSeek"},
     {"value": "deepseek-reasoner", "label": "DeepSeek R1 (рассуждающий)", "group": "DeepSeek"},
-    {"value": "google/gemma-3-27b-it:free", "label": "Gemma 3 27B (бесплатная)", "group": "OpenRouter бесплатные"},
-    {"value": "google/gemma-3-12b-it:free", "label": "Gemma 3 12B (бесплатная)", "group": "OpenRouter бесплатные"},
-    {"value": "google/gemma-3-4b-it:free", "label": "Gemma 3 4B (бесплатная)", "group": "OpenRouter бесплатные"},
+    {"value": "nvidia/nemotron-3-super-120b-a12b:free", "label": "Nemotron 3 Super 120B (бесплатная)", "group": "OpenRouter бесплатные"},
+    {"value": "openai/gpt-oss-120b:free", "label": "GPT-OSS 120B (бесплатная)", "group": "OpenRouter бесплатные"},
+    {"value": "google/gemma-4-31b-it:free", "label": "Gemma 4 31B (бесплатная)", "group": "OpenRouter бесплатные"},
+    {"value": "deepseek/deepseek-v4-flash:free", "label": "DeepSeek V4 Flash (бесплатная)", "group": "OpenRouter бесплатные"},
+    {"value": "qwen/qwen3-next-80b-a3b-instruct:free", "label": "Qwen3 Next 80B (бесплатная)", "group": "OpenRouter бесплатные"},
     {"value": "meta-llama/llama-3.3-70b-instruct:free", "label": "Llama 3.3 70B (бесплатная)", "group": "OpenRouter бесплатные"},
     {"value": "gpt-4o-mini", "label": "GPT-4o Mini", "group": "OpenAI"},
     {"value": "gpt-4o", "label": "GPT-4o", "group": "OpenAI"},
@@ -268,7 +270,7 @@ async def admin_list_core_agents(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_admin_user),
 ):
-    """Список core-агентов (Мэл, Агент Админ, Агент Контента, Агент Железа)"""
+    """Список core-агентов (Помощник, Агент Админ, Агент Контента, Агент Железа)"""
     result = await db.execute(
         select(Agent).where(Agent.agent_type == "core").order_by(Agent.id)
     )
@@ -418,7 +420,7 @@ async def admin_llm_status(
 async def admin_get_mel_settings(
     admin: User = Depends(get_admin_user),
 ):
-    """Текущие настройки Мэла (провайдер, модель, промпт)"""
+    """Текущие настройки Помощника (провайдер, модель, промпт)"""
     from app.core.config import settings as s
     from app.services.llm import MEL_SYSTEM_PROMPT
 
@@ -463,7 +465,7 @@ async def admin_update_mel_settings(
     body: dict = Body(...),
     admin: User = Depends(get_admin_user),
 ):
-    """Обновить настройки Мэла (provider, model, system_prompt)"""
+    """Обновить настройки Помощника (provider, model, system_prompt)"""
     from app.core.config import settings as s
     from app.services.llm import MEL_SYSTEM_PROMPT
 
@@ -508,7 +510,7 @@ async def admin_test_mel(
     body: dict = Body(...),
     admin: User = Depends(get_admin_user),
 ):
-    """Тест Мэла: отправить сообщение, получить ответ"""
+    """Тест Помощника: отправить сообщение, получить ответ"""
     from app.core.config import settings as s
     from app.services.llm import MEL_SYSTEM_PROMPT, get_llm_reply
 

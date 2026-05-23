@@ -14,7 +14,6 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 @router.get("/me", response_model=UserOut)
 async def get_me(user: User = Depends(get_current_user)):
-    """Получить профиль текущего пользователя"""
     return UserOut.from_user(user)
 
 
@@ -24,7 +23,6 @@ async def update_me(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Обновить профиль"""
     if body.display_name is not None:
         user.display_name = body.display_name
     if body.theme is not None:
@@ -46,5 +44,14 @@ async def update_me(
         user.city = body.city
     if body.about is not None:
         user.about = body.about
+    # Персонализация помощника
+    if body.assistant_name is not None:
+        user.assistant_name = body.assistant_name
+    if body.assistant_gender is not None:
+        user.assistant_gender = body.assistant_gender
+    if body.assistant_voice is not None:
+        user.assistant_voice = body.assistant_voice
+    if body.assistant_photo is not None:
+        user.assistant_photo = body.assistant_photo
     await db.flush()
     return UserOut.from_user(user)

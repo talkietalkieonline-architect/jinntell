@@ -7,7 +7,7 @@
 
 **Сервер:** 194.67.101.9 | **Логин:** root | **Пароль:** EEP9aT7WXfGyh1XO
 **Проект:** /root/jinntell/
-**Домены:** jinntell.com, jinntell.ru, jinntell.io (куплены)
+**Домены:** jinntell.ru (LIVE + SSL), jinntell.com, jinntell.io (куплены, не привязаны)
 **GitHub:** git@github.com:talkietalkieonline-architect/jinntell.git
 
 ### Как подключиться и прочитать контекст:
@@ -46,7 +46,7 @@ expect eof
 ## История ребрендинга
 - **Aimigo** → **MyeLinks** → **JinnTell** (текущее)
 - Концепция: Агенты = Джинны. Пользователь говорит с джиннами.
-- Старые проекты на сервере удалены. Единственный проект: /root/jinntell/
+- Старые проекты удалены с сервера. Единственный проект: /root/jinntell/
 
 ---
 
@@ -55,8 +55,8 @@ expect eof
 - **IP:** 194.67.101.9
 - **SSH:** root / EEP9aT7WXfGyh1XO
 - **Проект:** /root/jinntell/
-- **Домены:** jinntell.com / jinntell.ru / jinntell.io (нужно привязать)
-- **Текущий порт:** 3090 (nginx docker)
+- **Сайт:** https://jinntell.ru (LIVE, SSL Let's Encrypt до 17 авг 2026)
+- **Порт Docker nginx:** 3090 → системный nginx :443 → jinntell.ru
 
 ### Подключение через expect:
 ```bash
@@ -70,6 +70,17 @@ send \"КОМАНДА\r\"
 expect \"# \"
 send \"exit\r\"
 expect eof
+"
+```
+
+### Интерактивный SSH (для владельца):
+```bash
+expect -c "
+set timeout 30
+spawn ssh -o StrictHostKeyChecking=no root@194.67.101.9
+expect \"password:\"
+send \"EEP9aT7WXfGyh1XO\r\"
+interact
 "
 ```
 
@@ -93,12 +104,22 @@ docker compose -f docker-compose.prod.yml logs --tail 20
 ## Архитектура
 
 ```
-Docker Compose (порт 3090):
+Интернет → jinntell.ru (:443 SSL)
+  → системный nginx → :3090
+    → Docker nginx → backend/frontend
+
+Docker Compose (7 контейнеров):
   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────┐  ┌───────┐  ┌────────┐
   │  Nginx   │→ │ Frontend │  │ Backend  │→ │ PG   │  │ Redis │  │ Qdrant │
   │  :3090   │→ │  :3000   │  │  :8000   │→ │ :5432│  │ :6379 │  │ :6333  │
   └──────────┘  └──────────┘  └──────────┘  └──────┘  └───────┘  └────────┘
+  + Certbot (SSL renewal)
 ```
+
+### Безопасность данных:
+- **Qdrant**: данные разделены по agent_id. Каждый агент видит только свои чанки. Пользователи не имеют прямого доступа — только через API с фильтрацией.
+- **Фото помощника**: base64 в PostgreSQL (поле assistant_photo, до 2МБ). В будущем — S3/MinIO.
+- **API ключи**: только в .env на сервере, не в коде, не в Git.
 
 ---
 
@@ -112,7 +133,38 @@ Docker Compose (порт 3090):
 - FastAPI + async SQLAlchemy + PostgreSQL + Redis + Qdrant
 - WebSocket чат с LLM-ответами
 - 5 LLM-провайдеров: DeepSeek, OpenRouter, OpenAI, Gemini, Groq
-- RAG system (Qdrant + embeddings)
+- RAG system (Qdrant + embeddings — нужен fastembed)
+
+---
+
+## Текущее состояние (после Сессии 21)
+
+### Работает:
+- https://jinntell.ru — LIVE с SSL
+- 7 контейнеров healthy
+- Авторизация: логин/пароль + OAuth заготовки
+- Чат с Мэлом (LLM через OpenRouter/Gemma 3 27B)
+- 18 seed-агентов (4 core + 4 system + 7 business + 2 citizen)
+- Город Агентов, Мои Агенты, Контакты
+- Админка /admin (6 вкладок)
+- ЛК Контрагента
+- Центр Управления: персональные данные, настройки помощника (WIP), темы
+
+### В процессе (Сессия 21, не завершено):
+- Настройки Помощника: имя, тип (мужчина/женщина/животное/другое), голос, фото
+  - Backend готов (модель + API + миграция)
+  - Frontend: SettingsModal — build error, нужно починить
+- Ребрендинг UI: Агенты → Джинны
+
+### Нужно сделать:
+- Починить frontend build (SettingsModal)
+- fastembed (локальные embeddings, RAG без API)
+- Ребрендинг UI → Джинны
+- Красивые URL: /city/spb/slug
+- SMS production (ключ sms.ru)
+- TTS (голос джиннов)
+- Дизайн-ревизия
+- Привязать jinntell.com (редирект на jinntell.ru)
 
 ---
 
@@ -121,41 +173,19 @@ Docker Compose (порт 3090):
 1. **Проект — `/root/jinntell/`** — единственный источник правды
 2. **Экономия токенов** — не коммитить/пушить/docker compose через expect
 3. **Владелец выполняет**: git commit/push, docker compose, проверяет сайт
-4. **Claude**: пишет код, правит файлы, отправляет через expect+base64 или scp
+4. **Claude**: пишет код, правит файлы, отправляет через scp или expect+base64
 5. **Обновляй документацию** в конце каждой сессии
 6. **Не спрашивай что делать** — сам решай приоритеты как CTO
+7. **ВАЖНО**: При передаче больших TSX файлов через heredoc — спецсимволы ломают файл. Лучше использовать scp с временным файлом на Маке или base64.
 
-### Передача файлов на сервер:
-Через expect+base64:
+### Передача файлов:
 ```bash
+# Через scp (предпочтительно):
+scp файл root@194.67.101.9:/root/jinntell/путь/
+
+# Через expect+base64 (для файлов с $, `, " и т.д.):
 b64=$(base64 < "local/file.py")
 expect -c "
-  ...
-  send {echo '$b64' | base64 -d > /root/jinntell/path/file.py}
-  send \"\r\"
-  ...
+  ...send {echo '$b64' | base64 -d > /root/jinntell/path/file.py}...
 "
 ```
-
----
-
-## Текущее состояние (после Сессии 21)
-
-### Работает:
-- 7 контейнеров: postgres, redis, qdrant, backend, frontend, nginx, certbot
-- Авторизация: логин/пароль + OAuth заготовки (ВК/Яндекс/Telegram)
-- Чат с Мэлом через LLM (5 провайдеров)
-- WebSocket реалтайм
-- 4 core-агента (Мэл, Админ, Контент, Железо)
-- Город Агентов, Мои Агенты, Контакты
-- Админка /admin (6 вкладок)
-- ЛК Контрагента
-- RAG система (Qdrant, но embeddings заблокированы из РФ — нужен fastembed)
-
-### Нужно сделать:
-- Привязать домен jinntell.com + SSL
-- fastembed (локальные embeddings, без API)
-- SMS production (ключ sms.ru)
-- TTS (голос джиннов)
-- Красивые URL: /city/spb/slug
-- Дизайн-ревизия

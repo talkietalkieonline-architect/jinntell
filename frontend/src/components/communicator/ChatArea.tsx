@@ -3,7 +3,7 @@ import { useRef, useEffect, useState } from "react";
 
 export interface ChatMessage {
   id: string;
-  sender: "user" | "mel" | "butler" | "agent";
+  sender: "user" | "assistant" | "mel" | "butler" | "agent";
   name: string;
   text: string;
   color: string;
@@ -349,7 +349,7 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
 export default function ChatArea({
   messages,
   isTyping,
-  typingName = "Мэл",
+  typingName = "Джим",
   topPad = 80,
   bottomPad = 130,
   autoSpeak = false,
@@ -404,6 +404,7 @@ export default function ChatArea({
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto flex justify-center"
+        style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
       >
         {/* Сообщения прижаты к низу (как Telegram) */}
         <div className="flex flex-col justify-end min-h-full w-full" style={{ maxWidth: "620px" }}>

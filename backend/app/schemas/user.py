@@ -17,11 +17,16 @@ class UserOut(BaseModel):
     email: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    birth_date: Optional[str] = None  # ISO date string
+    birth_date: Optional[str] = None
     city: Optional[str] = None
     about: Optional[str] = None
     bio: Optional[str] = None
-    # OAuth привязки (только флаги — привязан/нет)
+    # Персонализация помощника
+    assistant_name: str = "Джим"
+    assistant_gender: str = "male"
+    assistant_voice: str = "male_low"
+    assistant_photo: Optional[str] = None
+    # OAuth привязки
     vk_linked: bool = False
     telegram_linked: bool = False
     yandex_linked: bool = False
@@ -31,7 +36,6 @@ class UserOut(BaseModel):
 
     @classmethod
     def from_user(cls, user) -> "UserOut":
-        """Build UserOut from User model with computed fields"""
         return cls(
             id=user.id,
             phone=user.phone,
@@ -48,6 +52,10 @@ class UserOut(BaseModel):
             city=user.city,
             about=user.about,
             bio=user.bio,
+            assistant_name=user.assistant_name or "Джим",
+            assistant_gender=user.assistant_gender or "male",
+            assistant_voice=user.assistant_voice or "male_low",
+            assistant_photo=user.assistant_photo,
             vk_linked=bool(user.vk_id),
             telegram_linked=bool(user.telegram_id),
             yandex_linked=bool(user.yandex_id),
@@ -63,6 +71,11 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    birth_date: Optional[str] = None  # ISO date string YYYY-MM-DD
+    birth_date: Optional[str] = None
     city: Optional[str] = None
     about: Optional[str] = None
+    # Персонализация помощника
+    assistant_name: Optional[str] = None
+    assistant_gender: Optional[str] = None
+    assistant_voice: Optional[str] = None
+    assistant_photo: Optional[str] = None

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import {
   adminGetAgent,
   adminUpdateAgent,
+  adminTestMel,
   adminGetRAGSources,
   adminAddRAGSource,
   adminDeleteRAGSource,
@@ -55,6 +56,27 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
   // Form fields (mirror of agent fields for editing)
   const [form, setForm] = useState<Record<string, unknown>>({});
 
+  // Мини-чат с агентом (для core-агентов)
+  const [chatMessages, setChatMessages] = useState<{role: "user"|"assistant"; text: string}[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: "user", text: userMsg }]);
+    setChatLoading(true);
+    try {
+      const result = await adminTestMel(userMsg);
+      setChatMessages(prev => [...prev, { role: "assistant", text: result.reply }]);
+    } catch (e) {
+      setChatMessages(prev => [...prev, { role: "assistant", text: "Ошибка: " + (e instanceof Error ? e.message : "нет ответа") }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const loadAgent = async () => {
     setLoading(true);
     try {
@@ -106,6 +128,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
   }
 
   const isSpecialist = f("agent_type") === "specialist";
+  const isCore = f("agent_type") === "core" || f("visibility") === "core";
 
   const TABS: { id: SettingsTab; label: string; icon: string }[] = [
     { id: "basic", label: "Основное", icon: "📋" },
@@ -138,10 +161,11 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
           <p className="text-gray-400 text-sm">{agent.profession} • {agent.brand} • ID:{agent.id}</p>
           <div className="flex items-center gap-3 mt-1">
             <span className={`text-xs px-2 py-0.5 rounded-full ${
+              agent.agent_type === "core" ? "bg-red-900/50 text-red-300" :
               agent.agent_type === "system" ? "bg-purple-900/50 text-purple-300" :
               agent.agent_type === "business" ? "bg-blue-900/50 text-blue-300" :
               "bg-green-900/50 text-green-300"
-            }`}>{agent.agent_type}</span>
+            }`}>{agent.agent_type === "core" ? "Core" : agent.agent_type}</span>
             {agent.is_active
               ? <span className="text-green-400 text-xs">Активен</span>
               : <span className="text-red-400 text-xs">Остановлен</span>}
@@ -170,7 +194,8 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
           <div className="flex flex-col gap-4">
             <Field label="Имя" value={f("name")} onChange={(v) => setF("name", v)} />
             <Field label="Профессия" value={f("profession")} onChange={(v) => setF("profession", v)} />
-            <Field label="Бренд" value={f("brand")} onChange={(v) => setF("brand", v)} />
+            {!isCore && <Field label="Бренд" value={f("brand")} onChange={(v) => setF("brand", v)} />}
+            {!isCore && (
             <div>
               <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Тип</label>
               <div className="flex gap-2 flex-wrap">
@@ -183,6 +208,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                 ))}
               </div>
             </div>
+            )}
             <div>
               <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Цвет</label>
               <div className="flex flex-wrap gap-2">
@@ -197,14 +223,16 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
               <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">AI Модель</label>
               <select value={f("llm_model")} onChange={(e) => setF("llm_model", e.target.value)}
                 className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
-                <optgroup label="DeepSeek">
-                  <option value="deepseek-chat">DeepSeek V3</option>
-                  <option value="deepseek-reasoner">DeepSeek R1</option>
+                <optgroup label="DeepSeek (прямой API)">
+                  <option value="deepseek-chat">DeepSeek V3 Chat</option>
+                  <option value="deepseek-reasoner">DeepSeek R1 Reasoner</option>
                 </optgroup>
                 <optgroup label="OpenRouter (бесплатные)">
-                  <option value="google/gemma-3-27b-it:free">Gemma 3 27B</option>
-                  <option value="google/gemma-3-12b-it:free">Gemma 3 12B</option>
-                  <option value="google/gemma-3-4b-it:free">Gemma 3 4B</option>
+                  <option value="nvidia/nemotron-3-super-120b-a12b:free">Nemotron 3 Super 120B</option>
+                  <option value="openai/gpt-oss-120b:free">GPT-OSS 120B</option>
+                  <option value="google/gemma-4-31b-it:free">Gemma 4 31B</option>
+                  <option value="deepseek/deepseek-v4-flash:free">DeepSeek V4 Flash</option>
+                  <option value="qwen/qwen3-next-80b-a3b-instruct:free">Qwen3 Next 80B</option>
                   <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B</option>
                 </optgroup>
                 <optgroup label="OpenRouter (платные)">
@@ -214,10 +242,10 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                   <option value="openai/gpt-4o-mini">GPT-4o Mini ($0.15/M)</option>
                   <option value="openai/gpt-4o">GPT-4o ($2.50/M)</option>
                 </optgroup>
-                <optgroup label="Прямые API">
+                <optgroup label="Прямые API (нужен ключ)">
                   <option value="gpt-4o-mini">OpenAI GPT-4o Mini</option>
                   <option value="gpt-4o">OpenAI GPT-4o</option>
-                  <option value="gemini-2.0-flash">Gemini Flash</option>
+                  <option value="gemini-2.0-flash">Google Gemini Flash</option>
                   <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
                 </optgroup>
               </select>
@@ -227,12 +255,14 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
             <FieldArea label="Описание" value={f("description")} onChange={(v) => setF("description", v)} rows={3} />
             <FieldArea label="Приветствие" value={f("greeting")} onChange={(v) => setF("greeting", v)} rows={3}
               placeholder="Первое сообщение агента при открытии чата" />
+            {!isCore && (
             <div>
               <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">JinnTell</label>
               <p className="text-sm text-gray-400 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2">
                 /a/{agent.jinntell_link || "—"}
               </p>
             </div>
+            )}
             <div>
               <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Информация</label>
               <div className="text-xs text-gray-500 space-y-1">
@@ -242,6 +272,56 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
               </div>
             </div>
           </div>
+
+          {/* Мини-чат с агентом (только для core) */}
+          {isCore && (
+            <div className="col-span-2 mt-6 bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-sm font-medium">Диалог с {agent.name}</span>
+                <span className="text-xs text-gray-500 ml-auto">Прямое общение с моделью</span>
+              </div>
+              <div className="h-64 overflow-y-auto p-4 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch" }}>
+                {chatMessages.length === 0 && (
+                  <p className="text-xs text-gray-600 text-center py-8">Напишите сообщение для общения с агентом...</p>
+                )}
+                {chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-start" : "justify-end"}`}>
+                    <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${
+                      msg.role === "user"
+                        ? "bg-gray-800 text-gray-200"
+                        : "bg-amber-900/30 border border-amber-800/50 text-amber-100"
+                    }`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+                {chatLoading && (
+                  <div className="flex justify-end">
+                    <div className="px-3 py-2 rounded-xl text-sm bg-amber-900/20 text-amber-300 animate-pulse">
+                      Думаю...
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="px-4 py-3 border-t border-gray-800 flex gap-2">
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
+                  placeholder="Введите сообщение..."
+                  className="flex-1 px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500"
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="px-4 py-2 bg-amber-500 text-black rounded-lg text-sm font-medium hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {chatLoading ? "..." : "Отправить"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

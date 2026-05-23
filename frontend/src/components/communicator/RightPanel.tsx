@@ -6,17 +6,17 @@ interface Participant {
   name: string;
   role: string;
   color: string;
-  isMel?: boolean;
+  isAssistant?: boolean;
   active: boolean;
 }
 
 const DEFAULT_PARTICIPANTS: Participant[] = [
   {
     id: "mel",
-    name: "Мэл",
+    name: "Помощник",
     role: "Помощник",
     color: "var(--accent)",
-    isMel: true,
+    isAssistant: true,
     active: true,
   },
   {
@@ -91,7 +91,7 @@ export default function RightPanel({
         <div
           key={p.id}
           className="flex flex-col items-center mb-4 cursor-pointer transition-all"
-          onClick={() => !p.isMel && toggleParticipant(p.id)}
+          onClick={() => !p.isAssistant && toggleParticipant(p.id)}
           style={{
             opacity: p.active ? 1 : 0.35,
             filter: p.active ? "none" : "grayscale(100%)",
@@ -100,29 +100,29 @@ export default function RightPanel({
           <div
             className="rounded-full flex items-center justify-center font-bold mb-1.5 transition-all"
             style={{
-              width: p.isMel ? "56px" : "48px",
-              height: p.isMel ? "56px" : "48px",
-              fontSize: p.isMel ? "18px" : "14px",
-              background: p.isMel
+              width: p.isAssistant ? "56px" : "48px",
+              height: p.isAssistant ? "56px" : "48px",
+              fontSize: p.isAssistant ? "18px" : "14px",
+              background: p.isAssistant
                 ? `linear-gradient(135deg, ${p.color}, var(--accent-bright))`
                 : `${p.color}22`,
-              border: p.isMel ? "none" : `1.5px solid ${p.color}44`,
-              color: p.isMel ? "var(--bg-deep)" : p.color,
-              boxShadow: p.isMel && p.active ? "0 0 20px var(--accent-glow)" : "none",
+              border: p.isAssistant ? "none" : `1.5px solid ${p.color}44`,
+              color: p.isAssistant ? "var(--bg-deep)" : p.color,
+              boxShadow: p.isAssistant && p.active ? "0 0 20px var(--accent-glow)" : "none",
             }}
           >
             {p.name[0]}
           </div>
           <span
             className="text-xs font-medium"
-            style={{ color: p.isMel ? "var(--accent)" : "var(--text-secondary)" }}
+            style={{ color: p.isAssistant ? "var(--accent)" : "var(--text-secondary)" }}
           >
             {p.name}
           </span>
           <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
             {p.role}
           </span>
-          {!p.isMel && (
+          {!p.isAssistant && (
             <span className="text-[9px] mt-0.5" style={{ color: "var(--text-muted)" }}>
               {p.active ? "нажми — выкл" : "нажми — вкл"}
             </span>

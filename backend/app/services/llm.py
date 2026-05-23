@@ -4,14 +4,15 @@ LLM Service — мульти-провайдер: DeepSeek, OpenAI, Gemini, Groq,
 """
 import json
 import random
+import re
 from typing import Optional
 
 import httpx
 
 from app.core.config import settings
 
-# Системный промпт Мэла (по умолчанию, перекрывается Redis)
-MEL_SYSTEM_PROMPT = """Ты — Мэл, персональный AI-помощник платформы JinnTell.
+# Системный промпт Помощника (по умолчанию, перекрывается Redis)
+ASSISTANT_SYSTEM_PROMPT = """Ты — персональный AI-помощник платформы JinnTell.
 JinnTell — это AI-first коммуникационная платформа, где пользователи общаются с AI-агентами голосом и текстом.
 
 Твои задачи:
@@ -24,8 +25,9 @@ JinnTell — это AI-first коммуникационная платформа
 Ты говоришь по-русски. Ответы давай кратко — 1-3 предложения, если не просят подробнее.
 Будь дружелюбным, но профессиональным. Используй эмодзи умеренно."""
 
-# Legacy alias
-BUTLER_SYSTEM_PROMPT = MEL_SYSTEM_PROMPT
+# Legacy aliases
+MEL_SYSTEM_PROMPT = ASSISTANT_SYSTEM_PROMPT
+BUTLER_SYSTEM_PROMPT = ASSISTANT_SYSTEM_PROMPT
 
 # Fallback ответы (когда LLM недоступен)
 FALLBACK_REPLIES = [
@@ -53,6 +55,40 @@ def get_active_provider() -> dict:
     return {"key": "", "model": "none", "name": "none"}
 
 
+def _clean_reasoning(text: str) -> str:
+    """Убираем reasoning/thinking блоки из ответа LLM (DeepSeek, R1 и др.)"""
+    # Убираем <think>...</think> блоки
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    # Убираем блоки, начинающиеся с reasoning-маркеров
+    # Паттерн: текст до первого нормального ответа на русском
+    # Если ответ содержит английский reasoning перед русским текстом — отсекаем
+    lines = text.strip().split('\n')
+    clean_lines = []
+    found_answer = False
+    for line in lines:
+        stripped = line.strip()
+        # Пропускаем пустые строки в начале
+        if not stripped and not found_answer:
+            continue
+        # Маркеры reasoning — пропускаем
+        if any(marker in stripped.lower() for marker in [
+            'so,', 'wait,', 'let me', 'i need to', 'looking at', 'the user',
+            'my task is', 'possible answer:', 'from the system', 'i should',
+            'thinking about', 'the exact', 'so my answer', 'let me check',
+            'previous interactions:', 'the latest', 'but keep it',
+        ]):
+            continue
+        # Если строка начинается с цитаты системного промпта — пропускаем
+        if stripped.startswith('"') and 'платформ' in stripped and len(stripped) > 100:
+            continue
+        # Нашли нормальный текст
+        found_answer = True
+        clean_lines.append(line)
+    result = '\n'.join(clean_lines).strip()
+    # Если после очистки ничего не осталось — вернуть оригинал
+    return result if result else text.strip()
+
+
 async def _call_deepseek(messages: list, model: str, api_key: str) -> str:
     """DeepSeek — дешёвый и качественный, работает из РФ. OpenAI-совместимый API."""
     async with httpx.AsyncClient(timeout=60.0) as client:
@@ -64,7 +100,12 @@ async def _call_deepseek(messages: list, model: str, api_key: str) -> str:
         if r.status_code != 200:
             print(f"[llm] DeepSeek error: {r.status_code} {r.text[:300]}")
             return ""
-        text = r.json()["choices"][0]["message"]["content"].strip()
+        data = r.json()
+        choice = data["choices"][0]
+        # DeepSeek R1 может иметь reasoning_content отдельно — берём только content
+        text = (choice.get("message", {}).get("content") or "").strip()
+        # Чистим от reasoning-мусора
+        text = _clean_reasoning(text)
         print(f"[llm] DeepSeek OK: {model}")
         return text
 
@@ -121,10 +162,12 @@ async def _call_groq(messages: list, model: str, api_key: str) -> str:
 
 
 OPENROUTER_FREE_MODELS = [
-    "google/gemma-3-27b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "openai/gpt-oss-120b:free",
+    "google/gemma-4-31b-it:free",
+    "deepseek/deepseek-v4-flash:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemma-3-12b-it:free",
-    "google/gemma-3-4b-it:free",
 ]
 
 
@@ -161,7 +204,7 @@ async def _call_openrouter(messages: list, model: str, api_key: str) -> str:
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://jinntell.com",
+                    "HTTP-Referer": "https://jinntell.ru",
                     "X-Title": "JinnTell",
                 },
                 json={"model": try_model, "messages": prepared, "max_tokens": 500, "temperature": 0.7},
@@ -171,8 +214,11 @@ async def _call_openrouter(messages: list, model: str, api_key: str) -> str:
                 if text:
                     print(f"[llm] OpenRouter OK: {try_model}")
                     return text
-            elif r.status_code == 429:
-                print(f"[llm] OpenRouter 429 ({try_model}), trying next...")
+            elif r.status_code in (429, 402):
+                print(f"[llm] OpenRouter {r.status_code} ({try_model}), trying next...")
+                continue
+            elif r.status_code == 404:
+                print(f"[llm] OpenRouter 404 ({try_model}), model unavailable, trying next...")
                 continue
             else:
                 print(f"[llm] OpenRouter error ({try_model}): {r.status_code} {r.text[:200]}")
@@ -186,31 +232,35 @@ async def get_llm_reply(
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
     conversation_history: Optional[list] = None,
+    user_persona_suffix: Optional[str] = None,
 ) -> str:
     """Получить ответ от LLM. Автовыбор провайдера."""
     provider = get_active_provider()
     if not provider["key"]:
         return random.choice(FALLBACK_REPLIES)
 
-    # Если вызов без явных параметров — проверяем Redis (настройки Мэла)
+    # Если вызов без явных параметров — проверяем Redis (настройки помощника)
     if system_prompt is None and model is None:
         try:
             import redis.asyncio as aioredis
             _redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-            # Поддерживаем оба ключа: mel:settings (новый) и butler:settings (legacy)
-            _mel_settings = await _redis.get("mel:settings") or await _redis.get("butler:settings")
-            _mel_prompt = await _redis.get("mel:system_prompt") or await _redis.get("butler:system_prompt")
+            # Поддерживаем все ключи: assistant:settings (новый), mel:settings, butler:settings (legacy)
+            _assistant_settings = await _redis.get("assistant:settings") or await _redis.get("mel:settings") or await _redis.get("butler:settings")
+            _assistant_prompt = await _redis.get("assistant:system_prompt") or await _redis.get("mel:system_prompt") or await _redis.get("butler:system_prompt")
             await _redis.aclose()
-            if _mel_settings:
-                _bs = json.loads(_mel_settings)
+            if _assistant_settings:
+                _bs = json.loads(_assistant_settings)
                 if _bs.get("model"):
                     model = _bs["model"]
-            if _mel_prompt:
-                system_prompt = _mel_prompt
+            if _assistant_prompt:
+                system_prompt = _assistant_prompt
         except Exception as e:
-            print(f"[llm] Redis mel settings error: {e}")
+            print(f"[llm] Redis assistant settings error: {e}")
 
-    prompt = system_prompt or MEL_SYSTEM_PROMPT
+    prompt = system_prompt or ASSISTANT_SYSTEM_PROMPT
+    # Инжектим пользовательскую персонализацию (имя, пол, манера)
+    if user_persona_suffix:
+        prompt = prompt + user_persona_suffix
     messages = [{"role": "system", "content": prompt}]
     if conversation_history:
         messages.extend(conversation_history[-10:])

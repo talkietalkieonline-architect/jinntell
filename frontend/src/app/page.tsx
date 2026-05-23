@@ -124,7 +124,7 @@ export default function Home() {
         onRoomChange={setActiveRoom}
       />
 
-      {/* Правая панель — Мэл + Участники */}
+      {/* Правая панель — Помощник + Участники */}
       <RightPanel isOpen={rightOpen} onClose={closeRight} />
 
       {/* Центральная область чата */}

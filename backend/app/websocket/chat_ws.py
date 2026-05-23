@@ -22,6 +22,9 @@ router = APIRouter()
 # Regex для определения комнаты агента: agent-{id}
 _AGENT_ROOM_RE = re.compile(r"^agent-(\d+)$")
 
+# Имя помощника по умолчанию (пользователь может менять)
+DEFAULT_ASSISTANT_NAME = "Джим"
+
 
 def _parse_agent_room(room: str) -> Optional[int]:
     """Если комната agent-{id} — вернуть id агента, иначе None"""
@@ -55,56 +58,109 @@ async def _get_conversation_history(room: str, limit: int = 10) -> list:
         return history
 
 
-async def _mel_reply(room: str, user_message: str):
-    """Мэл (бывш. Дворецкий) отвечает через LLM"""
+async def _get_user_assistant_settings(user_id: int) -> dict:
+    """Получить настройки помощника пользователя из БД"""
+    defaults = {
+        "name": DEFAULT_ASSISTANT_NAME,
+        "gender": "male",
+        "voice": "male_low",
+        "manner": None,  # None = использовать дефолт из промпта
+    }
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if user:
+                return {
+                    "name": user.assistant_name or DEFAULT_ASSISTANT_NAME,
+                    "gender": user.assistant_gender or "male",
+                    "voice": user.assistant_voice or "male_low",
+                    "manner": None,
+                }
+    except Exception:
+        pass
+    return defaults
+
+
+def _build_user_persona_injection(settings: dict) -> str:
+    """Строим дополнение к промпту на основе пользовательских настроек"""
+    name = settings.get("name", DEFAULT_ASSISTANT_NAME)
+    gender = settings.get("gender", "male")
+
+    gender_labels = {
+        "male": "мужчина",
+        "female": "женщина",
+        "neutral": "нейтральный пол",
+    }
+    gender_text = gender_labels.get(gender, "мужчина")
+
+    return f"""
+
+=== ПЕРСОНАЛИЗАЦИЯ ===
+Тебя зовут {name}. Ты {gender_text}.
+Когда представляешься — говори: «Я {name}».
+Пользователь выбрал тебе это имя — используй его.
+=== КОНЕЦ ПЕРСОНАЛИЗАЦИИ ==="""
+
+
+async def _assistant_reply(room: str, user_message: str, assistant_name: str = DEFAULT_ASSISTANT_NAME, user_id: int = 0):
+    """Помощник отвечает через LLM с инъекцией пользовательских настроек"""
     # Отправляем индикатор «печатает...»
     await manager.broadcast(room, {
         "type": "typing",
-        "sender_name": "Мэл",
-        "sender_type": "mel",
+        "sender_name": assistant_name,
+        "sender_type": "assistant",
     })
 
     # Получаем историю для контекста
     history = await _get_conversation_history(room)
 
-    # LLM-ответ
+    # Получаем пользовательские настройки и строим дополнение к промпту
+    user_persona = ""
+    if user_id:
+        settings = await _get_user_assistant_settings(user_id)
+        user_persona = _build_user_persona_injection(settings)
+
+    # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
     reply_text = await get_llm_reply(
         user_message=user_message,
         conversation_history=history,
+        user_persona_suffix=user_persona,
     )
 
-    # Сохраняем ответ Мэла в БД
+    # Сохраняем ответ помощника в БД
     async with async_session() as db:
-        mel_msg = Message(
+        assistant_msg = Message(
             room=room,
-            sender_type="mel",
-            sender_name="Мэл",
+            sender_type="assistant",
+            sender_name=assistant_name,
             text=reply_text,
         )
-        db.add(mel_msg)
+        db.add(assistant_msg)
         await db.commit()
-        await db.refresh(mel_msg)
+        await db.refresh(assistant_msg)
 
         msg_data = {
             "type": "message",
-            "id": mel_msg.id,
+            "id": assistant_msg.id,
             "room": room,
-            "sender_type": "mel",
-            "sender_name": "Мэл",
+            "sender_type": "assistant",
+            "sender_name": assistant_name,
             "text": reply_text,
-            "created_at": mel_msg.created_at.isoformat(),
+            "created_at": assistant_msg.created_at.isoformat(),
         }
 
     await manager.broadcast(room, {
         "type": "typing_stop",
-        "sender_name": "Мэл",
+        "sender_name": assistant_name,
     })
 
     await manager.broadcast(room, msg_data)
 
 
-# Legacy alias
-_butler_reply = _mel_reply
+# Legacy aliases
+_mel_reply = _assistant_reply
+_butler_reply = _assistant_reply
 
 
 async def _agent_reply(room: str, agent: Agent, user_message: str):
@@ -190,7 +246,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
     """
     WebSocket для реалтайм чата с LLM-ответами.
     Комнаты:
-    - "general" -> Мэл отвечает
+    - "general" -> Помощник отвечает
     - "agent-{id}" -> конкретный агент отвечает через get_agent_reply()
     """
     token = websocket.query_params.get("token", "")
@@ -207,6 +263,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
             await websocket.close(code=4001, reason="User not found")
             return
         user_name = user.display_name
+        assistant_name = user.assistant_name or DEFAULT_ASSISTANT_NAME
 
     # Если комната агента — загружаем агента
     agent_id = _parse_agent_room(room)
@@ -273,7 +330,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
             if agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
             elif room == "general":
-                asyncio.create_task(_mel_reply(room, text))
+                asyncio.create_task(_assistant_reply(room, text, assistant_name, user_id))
 
     except WebSocketDisconnect:
         manager.disconnect(room, user_id)

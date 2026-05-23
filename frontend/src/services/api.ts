@@ -542,7 +542,7 @@ export function adminTestButler(message: string): Promise<ButlerTestResult> {
 //  ADMIN: CORE AGENTS
 // ═══════════════════════════════════════════════
 
-/** Админ: core-агенты (Мэл, Агент Админ, Агент Контента, Агент Железа) */
+/** Админ: core-агенты (Помощник, Агент Админ, Агент Контента, Агент Железа) */
 export function adminGetCoreAgents(): Promise<AgentDetailOut[]> {
   return apiFetch("/api/admin/core-agents");
 }
@@ -603,17 +603,17 @@ export interface MelTestResult {
   response_time_ms: number;
 }
 
-/** Админ: настройки Мэла */
+/** Админ: настройки Помощника */
 export function adminGetMelSettings(): Promise<MelSettings> {
   return apiFetch("/api/admin/mel-settings");
 }
 
-/** Админ: обновить настройки Мэла */
+/** Админ: обновить настройки Помощника */
 export function adminUpdateMelSettings(data: { provider?: string; model?: string; system_prompt?: string }): Promise<MelSettings> {
   return apiFetch("/api/admin/mel-settings", { method: "PATCH", body: JSON.stringify(data) });
 }
 
-/** Админ: тест Мэла */
+/** Админ: тест Помощника */
 export function adminTestMel(message: string): Promise<MelTestResult> {
   return apiFetch("/api/admin/mel-test", { method: "POST", body: JSON.stringify({ message }) });
 }
@@ -951,6 +951,12 @@ export interface UserProfile {
   vk_linked?: boolean;
   telegram_linked?: boolean;
   yandex_linked?: boolean;
+  // Персонализация помощника
+  assistant_name?: string;
+  assistant_gender?: string;
+  assistant_voice?: string;
+  assistant_photo?: string;
+  user_age?: number;
 }
 
 /** Профиль текущего пользователя */

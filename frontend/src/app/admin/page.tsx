@@ -10,16 +10,10 @@ import {
   adminCreateAgent,
 
   adminGetLLMStatus,
-  adminGetButlerSettings,
-  adminUpdateButlerSettings,
-  adminTestButler,
   adminGetSystemSettings,
   adminUpdateSystemSettings,
   adminGetCoreAgents,
   adminGetSystemInfo,
-  adminGetMelSettings,
-  adminUpdateMelSettings,
-  adminTestMel,
   adminGetContractors,
   adminCreateContractor,
   adminUpdateContractor,
@@ -31,12 +25,8 @@ import {
   type AdminStats,
   type AdminUser,
   type LLMStatus,
-  type ButlerSettings,
-  type ButlerTestResult,
   type SystemSettings,
   type SystemInfo,
-  type MelSettings,
-  type MelTestResult,
   type ContractorOut,
   type ContractorCreateData,
 } from "@/services/api";
@@ -51,7 +41,6 @@ type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stat
 
 const AGENT_TYPES = [
   { id: "", label: "Все" },
-  { id: "core", label: "Ядро" },
   { id: "system", label: "Системные" },
   { id: "business", label: "Бизнес" },
   { id: "citizen", label: "Жители" },
@@ -98,15 +87,6 @@ export default function AdminPage() {
   const [embeddingProvider, setEmbeddingProvider] = useState("jina");
   const [jinaApiKey, setJinaApiKey] = useState("");
 
-  // Butler settings
-  const [butlerSettings, setButlerSettings] = useState<ButlerSettings | null>(null);
-  const [butlerPrompt, setButlerPrompt] = useState("");
-  const [butlerProvider, setButlerProvider] = useState("");
-  const [butlerModel, setButlerModel] = useState("");
-  const [butlerTestMsg, setButlerTestMsg] = useState("Привет! Расскажи о себе.");
-  const [butlerTestResult, setButlerTestResult] = useState<ButlerTestResult | null>(null);
-  const [butlerSaving, setButlerSaving] = useState(false);
-  const [butlerTesting, setButlerTesting] = useState(false);
 
   // Core agents
   const [coreAgents, setCoreAgents] = useState<AgentDetailOut[]>([]);
@@ -115,15 +95,6 @@ export default function AdminPage() {
   // System info
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
 
-  // Mel settings (новые)
-  const [melSettings, setMelSettings] = useState<MelSettings | null>(null);
-  const [melPrompt, setMelPrompt] = useState("");
-  const [melProvider, setMelProvider] = useState("");
-  const [melModel, setMelModel] = useState("");
-  const [melTestMsg, setMelTestMsg] = useState("Привет! Расскажи о себе.");
-  const [melTestResult, setMelTestResult] = useState<MelTestResult | null>(null);
-  const [melSaving, setMelSaving] = useState(false);
-  const [melTesting, setMelTesting] = useState(false);
 
   // Contractors state
   const [contractors, setContractors] = useState<ContractorOut[]>([]);
@@ -194,32 +165,22 @@ export default function AdminPage() {
 
   const loadSystemInfo = useCallback(async () => {
     try {
-      const [sysInfo, melData] = await Promise.all([
+      const [sysInfo] = await Promise.all([
         adminGetSystemInfo(),
-        adminGetMelSettings(),
       ]);
       setSystemInfo(sysInfo);
-      setMelSettings(melData);
-      setMelPrompt(melData.system_prompt);
-      setMelProvider(melData.provider);
-      setMelModel(melData.model);
     } catch {}
   }, []);
 
   const loadStats = useCallback(async () => {
     try {
-      const [statsData, llmData, butlerData, sysData] = await Promise.all([
+      const [statsData, llmData, sysData] = await Promise.all([
         adminGetStats(),
         adminGetLLMStatus(),
-        adminGetButlerSettings(),
         adminGetSystemSettings(),
       ]);
       setStats(statsData);
       setLlmStatus(llmData);
-      setButlerSettings(butlerData);
-      setButlerPrompt(butlerData.system_prompt);
-      setButlerProvider(butlerData.provider);
-      setButlerModel(butlerData.model);
       setSystemSettings(sysData);
       setSmsProvider(sysData.sms_provider);
       setSmscLogin(sysData.smsc_login);
@@ -350,76 +311,12 @@ export default function AdminPage() {
     } catch {} finally { setSystemSaving(false); }
   };
 
-  // Butler actions
-  const handleButlerSave = async () => {
-    setButlerSaving(true);
-    try {
-      const updated = await adminUpdateButlerSettings({
-        provider: butlerProvider,
-        model: butlerModel,
-        system_prompt: butlerPrompt,
-      });
-      setButlerSettings(updated);
-      setButlerProvider(updated.provider);
-      setButlerModel(updated.model);
-      setButlerPrompt(updated.system_prompt);
-    } catch {} finally { setButlerSaving(false); }
-  };
 
-  const handleButlerTest = async () => {
-    setButlerTesting(true);
-    setButlerTestResult(null);
-    try {
-      const result = await adminTestButler(butlerTestMsg);
-      setButlerTestResult(result);
-    } catch {} finally { setButlerTesting(false); }
-  };
 
-  // Mel actions
-  const handleMelSave = async () => {
-    setMelSaving(true);
-    try {
-      const updated = await adminUpdateMelSettings({
-        provider: melProvider,
-        model: melModel,
-        system_prompt: melPrompt,
-      });
-      setMelSettings(updated);
-      setMelProvider(updated.provider);
-      setMelModel(updated.model);
-      setMelPrompt(updated.system_prompt);
-    } catch {} finally { setMelSaving(false); }
-  };
 
-  const handleMelTest = async () => {
-    setMelTesting(true);
-    setMelTestResult(null);
-    try {
-      const result = await adminTestMel(melTestMsg);
-      setMelTestResult(result);
-    } catch {} finally { setMelTesting(false); }
-  };
 
   // Маппинг провайдер → группа моделей
-  const PROVIDER_GROUPS: Record<string, string[]> = {
-    deepseek: ["DeepSeek"],
-    openrouter: ["OpenRouter бесплатные"],
-    openai: ["OpenAI"],
-    gemini: ["Gemini"],
-    groq: ["Groq"],
-  };
 
-  const filteredMelModels = melSettings?.available_models.filter((m) => {
-    const groups = PROVIDER_GROUPS[melProvider];
-    if (!groups) return true;
-    return groups.includes(m.group);
-  }) || [];
-
-  const filteredButlerModels = butlerSettings?.available_models.filter((m) => {
-    const groups = PROVIDER_GROUPS[butlerProvider];
-    if (!groups) return true;
-    return groups.includes(m.group);
-  }) || [];
 
 
 
@@ -451,7 +348,7 @@ export default function AdminPage() {
         <nav className="w-52 border-r border-gray-800 min-h-[calc(100vh-65px)] p-4">
           {([
             { id: "agents" as Tab, label: "Агенты", icon: "🤖" },
-            { id: "core_agents" as Tab, label: "Системные агенты", icon: "⚙️" },
+            { id: "core_agents" as Tab, label: "Core-агенты", icon: "⚙️" },
             { id: "contractors" as Tab, label: "Контрагенты", icon: "🏢" },
             { id: "users" as Tab, label: "Пользователи", icon: "👥" },
             { id: "system" as Tab, label: "Система", icon: "🖥️" },
@@ -541,7 +438,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {agents.map((agent) => (
+                    {agents.filter((a) => a.agent_type !== "core" && a.visibility !== "core").map((agent) => (
                       <tr
                         key={agent.id}
                         onClick={() => setSelectedAgent(agent)}
@@ -749,7 +646,7 @@ export default function AdminPage() {
           {tab === "core_agents" && !selectedCoreAgent && (
             <div>
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold">Системные агенты (ядро)</h2>
+                <h2 className="text-lg font-semibold">Core-агенты</h2>
                 <button
                   onClick={() => {
                     setTab("agents");
@@ -758,12 +655,12 @@ export default function AdminPage() {
                   }}
                   className="px-4 py-2 bg-amber-500 text-black rounded-lg text-sm font-semibold hover:bg-amber-400 transition-colors"
                 >
-                  + Добавить системного агента
+                  + Добавить core-агента
                 </button>
               </div>
 
               <p className="text-sm text-gray-400 mb-6">
-                Core-агенты — внутреннее ядро платформы. Скрыты из Города Агентов. Управляют системой, контентом и инфраструктурой.
+                Core-агенты — ядро платформы. Скрыты из Города Агентов. Помощник, администрирование, контент, инфраструктура.
               </p>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1188,101 +1085,7 @@ export default function AdminPage() {
                 <p className="text-gray-500 mb-8">Загрузка...</p>
               )}
 
-              {/* Настройки Мэла */}
-              <h3 className="text-md font-semibold mb-4">Настройки Мэла</h3>
-              {melSettings ? (
-                <div className="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-8">
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Провайдер</label>
-                      <select
-                        value={melProvider}
-                        onChange={(e) => {
-                          const np = e.target.value;
-                          setMelProvider(np);
-                          const groups = PROVIDER_GROUPS[np];
-                          if (groups && melSettings) {
-                            const first = melSettings.available_models.find((m) => groups.includes(m.group));
-                            if (first) setMelModel(first.value);
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500"
-                      >
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="openrouter">OpenRouter</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="gemini">Gemini</option>
-                        <option value="groq">Groq</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Модель</label>
-                      <select
-                        value={melModel}
-                        onChange={(e) => setMelModel(e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500"
-                      >
-                        {filteredMelModels.map((m) => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Системный промпт</label>
-                    <textarea
-                      value={melPrompt}
-                      onChange={(e) => setMelPrompt(e.target.value)}
-                      rows={8}
-                      className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500 resize-none font-mono"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3 mb-4">
-                    <button
-                      onClick={handleMelSave}
-                      disabled={melSaving}
-                      className="px-5 py-2 bg-amber-500 text-black rounded-lg text-sm font-semibold hover:bg-amber-400 disabled:opacity-50"
-                    >
-                      {melSaving ? "Сохраняю..." : "Сохранить"}
-                    </button>
-                    <div className="flex-1 flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={melTestMsg}
-                        onChange={(e) => setMelTestMsg(e.target.value)}
-                        placeholder="Тестовое сообщение..."
-                        className="flex-1 px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 outline-none focus:border-amber-500"
-                      />
-                      <button
-                        onClick={handleMelTest}
-                        disabled={melTesting || !melTestMsg.trim()}
-                        className="px-5 py-2 bg-gray-800 text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
-                      >
-                        {melTesting ? "Тестирую..." : "Тест Мэла"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {melTestResult && (
-                    <div className="bg-gray-950 rounded-lg p-4 border border-gray-800">
-                      <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Результат теста</p>
-                      <p className="text-sm text-gray-200 mb-3 whitespace-pre-wrap">{melTestResult.reply}</p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span>Время: <span className="text-amber-400">{(melTestResult.response_time_ms / 1000).toFixed(1)}сек</span></span>
-                        <span>Провайдер: <span className="text-gray-300">{melTestResult.provider}</span></span>
-                        <span>Модель: <span className="text-gray-300">{melTestResult.model}</span></span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500 mb-8">Загрузка настроек Мэла...</p>
-              )}
-
-
-              {/* Embedding настройки */}
+{/* Embedding настройки */}
               <h3 className="text-md font-semibold mb-4">Embedding (RAG)</h3>
               <div className="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-8">
                 <p className="text-xs text-gray-500 mb-4">
@@ -1418,7 +1221,7 @@ export default function AdminPage() {
                       <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
                       <span className="text-sm font-medium text-white">Активный провайдер: <span className="text-amber-400">{llmStatus.active_provider.toUpperCase()}</span></span>
                     </div>
-                    <p className="text-xs text-gray-400">Модель Дворецкого: <span className="text-gray-200">{llmStatus.active_model}</span></p>
+                    <p className="text-xs text-gray-400">Активная модель: <span className="text-gray-200">{llmStatus.active_model}</span></p>
                   </div>
 
                   {/* Все провайдеры */}
@@ -1441,104 +1244,6 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <p className="text-gray-500">Загрузка LLM статуса...</p>
-              )}
-
-              {/* Настройки Дворецкого */}
-              <h3 className="text-lg font-semibold mt-8 mb-4">Настройки Дворецкого</h3>
-              {butlerSettings ? (
-                <div className="bg-gray-900 rounded-xl p-5 border border-gray-800">
-                  {/* Провайдер + Модель */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Провайдер</label>
-                      <select
-                        value={butlerProvider}
-                        onChange={(e) => {
-                          const newProvider = e.target.value;
-                          setButlerProvider(newProvider);
-                          // Сброс модели на первую из группы
-                          const groups = PROVIDER_GROUPS[newProvider];
-                          if (groups && butlerSettings) {
-                            const first = butlerSettings.available_models.find((m) => groups.includes(m.group));
-                            if (first) setButlerModel(first.value);
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500"
-                      >
-                        <option value="deepseek">DeepSeek</option>
-                        <option value="openrouter">OpenRouter</option>
-                        <option value="openai">OpenAI</option>
-                        <option value="gemini">Gemini</option>
-                        <option value="groq">Groq</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Модель</label>
-                      <select
-                        value={butlerModel}
-                        onChange={(e) => setButlerModel(e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500"
-                      >
-                        {filteredButlerModels.map((m) => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Системный промпт */}
-                  <div className="mb-4">
-                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Системный промпт</label>
-                    <textarea
-                      value={butlerPrompt}
-                      onChange={(e) => setButlerPrompt(e.target.value)}
-                      rows={8}
-                      className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500 resize-none font-mono"
-                    />
-                  </div>
-
-                  {/* Кнопки */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <button
-                      onClick={handleButlerSave}
-                      disabled={butlerSaving}
-                      className="px-5 py-2 bg-amber-500 text-black rounded-lg text-sm font-semibold hover:bg-amber-400 disabled:opacity-50"
-                    >
-                      {butlerSaving ? "Сохраняю..." : "Сохранить"}
-                    </button>
-                    <div className="flex-1 flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={butlerTestMsg}
-                        onChange={(e) => setButlerTestMsg(e.target.value)}
-                        placeholder="Тестовое сообщение..."
-                        className="flex-1 px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white placeholder-gray-500 outline-none focus:border-amber-500"
-                      />
-                      <button
-                        onClick={handleButlerTest}
-                        disabled={butlerTesting || !butlerTestMsg.trim()}
-                        className="px-5 py-2 bg-gray-800 text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
-                      >
-                        {butlerTesting ? "Тестирую..." : "Тест Дворецкого"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Результат теста */}
-                  {butlerTestResult && (
-                    <div className="bg-gray-950 rounded-lg p-4 border border-gray-800">
-                      <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Результат теста</p>
-                      <p className="text-sm text-gray-200 mb-3 whitespace-pre-wrap">{butlerTestResult.reply}</p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span>Время: <span className="text-amber-400">{(butlerTestResult.response_time_ms / 1000).toFixed(1)}сек</span></span>
-                        <span>Провайдер: <span className="text-gray-300">{butlerTestResult.provider}</span></span>
-                        <span>Модель: <span className="text-gray-300">{butlerTestResult.model}</span></span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500">Загрузка настроек Дворецкого...</p>
               )}
 
               {/* Системные настройки */}
