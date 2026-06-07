@@ -20,7 +20,7 @@ import BusinessDashboardModal from "@/components/communicator/BusinessDashboardM
 type AppScreen = "splash" | "login" | "communicator";
 
 export default function Home() {
-  const { isLoggedIn, isAdmin, login, logout } = useAuth();
+  const { isLoggedIn, isAdmin, login, logout, user } = useAuth();
   const [screen, setScreen] = useState<AppScreen>("splash");
   const [leftOpen, setLeftOpen] = useState(false);
   const [rightOpen, setRightOpen] = useState(false);
@@ -147,6 +147,7 @@ export default function Home() {
         onAttachMedia={attachMedia}
         onHeightChange={setBottomBarH}
         onMicStateChange={(active) => setMicActive(active)}
+        assistantName={user?.assistant_name || "Джим"}
       />
 
       {/* Центр Управления */}
@@ -159,7 +160,7 @@ export default function Home() {
         }}
       />
 
-      {/* Мои агенты */}
+      {/* Мои Джинны */}
       <MyAgentsModal
         isOpen={agentsOpen}
         onClose={() => setAgentsOpen(false)}
@@ -170,7 +171,7 @@ export default function Home() {
         onStartChat={openAgentChat}
       />
 
-      {/* Город Агентов */}
+      {/* Город Джиннов */}
       <AgentCityModal
         isOpen={cityOpen}
         onClose={() => setCityOpen(false)}

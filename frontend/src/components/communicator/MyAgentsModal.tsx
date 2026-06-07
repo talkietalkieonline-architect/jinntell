@@ -76,7 +76,7 @@ export default function MyAgentsModal({
       >
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            Мои агенты
+            Мои Джинны
           </h2>
           <button
             onClick={onClose}
@@ -217,13 +217,13 @@ export default function MyAgentsModal({
               );
             })}
 
-            {/* Кнопка Город Агентов */}
+            {/* Кнопка Город Джиннов */}
             <button
               onClick={() => { onClose(); onOpenCity(); }}
               className="w-full py-3 rounded-xl text-sm font-semibold mt-2 transition-all hover:scale-[1.02]"
               style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
             >
-              Город Агентов
+              Город Джиннов
             </button>
           </>
         )}

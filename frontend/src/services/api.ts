@@ -507,37 +507,6 @@ export function adminUpdateSystemSettings(data: Record<string, unknown>): Promis
   return apiFetch("/api/admin/system-settings", { method: "PATCH", body: JSON.stringify(data) });
 }
 
-// Butler (Дворецкий) settings
-export interface ButlerSettings {
-  provider: string;
-  model: string;
-  system_prompt: string;
-  available_models: { value: string; label: string; group: string }[];
-}
-
-export interface ButlerTestResult {
-  reply: string;
-  provider: string;
-  model: string;
-  response_time_ms: number;
-}
-
-/** Админ: настройки Дворецкого */
-export function adminGetButlerSettings(): Promise<ButlerSettings> {
-  return apiFetch("/api/admin/butler-settings");
-}
-
-/** Админ: обновить настройки Дворецкого */
-export function adminUpdateButlerSettings(data: { provider?: string; model?: string; system_prompt?: string }): Promise<ButlerSettings> {
-  return apiFetch("/api/admin/butler-settings", { method: "PATCH", body: JSON.stringify(data) });
-}
-
-/** Админ: тест Дворецкого */
-export function adminTestButler(message: string): Promise<ButlerTestResult> {
-  return apiFetch("/api/admin/butler-test", { method: "POST", body: JSON.stringify({ message }) });
-}
-
-
 // ═══════════════════════════════════════════════
 //  ADMIN: CORE AGENTS
 // ═══════════════════════════════════════════════
@@ -586,36 +555,37 @@ export function adminGetSystemInfo(): Promise<SystemInfo> {
 }
 
 // ═══════════════════════════════════════════════
-//  ADMIN: MEL SETTINGS (ex-Butler)
+//  ADMIN: ASSISTANT SETTINGS
 // ═══════════════════════════════════════════════
 
-export interface MelSettings {
-  provider: string;
-  model: string;
-  system_prompt: string;
-  available_models: { value: string; label: string; group: string }[];
-}
-
-export interface MelTestResult {
+export interface AssistantTestResult {
   reply: string;
   provider: string;
   model: string;
   response_time_ms: number;
 }
 
+// Помощник (assistant) — актуальные эндпоинты
+export interface AssistantSettings {
+  provider: string;
+  model: string;
+  system_prompt: string;
+  available_models: { value: string; label: string; group: string }[];
+}
+
 /** Админ: настройки Помощника */
-export function adminGetMelSettings(): Promise<MelSettings> {
-  return apiFetch("/api/admin/mel-settings");
+export function adminGetAssistantSettings(): Promise<AssistantSettings> {
+  return apiFetch("/api/admin/assistant-settings");
 }
 
 /** Админ: обновить настройки Помощника */
-export function adminUpdateMelSettings(data: { provider?: string; model?: string; system_prompt?: string }): Promise<MelSettings> {
-  return apiFetch("/api/admin/mel-settings", { method: "PATCH", body: JSON.stringify(data) });
+export function adminUpdateAssistantSettings(data: { provider?: string; model?: string; system_prompt?: string }): Promise<AssistantSettings> {
+  return apiFetch("/api/admin/assistant-settings", { method: "PATCH", body: JSON.stringify(data) });
 }
 
 /** Админ: тест Помощника */
-export function adminTestMel(message: string): Promise<MelTestResult> {
-  return apiFetch("/api/admin/mel-test", { method: "POST", body: JSON.stringify({ message }) });
+export function adminTestAssistant(message: string): Promise<AssistantTestResult> {
+  return apiFetch("/api/admin/assistant-test", { method: "POST", body: JSON.stringify({ message }) });
 }
 
 // ═══════════════════════════════════════════════

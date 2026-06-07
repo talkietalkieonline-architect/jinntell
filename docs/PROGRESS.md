@@ -1057,10 +1057,103 @@ frontend/src/services/api.ts          ← MelSettings, SystemInfo, adminGetCoreA
 - API ключи: только в .env, не в коде, не в Git
 - Рекомендация: после запуска сменить SSH пароль, ротировать ключи API
 
-### Что дальше (Сессия 22)
-1. ПОЧИНИТЬ frontend build (SettingsModal.tsx через scp)
-2. Завершить UI настроек помощника
-3. Ребрендинг UI: Агенты -> Джинны
-4. fastembed — локальные embeddings
-5. Красивые URL
-6. Коммит + пуш в GitHub
+### Сессия 23 (Май 2026)
+- [x] **TTS + Video поля в модели Agent (27 новых колонок):**
+  - TTS: tts_enabled, tts_provider, tts_voice_id, tts_language, tts_speed, tts_pitch, tts_emotion, tts_sample_url, tts_audio_format
+  - Video: video_enabled, video_provider, video_model, video_source_photo, video_quality, video_mode, video_fps, video_resolution, video_background
+  - LLM: llm_max_tokens (100-4000, default 1000)
+- [x] **Config расширен (14 новых переменных):**
+  - TTS: YANDEX_SPEECHKIT_API_KEY/FOLDER_ID/URL, SELF_TTS_URL/API_KEY/MODEL, DEFAULT_TTS_PROVIDER
+  - Video: SELF_VIDEO_URL/API_KEY/MODEL, HEDRA_API_KEY/URL, DID_API_KEY/URL, DEFAULT_VIDEO_PROVIDER
+- [x] **Ребрендинг UI: Агенты → Джинны:**
+  - "Город Агентов" → "Город Джиннов" (6 файлов)
+  - "Мои Агенты" → "Мои Джинны" (5 файлов)
+  - "агента-консультанта" → "джинна-консультанта"
+  - Кнопка BottomBar: "Агенты" → "Джинны"
+- [x] **Переименование mel → assistant:**
+  - admin.py: /mel-settings → /assistant-settings, /mel-test → /assistant-test
+  - llm.py: Redis ключи mel:settings → assistant:settings
+  - Frontend: adminGetMelSettings → adminGetAssistantSettings (3 файла)
+  - "Настройки Мэла" → "Настройки Помощника"
+- [x] **Reasoning-фильтр улучшен:**
+  - _clean_reasoning() переписан — ищет первый блок русского текста (≥10 символов)
+  - Обрезает английский reasoning-мусор от DeepSeek/OpenRouter
+  - Обрезает незаконченные предложения
+  - Применяется ко ВСЕМ провайдерам (не только DeepSeek)
+- [x] **Скролл чата починен:**
+  - userScrolledUp ref — автоскролл не дёргает при ручном листании вверх
+  - handleScroll + onScroll — определение позиции (100px от низа)
+  - Автоскролл только при новых сообщениях и если пользователь внизу
+- [x] **llm_max_tokens — динамическая длина ответа:**
+  - Поле в модели Agent + схемах + API
+  - Передаётся во все LLM-провайдеры
+  - Загружается из Redis (настройки помощника)
+  - По умолчанию 1000 токенов
+- [x] **SQL миграции выполнены:** 19 ALTER TABLE (TTS + Video + llm_max_tokens)
+- [x] **Мусорные сообщения удалены** из БД (6 записей с reasoning)
+- [x] **Build чист** (TypeScript + Next.js)
+- [x] **Деплой** — всё работает на https://jinntell.ru
+
+### Архитектурные решения Сессии 23
+- Помощник: двухуровневая система (Админ: модель/правила/скилы, Пользователь: имя/пол/голос/фото)
+- TTS roadmap: Яндекс SpeechKit → свой GPT-SoVITS/XTTS на GPU
+- Video roadmap: кружочки в чате (bubble) → PiP → sidebar → fullscreen
+- Контрагент кастомизирует голос/видео своего агента в ЛК
+- Пользователь управляет приложением голосом через помощника (будущее)
+
+### Архитектура после Сессии 23
+```
+ИЗМЕНЁННЫЕ ФАЙЛЫ (12):
+backend/app/models/agent.py          ← +27 полей: TTS, Video, llm_max_tokens
+backend/app/core/config.py           ← +14 переменных: TTS, Video провайдеры
+backend/app/schemas/agent.py         ← TTS/Video в AgentOut, AgentDetailOut, AgentUpdate
+backend/app/services/llm.py          ← _clean_reasoning v2, dynamic max_tokens, assistant:settings
+backend/app/api/admin.py             ← mel → assistant (endpoints + Redis keys)
+backend/migrations/session23_tts_video.sql ← NEW
+
+frontend/src/components/communicator/ChatArea.tsx    ← scroll fix (userScrolledUp)
+frontend/src/components/communicator/BottomBar.tsx   ← "Агенты" → "Джинны"
+frontend/src/components/communicator/MyAgentsModal.tsx ← "Мои Агенты" → "Мои Джинны"
+frontend/src/components/communicator/AgentCityModal.tsx ← "Город Агентов" → "Город Джиннов"
+frontend/src/components/admin/AgentSettingsPanel.tsx ← adminTestMel → adminTestAssistant
+frontend/src/hooks/useChat.ts        ← "Город Джиннов", "джинна-консультанта"
+frontend/src/services/api.ts         ← assistant-settings, AssistantSettings
+frontend/src/app/admin/page.tsx      ← assistant-settings, "Настройки Помощника"
+frontend/src/app/page.tsx            ← "Город Джиннов", "Мои Джинны"
+```
+
+
+---
+
+## Сессия 24 (2026-06-06)
+
+### Инфраструктура
+- Настроен SSH-ключ на Маке (```~/.ssh/jinntell_key```, alias `jinntell`) — больше пароль не нужен
+- Обнаружено: DEFAULT_LLM_PROVIDER был openrouter (nvidia/nemotron бесплатный), переключён на deepseek
+
+### Исправления чата
+- **ChatArea.tsx** — фикс автоскролла: добавлен `programmaticScrollRef` (игнорирует программный scroll как user-action), `requestAnimationFrame` (скролл после отрисовки), сброс `userScrolledUp` при новом сообщении пользователя. Причина бага: открытие клавиатуры меняло `bottomPad` → resize → spurious scroll event → `userScrolledUp=true`
+- **BottomBar.tsx** — фикс голоса: убрана авто-отправка незавершённого (interim) текста при остановке микрофона. Только финальные (isFinal) результаты отправляются как сообщения
+- **DeepSeek активирован** как основной LLM провайдер
+
+### Документация
+- Проведён архитектурный опрос владельца (15 вопросов) → сохранён в `docs/VISION_INTERVIEW.md`
+- Обновлён `CLAUDE_SESSION.md`
+
+### Что НЕ сделано (перенос в Сессию 25)
+- UI настроек TTS/Video в админке
+- Яндекс SpeechKit
+- Видео-кружочки в чате
+- Git commit + push
+- Джинн ПДД + RAG парсер
+
+## Сессия 25 (2026-06-07)
+
+Связка **пользователь → помощник → модель** + отладка чата + порядок в админке. Подробности: [SESSION_25_NOTES.md](SESSION_25_NOTES.md).
+
+Кратко:
+- Чат: исправлен скролл; голос без превью/подсказки; **wake-word** (активация по имени, opt-in) + защита от краша Chrome.
+- LLM: Джим перестал вываливать рассуждения (фикс `_clean_reasoning` + чистка БД); фикс роутинга OpenRouter (по «/»).
+- **Мозг помощника** теперь управляется карточкой core-агента «Помощник Джим» (`jinntell_link='jim'`), а не Redis. Тест в админке — тоже по карточке.
+- Админка: убраны легаси butler/mel → единое `assistant`; во вкладку «Персонаж» добавлены поля TTS/видео (каркас).
+- Архитектура: один помощник на всех + персонализация по user_id; местоположение модели = облако/наш сервер/своё железо.

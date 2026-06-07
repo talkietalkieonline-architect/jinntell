@@ -16,6 +16,7 @@ export default function BottomBar({
   onAttachMedia,
   onHeightChange,
   onMicStateChange,
+  assistantName = "Джим",
 }: {
   onSettingsClick: () => void;
   onContactsClick: () => void;
@@ -24,6 +25,7 @@ export default function BottomBar({
   onAttachMedia: (file: File) => void;
   onHeightChange?: (h: number) => void;
   onMicStateChange?: (active: boolean) => void;
+  assistantName?: string;
 }) {
   const [micState, setMicState] = useState<MicState>("off");
   const [showTextInput, setShowTextInput] = useState(false);
@@ -127,11 +129,132 @@ export default function BottomBar({
 
   const stopRecognition = useCallback(() => {
     if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null; }
-    setVoiceText((prev) => {
-      if (prev.trim()) { onSendRef.current(prev.trim()); }
-      return "";
-    });
+    setVoiceText("");
   }, []);
+
+  // === Wake-word: активация по имени ("Джим, ...") ===
+  const wakeRecognitionRef = useRef<SpeechRecognition | null>(null);
+  const [wakeEnabled, setWakeEnabled] = useState(false);
+  const awaitingCommandRef = useRef(false);
+  const assistantNameRef = useRef(assistantName);
+  const startWakeRef = useRef<(() => void) | undefined>(undefined);
+  const wakeRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeSessionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeLastStart = useRef(0);
+  const wakeFailCount = useRef(0);
+  useEffect(() => { assistantNameRef.current = assistantName; }, [assistantName]);
+
+  // opt-in из localStorage + реакция на изменение настройки
+  useEffect(() => {
+    const read = () => setWakeEnabled(localStorage.getItem("jinntell_wake_enabled") === "1");
+    read();
+    window.addEventListener("storage", read);
+    window.addEventListener("jinntell_wake_change", read);
+    return () => {
+      window.removeEventListener("storage", read);
+      window.removeEventListener("jinntell_wake_change", read);
+    };
+  }, []);
+
+  // Поиск имени в тексте -> индекс конца совпадения (или -1)
+  const matchName = (text: string): number => {
+    const name = (assistantNameRef.current || "Джим").toLowerCase().trim();
+    if (!name) return -1;
+    const i = text.toLowerCase().indexOf(name);
+    return i < 0 ? -1 : i + name.length;
+  };
+
+  const startWake = useCallback(() => {
+    const SR = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+    if (!SR) return;
+    if (wakeRecognitionRef.current) return;
+    if (localStorage.getItem("jinntell_wake_enabled") !== "1") return;
+    if (micStateRef.current !== "off") return;
+
+    const r = new (SR as unknown as { new(): SpeechRecognition })();
+    r.lang = "ru-RU";
+    r.continuous = true;
+    r.interimResults = false;
+    wakeLastStart.current = Date.now();
+
+    r.onresult = (event: SpeechRecognitionEvent) => {
+      wakeFailCount.current = 0;
+      const last = event.results[event.results.length - 1];
+      if (!last.isFinal) return;
+      const text = last[0].transcript.trim();
+      if (!text) return;
+      if (awaitingCommandRef.current) {
+        awaitingCommandRef.current = false;
+        onSendRef.current(text);
+        return;
+      }
+      const end = matchName(text);
+      if (end >= 0) {
+        const rest = text.slice(end).replace(/^[\s,.!?:;-]+/, "").trim();
+        if (rest) {
+          onSendRef.current(rest);
+        } else {
+          // Обращение без команды — Джим откликается и ждёт продолжения
+          onSendRef.current(assistantNameRef.current || "Джим");
+          awaitingCommandRef.current = true;
+        }
+      }
+    };
+
+    r.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setWakeEnabled(false);
+      }
+    };
+
+    r.onend = () => {
+      wakeRecognitionRef.current = null;
+      if (wakeSessionTimer.current) { clearTimeout(wakeSessionTimer.current); wakeSessionTimer.current = null; }
+      if (localStorage.getItem("jinntell_wake_enabled") !== "1" || micStateRef.current !== "off") return;
+      // Защита от тайтового цикла рестартов (краш вкладки)
+      const elapsed = Date.now() - wakeLastStart.current;
+      wakeFailCount.current = elapsed < 1000 ? wakeFailCount.current + 1 : 0;
+      const delay = wakeFailCount.current >= 5 ? 5000 : 500;
+      if (wakeFailCount.current >= 5) wakeFailCount.current = 0;
+      wakeRestartTimer.current = setTimeout(() => startWakeRef.current?.(), delay);
+    };
+
+    try {
+      r.start();
+      wakeRecognitionRef.current = r;
+      // Периодический сброс сессии — чтобы Chrome не копил память и не падал
+      wakeSessionTimer.current = setTimeout(() => {
+        try { r.stop(); } catch { /* noop */ }
+      }, 50000);
+    } catch {
+      wakeRecognitionRef.current = null;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { startWakeRef.current = startWake; }, [startWake]);
+
+  const stopWake = useCallback(() => {
+    awaitingCommandRef.current = false;
+    if (wakeRestartTimer.current) { clearTimeout(wakeRestartTimer.current); wakeRestartTimer.current = null; }
+    if (wakeSessionTimer.current) { clearTimeout(wakeSessionTimer.current); wakeSessionTimer.current = null; }
+    const r = wakeRecognitionRef.current;
+    if (r) {
+      r.onend = null;
+      r.onerror = null;
+      r.onresult = null;
+      try { r.abort(); } catch { /* noop */ }
+      wakeRecognitionRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (wakeEnabled && micState === "off") {
+      startWake();
+    } else {
+      stopWake();
+    }
+    return () => stopWake();
+  }, [wakeEnabled, micState, startWake, stopWake]);
 
   // === Микрофон: короткое / длинное нажатие ===
   const handleMicDown = useCallback(() => {
@@ -426,7 +549,7 @@ export default function BottomBar({
           <span className="text-[9px] uppercase tracking-wider">Контакты</span>
         </button>
 
-        {/* Мои агенты */}
+        {/* Мои Джинны */}
         <button
           onClick={onAgentsClick}
           className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
@@ -437,25 +560,13 @@ export default function BottomBar({
             <path d="M3 21v-2a7 7 0 0 1 7-7h4a7 7 0 0 1 7 7v2" />
             <circle cx="12" cy="8" r="2" fill="currentColor" opacity="0.3" />
           </svg>
-          <span className="text-[9px] uppercase tracking-wider">Агенты</span>
+          <span className="text-[9px] uppercase tracking-wider">Джинны</span>
         </button>
       </div>
 
-      {/* Подсказка состояния микрофона + распознанный текст */}
-      {micState !== "off" && (
+      {/* Подсказка состояния микрофона (только MUTE) */}
+      {micState === "mute" && (
         <div className="flex flex-col items-center gap-1 pb-1">
-          {voiceText && (micState === "on" || micState === "always") && (
-            <div
-              className="text-[12px] px-4 py-1 rounded-full max-w-[80%] truncate animate-fade-in"
-              style={{
-                background: "rgba(212,168,67,0.08)",
-                color: "var(--text-secondary)",
-                border: "1px solid rgba(212,168,67,0.15)",
-              }}
-            >
-              {voiceText}
-            </div>
-          )}
           <span
             className="text-[9px] uppercase tracking-wider px-3 py-0.5 rounded-full animate-fade-in"
             style={{

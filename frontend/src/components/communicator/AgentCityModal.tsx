@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useAgents } from "@/hooks/useAgents";
 
 /* ══════════════════════════════════════════════════════════════
-   Город Агентов — каталог из API с fallback на хардкод
+   Город Джиннов — каталог из API с fallback на хардкод
    ══════════════════════════════════════════════════════════════ */
 
 const PROFESSIONS = [
@@ -110,7 +110,7 @@ export default function AgentCityModal({
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Город Агентов
+                Город Джиннов
               </h2>
               <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
                 Всего {counts.total} &bull; Бизнес {counts.business} &bull; Жители {counts.citizen}
@@ -304,14 +304,14 @@ export default function AgentCityModal({
               <div className="flex flex-col gap-1">
                 {[
                   "Смотреть презентацию",
-                  isFav(agentDetails.id) ? "Уже у тебя в избранном" : "Добавить в Мои агенты",
+                  isFav(agentDetails.id) ? "Уже у тебя в избранном" : "Добавить в Мои Джинны",
                   "Начать чат",
                   "Оценить агента",
                   "Пожаловаться",
                 ].map((action) => {
                   const isDisabled = action === "Уже у тебя в избранном";
                   const isDanger = action === "Пожаловаться";
-                  const isAdd = action === "Добавить в Мои агенты";
+                  const isAdd = action === "Добавить в Мои Джинны";
 
                   return (
                     <button

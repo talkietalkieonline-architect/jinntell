@@ -57,6 +57,26 @@ AVAILABLE_MODELS = [
     {"value": "llama-3.3-70b-versatile", "label": "Llama 3.3 70B", "group": "Groq"},
 ]
 
+# Голос (TTS) — провайдеры для помощника
+AVAILABLE_TTS = [
+    {"value": "browser", "label": "Браузерный (Web Speech) — бесплатно", "group": "Базовый"},
+    {"value": "yandex", "label": "Yandex SpeechKit", "group": "Облако"},
+    {"value": "self", "label": "Self-hosted (GPT-SoVITS и др.)", "group": "Своё"},
+]
+
+# Видео (talking avatar) — провайдеры для помощника
+AVAILABLE_VIDEO = [
+    {"value": "", "label": "Выключено", "group": ""},
+    {"value": "self", "label": "Self-hosted SadTalker", "group": "Своё"},
+]
+
+# Местоположение модели (где физически крутится)
+MODEL_LOCATIONS = [
+    {"value": "cloud", "label": "Облако (API провайдера)"},
+    {"value": "self", "label": "Наш сервер"},
+    {"value": "own_hw", "label": "Своё железо (GPU)"},
+]
+
 
 async def _get_redis():
     """Async Redis connection"""
@@ -416,8 +436,8 @@ async def admin_llm_status(
 # ═══════════════════════════════════════════════
 
 
-@router.get("/mel-settings")
-async def admin_get_mel_settings(
+@router.get("/assistant-settings")
+async def admin_get_assistant_settings(
     admin: User = Depends(get_admin_user),
 ):
     """Текущие настройки Помощника (провайдер, модель, промпт)"""
@@ -427,11 +447,13 @@ async def admin_get_mel_settings(
     provider = s.DEFAULT_LLM_PROVIDER
     model = _default_model_for_provider(provider)
     system_prompt = MEL_SYSTEM_PROMPT
+    voice = {"provider": "browser", "model": "", "location": "cloud", "endpoint": "", "voice_id": ""}
+    video = {"provider": "", "model": "", "location": "cloud", "endpoint": ""}
 
     try:
         r = await _get_redis()
-        mel_json = await r.get("mel:settings") or await r.get("butler:settings")
-        mel_prompt = await r.get("mel:system_prompt") or await r.get("butler:system_prompt")
+        mel_json = await r.get("assistant:settings") or await r.get("butler:settings")
+        mel_prompt = await r.get("assistant:system_prompt") or await r.get("butler:system_prompt")
         await r.aclose()
 
         if mel_json:
@@ -440,6 +462,10 @@ async def admin_get_mel_settings(
                 provider = bs["provider"]
             if bs.get("model"):
                 model = bs["model"]
+            if isinstance(bs.get("voice"), dict):
+                voice.update(bs["voice"])
+            if isinstance(bs.get("video"), dict):
+                video.update(bs["video"])
         if mel_prompt:
             system_prompt = mel_prompt
     except Exception as e:
@@ -449,19 +475,18 @@ async def admin_get_mel_settings(
         "provider": provider,
         "model": model,
         "system_prompt": system_prompt,
+        "voice": voice,
+        "video": video,
         "available_models": AVAILABLE_MODELS,
+        "available_tts": AVAILABLE_TTS,
+        "available_video": AVAILABLE_VIDEO,
+        "model_locations": MODEL_LOCATIONS,
     }
 
 
-# Legacy alias
-@router.get("/butler-settings")
-async def admin_get_butler_settings(admin: User = Depends(get_admin_user)):
-    """Legacy: перенаправление на mel-settings"""
-    return await admin_get_mel_settings(admin)
 
-
-@router.patch("/mel-settings")
-async def admin_update_mel_settings(
+@router.patch("/assistant-settings")
+async def admin_update_assistant_settings(
     body: dict = Body(...),
     admin: User = Depends(get_admin_user),
 ):
@@ -472,42 +497,47 @@ async def admin_update_mel_settings(
     try:
         r = await _get_redis()
 
-        existing_json = await r.get("mel:settings") or await r.get("butler:settings")
+        existing_json = await r.get("assistant:settings") or await r.get("butler:settings")
         existing = json.loads(existing_json) if existing_json else {}
 
         if "provider" in body:
             existing["provider"] = body["provider"]
         if "model" in body:
             existing["model"] = body["model"]
+        if isinstance(body.get("voice"), dict):
+            existing["voice"] = {**existing.get("voice", {}), **body["voice"]}
+        if isinstance(body.get("video"), dict):
+            existing["video"] = {**existing.get("video", {}), **body["video"]}
 
-        await r.set("mel:settings", json.dumps(existing))
+        await r.set("assistant:settings", json.dumps(existing))
 
         if "system_prompt" in body:
-            await r.set("mel:system_prompt", body["system_prompt"])
+            await r.set("assistant:system_prompt", body["system_prompt"])
 
-        mel_prompt = await r.get("mel:system_prompt")
+        mel_prompt = await r.get("assistant:system_prompt")
         await r.aclose()
 
         return {
             "provider": existing.get("provider", s.DEFAULT_LLM_PROVIDER),
             "model": existing.get("model", _default_model_for_provider(s.DEFAULT_LLM_PROVIDER)),
             "system_prompt": mel_prompt or MEL_SYSTEM_PROMPT,
+            "voice": existing.get("voice", {}),
+            "video": existing.get("video", {}),
             "available_models": AVAILABLE_MODELS,
+            "available_tts": AVAILABLE_TTS,
+            "available_video": AVAILABLE_VIDEO,
+            "model_locations": MODEL_LOCATIONS,
         }
     except Exception as e:
         print(f"[admin] Redis write error: {e}")
         raise HTTPException(500, f"Ошибка сохранения: {e}")
 
 
-# Legacy alias
-@router.patch("/butler-settings")
-async def admin_update_butler_settings_legacy(body: dict = Body(...), admin: User = Depends(get_admin_user)):
-    return await admin_update_mel_settings(body, admin)
 
-
-@router.post("/mel-test")
-async def admin_test_mel(
+@router.post("/assistant-test")
+async def admin_test_assistant(
     body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_admin_user),
 ):
     """Тест Помощника: отправить сообщение, получить ответ"""
@@ -518,32 +548,20 @@ async def admin_test_mel(
     if not message:
         raise HTTPException(400, "Сообщение не может быть пустым")
 
-    provider = s.DEFAULT_LLM_PROVIDER
-    model = _default_model_for_provider(provider)
-    system_prompt = MEL_SYSTEM_PROMPT
-
-    try:
-        r = await _get_redis()
-        mel_json = await r.get("mel:settings") or await r.get("butler:settings")
-        mel_prompt = await r.get("mel:system_prompt") or await r.get("butler:system_prompt")
-        await r.aclose()
-
-        if mel_json:
-            bs = json.loads(mel_json)
-            if bs.get("provider"):
-                provider = bs["provider"]
-            if bs.get("model"):
-                model = bs["model"]
-        if mel_prompt:
-            system_prompt = mel_prompt
-    except Exception as e:
-        print(f"[admin] Redis read error (test): {e}")
+    # Берём настройки из карточки core-агента «Помощник Джим» — как реальный Джим
+    result = await db.execute(select(Agent).where(Agent.jinntell_link == "jim"))
+    asst = result.scalar_one_or_none()
+    model = asst.llm_model if asst else _default_model_for_provider(s.DEFAULT_LLM_PROVIDER)
+    system_prompt = asst.system_prompt if (asst and asst.system_prompt) else MEL_SYSTEM_PROMPT
+    max_tokens = asst.llm_max_tokens if asst else 1000
+    provider = (model.split("/")[0] if "/" in model else ("deepseek" if model.startswith("deepseek") else s.DEFAULT_LLM_PROVIDER))
 
     start = time.time()
     reply = await get_llm_reply(
         user_message=message,
         system_prompt=system_prompt,
         model=model,
+        max_tokens=max_tokens,
     )
     elapsed_ms = int((time.time() - start) * 1000)
 
@@ -554,11 +572,6 @@ async def admin_test_mel(
         "response_time_ms": elapsed_ms,
     }
 
-
-# Legacy alias
-@router.post("/butler-test")
-async def admin_test_butler_legacy(body: dict = Body(...), admin: User = Depends(get_admin_user)):
-    return await admin_test_mel(body, admin)
 
 
 # ═══════════════════════════════════════════════

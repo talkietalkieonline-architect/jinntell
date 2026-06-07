@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   adminGetAgent,
   adminUpdateAgent,
-  adminTestMel,
+  adminTestAssistant,
   adminGetRAGSources,
   adminAddRAGSource,
   adminDeleteRAGSource,
@@ -68,7 +68,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
     setChatMessages(prev => [...prev, { role: "user", text: userMsg }]);
     setChatLoading(true);
     try {
-      const result = await adminTestMel(userMsg);
+      const result = await adminTestAssistant(userMsg);
       setChatMessages(prev => [...prev, { role: "assistant", text: result.reply }]);
     } catch (e) {
       setChatMessages(prev => [...prev, { role: "assistant", text: "Ошибка: " + (e instanceof Error ? e.message : "нет ответа") }]);
@@ -494,22 +494,64 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
             </div>
           </div>
 
-          {/* Голос */}
+          {/* Голос (TTS) */}
           <div className="bg-gray-900 rounded-xl p-5 border border-gray-800">
-            <p className="text-sm font-medium mb-3">Голос (будущее — TTS)</p>
+            <label className="flex items-center gap-2 text-sm font-medium mb-3 cursor-pointer">
+              <input type="checkbox" checked={fBool("tts_enabled")} onChange={(e) => setF("tts_enabled", e.target.checked)} className="accent-amber-500" /> Голос (TTS) включён
+            </label>
             <div className="grid grid-cols-3 gap-4">
-              <Field label="Voice ID" value={f("voice_id")} onChange={(v) => setF("voice_id", v)} placeholder="male-deep" />
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Скорость: {((form.voice_speed as number) || 1.0).toFixed(1)}</label>
-                <input type="range" min="0.5" max="2.0" step="0.1" value={(form.voice_speed as number) || 1.0}
-                  onChange={(e) => setF("voice_speed", parseFloat(e.target.value))} className="w-full accent-amber-500" />
+                <label className="text-xs text-gray-500 mb-1 block">Провайдер</label>
+                <select value={f("tts_provider") || "browser"} onChange={(e) => setF("tts_provider", e.target.value)} className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
+                  <option value="browser">Браузерный (Web Speech)</option>
+                  <option value="yandex">Yandex SpeechKit</option>
+                  <option value="self">Self-hosted (своё железо)</option>
+                </select>
+              </div>
+              <Field label="Voice ID" value={f("tts_voice_id")} onChange={(v) => setF("tts_voice_id", v)} placeholder="alyona" />
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Эмоция</label>
+                <select value={f("tts_emotion") || "neutral"} onChange={(e) => setF("tts_emotion", e.target.value)} className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
+                  <option value="neutral">Нейтральная</option>
+                  <option value="good">Добрая</option>
+                  <option value="evil">Строгая</option>
+                </select>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Тон: {((form.voice_pitch as number) || 1.0).toFixed(1)}</label>
-                <input type="range" min="0.5" max="2.0" step="0.1" value={(form.voice_pitch as number) || 1.0}
-                  onChange={(e) => setF("voice_pitch", parseFloat(e.target.value))} className="w-full accent-amber-500" />
+                <label className="text-xs text-gray-500 mb-1 block">Скорость: {((form.tts_speed as number) || 1.0).toFixed(1)}</label>
+                <input type="range" min="0.5" max="2.0" step="0.1" value={(form.tts_speed as number) || 1.0} onChange={(e) => setF("tts_speed", parseFloat(e.target.value))} className="w-full accent-amber-500" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Тон: {((form.tts_pitch as number) || 1.0).toFixed(1)}</label>
+                <input type="range" min="0.5" max="2.0" step="0.1" value={(form.tts_pitch as number) || 1.0} onChange={(e) => setF("tts_pitch", parseFloat(e.target.value))} className="w-full accent-amber-500" />
               </div>
             </div>
+            <p className="text-[11px] text-gray-600 mt-2">Местоположение (endpoint своего сервера/железа) задаётся глобально в конфиге сервера.</p>
+          </div>
+
+          {/* Видео (talking avatar) */}
+          <div className="bg-gray-900 rounded-xl p-5 border border-gray-800">
+            <label className="flex items-center gap-2 text-sm font-medium mb-3 cursor-pointer">
+              <input type="checkbox" checked={fBool("video_enabled")} onChange={(e) => setF("video_enabled", e.target.checked)} className="accent-amber-500" /> Видео-аватар включён
+            </label>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Провайдер</label>
+                <select value={f("video_provider")} onChange={(e) => setF("video_provider", e.target.value)} className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
+                  <option value="">Выключено</option>
+                  <option value="self">Self-hosted SadTalker</option>
+                </select>
+              </div>
+              <Field label="Модель" value={f("video_model")} onChange={(v) => setF("video_model", v)} placeholder="sadtalker" />
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Режим</label>
+                <select value={f("video_mode") || "bubble"} onChange={(e) => setF("video_mode", e.target.value)} className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
+                  <option value="bubble">Кружочек</option>
+                  <option value="fullscreen">Полный экран</option>
+                </select>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-600 mt-2">Каркас на перспективу — генерация подключится со своим железом.</p>
           </div>
 
           {/* Внешность + Одежда */}

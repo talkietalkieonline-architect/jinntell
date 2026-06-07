@@ -41,6 +41,15 @@ async def _load_agent(agent_id: int) -> Optional[Agent]:
         return result.scalar_one_or_none()
 
 
+async def _get_assistant_agent() -> Optional[Agent]:
+    """Core-агент «Помощник Джим» — единый источник настроек помощника (мозг/промпт)"""
+    async with async_session() as db:
+        result = await db.execute(
+            select(Agent).where(Agent.jinntell_link == "jim")
+        )
+        return result.scalar_one_or_none()
+
+
 async def _get_conversation_history(room: str, limit: int = 10) -> list:
     """Получить последние сообщения для контекста LLM"""
     async with async_session() as db:
@@ -122,8 +131,13 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         user_persona = _build_user_persona_injection(settings)
 
     # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
+    # Мозг и промпт берём из карточки core-агента «Помощник Джим» (единый источник)
+    asst = await _get_assistant_agent()
     reply_text = await get_llm_reply(
         user_message=user_message,
+        system_prompt=(asst.system_prompt if asst and asst.system_prompt else None),
+        model=(asst.llm_model if asst else None),
+        max_tokens=(asst.llm_max_tokens if asst else 1000),
         conversation_history=history,
         user_persona_suffix=user_persona,
     )

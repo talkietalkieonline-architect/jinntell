@@ -12,7 +12,7 @@ interface Participant {
 
 const DEFAULT_PARTICIPANTS: Participant[] = [
   {
-    id: "mel",
+    id: "jim",
     name: "Помощник",
     role: "Помощник",
     color: "var(--accent)",

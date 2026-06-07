@@ -23,7 +23,9 @@ JinnTell — это AI-first коммуникационная платформа
 - Быть вежливым, лаконичным и полезным
 
 Ты говоришь по-русски. Ответы давай кратко — 1-3 предложения, если не просят подробнее.
-Будь дружелюбным, но профессиональным. Используй эмодзи умеренно."""
+Будь дружелюбным, но профессиональным. Используй эмодзи умеренно.
+
+ВАЖНО: Отвечай ТОЛЬКО готовым ответом на русском языке. НЕ пиши свои рассуждения, мысли, планы или анализ. НЕ пиши на английском. Сразу давай финальный ответ пользователю."""
 
 # Legacy aliases
 MEL_SYSTEM_PROMPT = ASSISTANT_SYSTEM_PROMPT
@@ -56,46 +58,103 @@ def get_active_provider() -> dict:
 
 
 def _clean_reasoning(text: str) -> str:
-    """Убираем reasoning/thinking блоки из ответа LLM (DeepSeek, R1 и др.)"""
-    # Убираем <think>...</think> блоки
-    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
-    # Убираем блоки, начинающиеся с reasoning-маркеров
-    # Паттерн: текст до первого нормального ответа на русском
-    # Если ответ содержит английский reasoning перед русским текстом — отсекаем
-    lines = text.strip().split('\n')
+    """Убираем reasoning/thinking из ответа LLM (DeepSeek, R1 и др.), в т.ч. русский."""
+    if not text:
+        return text
+
+    # 1. Явные <think>...</think> блоки
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+
+    low = text.lower()
+
+    # Сильные мета-маркеры — таких фраз не бывает в нормальном ответе пользователю
+    strong_markers = [
+        "хорошо, пользовател", "пользователь пишет", "пользователь спрашивает",
+        "пользователь написал", "пользователь просит", "пользователь, видимо",
+        "посмотрю на истори", "историю диалога", "я (или система)",
+        "инструкция четко", "инструкция говорит", "вариант ответа",
+        "the user is", "the user wrote", "the user asks", "let me think",
+    ]
+    # Слабые маркеры — срабатывают только на длинном тексте
+    weak_markers = [
+        "мне нужно", "нужно ответить", "нужно дать", "сначала посмотр",
+        "okay, let", "let us see", "i need to",
+    ]
+    is_reasoning = any(m in low for m in strong_markers) or (
+        len(text) > 500 and any(m in low for m in weak_markers)
+    )
+
+    if is_reasoning:
+        # Пытаемся вытащить финальный ответ из явного маркера
+        answer_markers = [
+            "вариант ответа:", "финальный ответ:", "итоговый ответ:",
+            "мой ответ:", "ответ пользователю:", "final answer:",
+        ]
+        best_pos, best_len = -1, 0
+        for m in answer_markers:
+            pos = low.rfind(m)
+            if pos > best_pos:
+                best_pos, best_len = pos, len(m)
+        if best_pos >= 0:
+            after = text[best_pos + best_len:].strip()
+            q = re.search(r'[«"“](.+?)[»"”]', after, flags=re.DOTALL)
+            cand = (q.group(1) if q else after.split(chr(10))[0])
+            cand = cand.strip().strip('"«»“”')
+            if cand and len(cand) < 600:
+                return cand
+        # Не удалось аккуратно извлечь — пусть caller подставит fallback
+        return ""
+
+    # Мягкая очистка: англ. reasoning перед русским ответом
+    russian_pattern = re.compile(r'[А-Яа-яЁё]')
+    lines = text.strip().split(chr(10))
+    first_russian_line = -1
+    for i, line in enumerate(lines):
+        if len(russian_pattern.findall(line)) >= 10:
+            first_russian_line = i
+            break
+    if first_russian_line > 0:
+        text = chr(10).join(lines[first_russian_line:]).strip()
+
+    # Срезаем оставшиеся англ. reasoning-строки в начале
+    lines = text.strip().split(chr(10))
     clean_lines = []
-    found_answer = False
+    found_content = False
     for line in lines:
         stripped = line.strip()
-        # Пропускаем пустые строки в начале
-        if not stripped and not found_answer:
+        if not stripped:
+            if found_content:
+                clean_lines.append(line)
             continue
-        # Маркеры reasoning — пропускаем
-        if any(marker in stripped.lower() for marker in [
-            'so,', 'wait,', 'let me', 'i need to', 'looking at', 'the user',
-            'my task is', 'possible answer:', 'from the system', 'i should',
-            'thinking about', 'the exact', 'so my answer', 'let me check',
-            'previous interactions:', 'the latest', 'but keep it',
+        lower = stripped.lower()
+        if not found_content and any(lower.startswith(m) for m in [
+            'so,', 'wait,', 'let me', 'i need', 'looking at', 'the user',
+            'my task', 'possible', 'from the', 'i should', 'thinking',
+            'the exact', 'so my', 'let me check', 'previous', 'the latest',
+            'but keep', 'check ', 'final answer', 'example response',
+            'also,', 'note ', 'make sure', 'maybe ', 'hmm', 'okay',
         ]):
             continue
-        # Если строка начинается с цитаты системного промпта — пропускаем
-        if stripped.startswith('"') and 'платформ' in stripped and len(stripped) > 100:
-            continue
-        # Нашли нормальный текст
-        found_answer = True
+        found_content = True
         clean_lines.append(line)
-    result = '\n'.join(clean_lines).strip()
-    # Если после очистки ничего не осталось — вернуть оригинал
+    result = chr(10).join(clean_lines).strip()
+
+    # Обрезанный хвост (незаконченное предложение)
+    if result and result[-1] not in '.!?»"' + chr(10):
+        last_dot = max(result.rfind('.'), result.rfind('!'), result.rfind('?'))
+        if last_dot > len(result) // 2:
+            result = result[:last_dot + 1]
+
     return result if result else text.strip()
 
 
-async def _call_deepseek(messages: list, model: str, api_key: str) -> str:
+async def _call_deepseek(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     """DeepSeek — дешёвый и качественный, работает из РФ. OpenAI-совместимый API."""
     async with httpx.AsyncClient(timeout=60.0) as client:
         r = await client.post(
             "https://api.deepseek.com/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": messages, "max_tokens": 500, "temperature": 0.7},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
         )
         if r.status_code != 200:
             print(f"[llm] DeepSeek error: {r.status_code} {r.text[:300]}")
@@ -110,12 +169,12 @@ async def _call_deepseek(messages: list, model: str, api_key: str) -> str:
         return text
 
 
-async def _call_openai(messages: list, model: str, api_key: str) -> str:
+async def _call_openai(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": messages, "max_tokens": 500, "temperature": 0.7},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
         )
         if r.status_code != 200:
             print(f"[llm] OpenAI error: {r.status_code} {r.text[:200]}")
@@ -123,7 +182,7 @@ async def _call_openai(messages: list, model: str, api_key: str) -> str:
         return r.json()["choices"][0]["message"]["content"].strip()
 
 
-async def _call_gemini(messages: list, model: str, api_key: str) -> str:
+async def _call_gemini(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     contents = []
     system_text = ""
     for m in messages:
@@ -133,7 +192,7 @@ async def _call_gemini(messages: list, model: str, api_key: str) -> str:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
     async with httpx.AsyncClient(timeout=30.0) as client:
-        body = {"contents": contents, "generationConfig": {"maxOutputTokens": 500, "temperature": 0.7}}
+        body = {"contents": contents, "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
         if system_text:
             body["systemInstruction"] = {"parts": [{"text": system_text}]}
         r = await client.post(
@@ -148,12 +207,12 @@ async def _call_gemini(messages: list, model: str, api_key: str) -> str:
         return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
-async def _call_groq(messages: list, model: str, api_key: str) -> str:
+async def _call_groq(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": messages, "max_tokens": 500, "temperature": 0.7},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
         )
         if r.status_code != 200:
             print(f"[llm] Groq error: {r.status_code} {r.text[:200]}")
@@ -193,7 +252,7 @@ def _prepare_openrouter_messages(messages: list, model: str) -> list:
     return other_msgs or messages
 
 
-async def _call_openrouter(messages: list, model: str, api_key: str) -> str:
+async def _call_openrouter(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     """OpenRouter — агрегатор LLM. Авто-fallback на другие бесплатные модели при 429."""
     models_to_try = [model] + [m for m in OPENROUTER_FREE_MODELS if m != model]
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -207,7 +266,7 @@ async def _call_openrouter(messages: list, model: str, api_key: str) -> str:
                     "HTTP-Referer": "https://jinntell.ru",
                     "X-Title": "JinnTell",
                 },
-                json={"model": try_model, "messages": prepared, "max_tokens": 500, "temperature": 0.7},
+                json={"model": try_model, "messages": prepared, "max_tokens": max_tokens, "temperature": 0.7},
             )
             if r.status_code == 200:
                 text = r.json()["choices"][0]["message"]["content"].strip()
@@ -233,6 +292,7 @@ async def get_llm_reply(
     model: Optional[str] = None,
     conversation_history: Optional[list] = None,
     user_persona_suffix: Optional[str] = None,
+    max_tokens: int = 1000,
 ) -> str:
     """Получить ответ от LLM. Автовыбор провайдера."""
     provider = get_active_provider()
@@ -245,13 +305,15 @@ async def get_llm_reply(
             import redis.asyncio as aioredis
             _redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
             # Поддерживаем все ключи: assistant:settings (новый), mel:settings, butler:settings (legacy)
-            _assistant_settings = await _redis.get("assistant:settings") or await _redis.get("mel:settings") or await _redis.get("butler:settings")
-            _assistant_prompt = await _redis.get("assistant:system_prompt") or await _redis.get("mel:system_prompt") or await _redis.get("butler:system_prompt")
+            _assistant_settings = await _redis.get("assistant:settings") or await _redis.get("assistant:settings") or await _redis.get("butler:settings")
+            _assistant_prompt = await _redis.get("assistant:system_prompt") or await _redis.get("assistant:system_prompt") or await _redis.get("butler:system_prompt")
             await _redis.aclose()
             if _assistant_settings:
                 _bs = json.loads(_assistant_settings)
                 if _bs.get("model"):
                     model = _bs["model"]
+                if _bs.get("max_tokens"):
+                    max_tokens = int(_bs["max_tokens"])
             if _assistant_prompt:
                 system_prompt = _assistant_prompt
         except Exception as e:
@@ -268,7 +330,11 @@ async def get_llm_reply(
 
     llm_model = model or provider["model"]
     pname = provider["name"]
-    if llm_model.startswith("deepseek"):
+    # OpenRouter-модели всегда содержат "/" в имени (vendor/model[:free])
+    # и должны идти через OpenRouter, а не определяться по префиксу.
+    if "/" in llm_model:
+        pname = "openrouter"
+    elif llm_model.startswith("deepseek"):
         pname = "deepseek"
     elif llm_model.startswith("gemini"):
         pname = "gemini"
@@ -301,6 +367,8 @@ async def get_llm_reply(
                 reply = await _call_groq(messages, settings.GROQ_MODEL, settings.GROQ_API_KEY)
             else:
                 return random.choice(FALLBACK_REPLIES)
+        if reply:
+            reply = _clean_reasoning(reply)
         return reply or random.choice(FALLBACK_REPLIES)
     except Exception as e:
         print(f"[llm] Error ({pname}): {e}")
@@ -389,6 +457,7 @@ def _build_agent_prompt(
         parts.append("Не используй эмодзи.")
 
     parts.append("\nОтвечай кратко — 1-3 предложения, если не просят подробнее. Говори по-русски.")
+    parts.append("ВАЖНО: Отвечай ТОЛЬКО готовым ответом. НЕ пиши рассуждения, мысли или анализ. Сразу давай финальный ответ.")
 
     return "\n".join(parts)
 
@@ -412,6 +481,7 @@ async def get_agent_reply(
     mode_rules: Optional[str] = None,
     mode_context: Optional[str] = None,
     rag_context: Optional[str] = None,
+    max_tokens: int = 1000,
 ) -> str:
     """Получить ответ от конкретного агента."""
     prompt = _build_agent_prompt(
@@ -436,4 +506,5 @@ async def get_agent_reply(
         system_prompt=prompt,
         model=llm_model,
         conversation_history=conversation_history,
+        max_tokens=max_tokens,
     )

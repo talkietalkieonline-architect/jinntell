@@ -365,14 +365,48 @@ export default function ChatArea({
   agentInfo?: { id: number; name: string; color: string; greeting?: string } | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const userScrolledUp = useRef(false);
+  const lastMsgCount = useRef(0);
   const prevMsgCountRef = useRef(messages.length);
+  const programmaticScrollRef = useRef(false);
 
-  // Автоскролл к последнему сообщению
+  // Автоскролл — только когда пользователь сам отправил сообщение
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const newMsgAdded = messages.length > lastMsgCount.current;
+    if (newMsgAdded) {
+      const lastMsg = messages[messages.length - 1];
+      const isUserMsg = lastMsg?.sender === "user";
+      if (isUserMsg) {
+        // Пользователь отправил — всегда скроллим вниз
+        userScrolledUp.current = false;
+        programmaticScrollRef.current = true;
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+          setTimeout(() => { programmaticScrollRef.current = false; }, 100);
+        });
+      } else if (!userScrolledUp.current) {
+        // Агент ответил — скроллим только если пользователь уже внизу
+        programmaticScrollRef.current = true;
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+          setTimeout(() => { programmaticScrollRef.current = false; }, 100);
+        });
+      }
     }
-  }, [messages, isTyping]);
+    lastMsgCount.current = messages.length;
+  }, [messages]);
+
+  // Detect user scrolling up (ignore programmatic scrolls)
+  const handleScroll = () => {
+    if (programmaticScrollRef.current) return;
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    userScrolledUp.current = scrollHeight - scrollTop - clientHeight > 80;
+  };
 
   // TTS — автоозвучка новых сообщений агентов
   useEffect(() => {
@@ -403,12 +437,13 @@ export default function ChatArea({
     >
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto flex justify-center"
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto"
         style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
       >
         {/* Сообщения прижаты к низу (как Telegram) */}
-        <div className="flex flex-col justify-end min-h-full w-full" style={{ maxWidth: "620px" }}>
-          <div className="flex flex-col gap-3 w-full py-4 pb-6 px-4">
+        <div className="flex flex-col justify-end items-center min-h-full w-full">
+          <div className="flex flex-col gap-3 w-full max-w-[620px] mx-auto py-4 pb-6 px-4">
             {messages.map((msg) => {
               const userSide = isUser(msg.sender);
 

@@ -62,6 +62,9 @@ export default function SettingsModal({
   const [assistantGender, setAssistantGender] = useState("male");
   const [assistantVoice, setAssistantVoice] = useState("male_low");
   const [userAge, setUserAge] = useState("");
+  const [wakeEnabled, setWakeEnabled] = useState(
+    typeof window !== "undefined" && localStorage.getItem("jinntell_wake_enabled") === "1"
+  );
 
   // Состояние сохранения
   const [saving, setSaving] = useState(false);
@@ -312,6 +315,28 @@ export default function SettingsModal({
                   className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle}
                 />
                 <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Так вы будете обращаться к помощнику</p>
+              </div>
+
+              {/* Активация по имени (wake-word) */}
+              <div>
+                <label className="flex items-center justify-between cursor-pointer gap-3">
+                  <span className="flex flex-col">
+                    <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Активация по имени</span>
+                    <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Произнесите «{assistantName || "Джим"}», чтобы помощник начал слушать</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={wakeEnabled}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setWakeEnabled(on);
+                      localStorage.setItem("jinntell_wake_enabled", on ? "1" : "0");
+                      window.dispatchEvent(new Event("jinntell_wake_change"));
+                    }}
+                    className="w-5 h-5 shrink-0 cursor-pointer"
+                    style={{ accentColor: "var(--accent)" }}
+                  />
+                </label>
               </div>
 
               {/* Пол помощника */}

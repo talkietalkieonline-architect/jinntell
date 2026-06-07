@@ -5,41 +5,34 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # Приложение
     APP_NAME: str = "JinnTell"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.2.0"
     DEBUG: bool = True
 
-    # PostgreSQL
     DATABASE_URL: str = "postgresql+asyncpg://jinntell:jinntell@localhost:5432/jinntell"
     DATABASE_URL_SYNC: str = "postgresql://jinntell:jinntell@localhost:5432/jinntell"
 
-    # JWT
     SECRET_KEY: str = "jinntell-dev-secret-key-change-in-production"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30  # 30 дней
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
 
-    # SMS
     SMS_CODE_EXPIRE_MINUTES: int = 5
     SMS_CODE_LENGTH: int = 4
-    SMS_PROVIDER: str = "sms_ru"  # sms_ru / smsc / debug
-    SMS_RU_API_KEY: str = ""  # https://sms.ru/my/settings
+    SMS_PROVIDER: str = "sms_ru"
+    SMS_RU_API_KEY: str = ""
     SMSC_LOGIN: str = ""
     SMSC_PASSWORD: str = ""
 
-    # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Qdrant (vector DB for RAG)
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION_PREFIX: str = "jinntell"
 
-    # Embeddings
-    EMBEDDING_PROVIDER: str = "jina"  # jina / openai
+    EMBEDDING_PROVIDER: str = "jina"
     JINA_API_KEY: str = ""
-    EMBEDDING_MODEL: str = "jina-embeddings-v3"  # or text-embedding-3-small for openai
+    EMBEDDING_MODEL: str = "jina-embeddings-v3"
 
-    # LLM — мульти-провайдер
+    # LLM
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     GEMINI_API_KEY: str = ""
@@ -50,25 +43,37 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_MODEL: str = "deepseek-chat"
-
-    # Провайдер по умолчанию для Дворецкого: openai / gemini / groq / openrouter / deepseek
     DEFAULT_LLM_PROVIDER: str = "deepseek"
 
-    # Админка — номера телефонов админов (при регистрации получают is_admin=True)
+    # TTS
+    DEFAULT_TTS_PROVIDER: str = ""
+    YANDEX_SPEECHKIT_API_KEY: str = ""
+    YANDEX_SPEECHKIT_FOLDER_ID: str = ""
+    YANDEX_SPEECHKIT_URL: str = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
+    SELF_TTS_URL: str = ""
+    SELF_TTS_API_KEY: str = ""
+    SELF_TTS_MODEL: str = "gptsovits"
+
+    # VIDEO
+    DEFAULT_VIDEO_PROVIDER: str = ""
+    SELF_VIDEO_URL: str = ""
+    SELF_VIDEO_API_KEY: str = ""
+    SELF_VIDEO_MODEL: str = "sadtalker"
+    HEDRA_API_KEY: str = ""
+    HEDRA_URL: str = "https://api.hedra.com/v1"
+    DID_API_KEY: str = ""
+    DID_URL: str = "https://api.d-id.com"
+
     ADMIN_PHONES: List[str] = []
 
-    # OAuth — ВК, Яндекс, Telegram
     VK_CLIENT_ID: str = ""
     VK_CLIENT_SECRET: str = ""
     YANDEX_CLIENT_ID: str = ""
     YANDEX_CLIENT_SECRET: str = ""
-    TELEGRAM_BOT_TOKEN: str = ""  # для проверки подписи Telegram Login Widget
+    TELEGRAM_BOT_TOKEN: str = ""
 
-    # Сайт (для OAuth redirect)
     SITE_URL: str = "https://jinntell.com"
 
-    # CORS (в production nginx проксирует — CORS не нужен,
-    # но оставляем для прямого доступа к API)
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     class Config:
