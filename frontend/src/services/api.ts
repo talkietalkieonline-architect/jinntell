@@ -588,6 +588,11 @@ export function adminTestAssistant(message: string): Promise<AssistantTestResult
   return apiFetch("/api/admin/assistant-test", { method: "POST", body: JSON.stringify({ message }) });
 }
 
+/** Админ: тест конкретного агента (его модель + промпт + RAG) */
+export function adminTestAgentChat(agentId: number, message: string): Promise<{ reply: string; model: string; rag_used: boolean; response_time_ms: number }> {
+  return apiFetch("/api/admin/agents/" + agentId + "/test", { method: "POST", body: JSON.stringify({ message }) });
+}
+
 // ═══════════════════════════════════════════════
 //  ADMIN: CONTRACTORS
 // ═══════════════════════════════════════════════

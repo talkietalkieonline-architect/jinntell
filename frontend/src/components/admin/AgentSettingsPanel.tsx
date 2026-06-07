@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   adminGetAgent,
   adminUpdateAgent,
-  adminTestAssistant,
+  adminTestAgentChat,
   adminGetRAGSources,
   adminAddRAGSource,
   adminDeleteRAGSource,
@@ -68,7 +68,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
     setChatMessages(prev => [...prev, { role: "user", text: userMsg }]);
     setChatLoading(true);
     try {
-      const result = await adminTestAssistant(userMsg);
+      const result = await adminTestAgentChat(agentId, userMsg);
       setChatMessages(prev => [...prev, { role: "assistant", text: result.reply }]);
     } catch (e) {
       setChatMessages(prev => [...prev, { role: "assistant", text: "Ошибка: " + (e instanceof Error ? e.message : "нет ответа") }]);
@@ -273,8 +273,8 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
             </div>
           </div>
 
-          {/* Мини-чат с агентом (только для core) */}
-          {isCore && (
+          {/* Мини-чат с агентом (его модель + промпт + RAG) */}
+          {agent && (
             <div className="col-span-2 mt-6 bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500" />

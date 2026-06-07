@@ -913,3 +913,57 @@ async def admin_assign_agent_to_contractor(
     await db.flush()
     await db.refresh(agent)
     return AgentDetailOut.model_validate(agent)
+
+
+@router.post("/agents/{agent_id}/test")
+async def admin_test_agent(
+    agent_id: int,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Тест конкретного агента: прямой диалог с его моделью (+RAG для специалистов)."""
+    import time as _t
+    from app.services.llm import get_agent_reply
+    from app.services import rag as rag_service
+
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "Сообщение не может быть пустым")
+    agent = await db.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Agent not found")
+
+    rag_context = None
+    if agent.agent_type == "specialist":
+        try:
+            results = await rag_service.search(agent_id, message, limit=5)
+            if results:
+                parts = []
+                for i, r in enumerate(results, 1):
+                    art = getattr(r, "article_number", "") or ""
+                    prefix = (art + ": ") if art else ""
+                    parts.append("[" + str(i) + "]" + prefix + r.text)
+                rag_context = "\n\n".join(parts)
+        except Exception as e:
+            print("[admin] RAG search error (test):", e)
+
+    start = _t.time()
+    reply = await get_agent_reply(
+        agent_name=agent.name,
+        agent_profession=agent.profession,
+        agent_description=agent.description or "",
+        system_prompt=agent.system_prompt,
+        llm_model=agent.llm_model or "deepseek-chat",
+        user_message=message,
+        manner_style=agent.manner_style or "friendly",
+        manner_temperament=agent.manner_temperament or "balanced",
+        manner_humor=agent.manner_humor if agent.manner_humor is not None else True,
+        manner_emoji_use=agent.manner_emoji_use if agent.manner_emoji_use is not None else True,
+        knowledge_text=agent.knowledge_text,
+        skills_text=agent.skills_text,
+        exclusions_text=agent.exclusions_text,
+        rag_context=rag_context,
+        max_tokens=agent.llm_max_tokens or 1000,
+    )
+    return {"reply": reply, "model": agent.llm_model, "rag_used": bool(rag_context), "response_time_ms": int((_t.time() - start) * 1000)}
