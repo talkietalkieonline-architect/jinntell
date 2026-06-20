@@ -46,6 +46,14 @@ const PRESET_COLORS = [
   "#3F51B5", "#F44336", "#795548", "#CDDC39",
 ];
 
+const KNOWN_MODELS = [
+  "deepseek-chat", "deepseek-reasoner",
+  "nvidia/nemotron-3-super-120b-a12b:free", "openai/gpt-oss-120b:free", "google/gemma-4-31b-it:free",
+  "deepseek/deepseek-v4-flash:free", "qwen/qwen3-next-80b-a3b-instruct:free", "meta-llama/llama-3.3-70b-instruct:free",
+  "deepseek/deepseek-chat", "google/gemini-2.0-flash-001", "anthropic/claude-3.5-haiku", "openai/gpt-4o-mini", "openai/gpt-4o",
+  "gpt-4o-mini", "gpt-4o", "gemini-2.0-flash", "llama-3.3-70b-versatile",
+];
+
 export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: Props) {
   const [agent, setAgent] = useState<AgentDetailOut | null>(null);
   const [tab, setTab] = useState<SettingsTab>("basic");
@@ -60,6 +68,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
   const [chatMessages, setChatMessages] = useState<{role: "user"|"assistant"; text: string}[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [customModel, setCustomModel] = useState(false);
 
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
@@ -83,6 +92,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
       const data = await adminGetAgent(agentId);
       setAgent(data);
       setForm(data as unknown as Record<string, unknown>);
+      setCustomModel(!KNOWN_MODELS.includes(((data as unknown as Record<string, unknown>).llm_model as string) || ""));
     } catch {
       /* ignore */
     } finally {
@@ -221,7 +231,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
             </div>
             <div>
               <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">AI Модель</label>
-              <select value={f("llm_model")} onChange={(e) => setF("llm_model", e.target.value)}
+              <select value={customModel ? "__custom__" : f("llm_model")} onChange={(e) => { const v = e.target.value; if (v === "__custom__") { setCustomModel(true); } else { setCustomModel(false); setF("llm_model", v); } }}
                 className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
                 <optgroup label="DeepSeek (прямой API)">
                   <option value="deepseek-chat">DeepSeek V3 Chat</option>
@@ -248,7 +258,14 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                   <option value="gemini-2.0-flash">Google Gemini Flash</option>
                   <option value="llama-3.3-70b-versatile">Groq Llama 3.3 70B</option>
                 </optgroup>
+                <option value="__custom__">✏️ Своя модель…</option>
               </select>
+              {customModel && (
+                <input value={f("llm_model")} onChange={(e) => setF("llm_model", e.target.value)}
+                  placeholder="vendor/model:free или deepseek-chat"
+                  className="w-full mt-2 px-3 py-2 bg-gray-950 border border-amber-700 rounded-lg text-sm text-white outline-none focus:border-amber-500" />
+              )}
+              {customModel && <p className="text-[11px] text-gray-500 mt-1">Свободный ввод. OpenRouter — формат vendor/model[:free]; прямой DeepSeek — deepseek-chat.</p>}
             </div>
           </div>
           <div className="flex flex-col gap-4">
