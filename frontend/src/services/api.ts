@@ -228,6 +228,7 @@ export interface AgentFullOut extends AgentOut {
   // AI
   system_prompt?: string;
   llm_model: string;
+  llm_max_tokens?: number;
   is_active: boolean;
   created_at?: string;
   // Голос
@@ -286,6 +287,7 @@ export interface AgentPersonaUpdate {
   greeting?: string;
   system_prompt?: string;
   llm_model?: string;
+  llm_max_tokens?: number;
   // Голос
   voice_id?: string;
   voice_speed?: number;
@@ -766,6 +768,45 @@ export function contractorUpdateAgent(id: number, data: AgentPersonaUpdate): Pro
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+/** Контрагент: статистика агента */
+export interface ContractorAgentStats {
+  total_messages: number;
+  messages_7d: number;
+  messages_30d: number;
+  last_activity: string | null;
+  clients_total: number;
+  returning_total: number;
+  new_total: number;
+  avg_dialog_len: number;
+  rating: number;
+  rating_count: number;
+  by_hour: number[];
+  by_day: { date: string; count: number }[];
+}
+export interface ContractorDialogItem {
+  user_id: number;
+  user_name: string;
+  message_count: number;
+  last_message: string;
+  last_active: string | null;
+}
+export interface ContractorDialogMessage {
+  id: number;
+  sender_type: string;
+  sender_name: string;
+  text: string;
+  created_at: string;
+}
+export function contractorGetAgentStats(id: number): Promise<ContractorAgentStats> {
+  return contractorFetch(`/api/contractor/agents/${id}/stats`);
+}
+export function contractorGetDialogs(id: number): Promise<ContractorDialogItem[]> {
+  return contractorFetch(`/api/contractor/agents/${id}/dialogs`);
+}
+export function contractorGetDialog(id: number, userId: number): Promise<ContractorDialogMessage[]> {
+  return contractorFetch(`/api/contractor/agents/${id}/dialogs/${userId}`);
 }
 
 /** Контрагент: выход */

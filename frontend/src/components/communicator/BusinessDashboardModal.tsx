@@ -6,8 +6,14 @@ import {
   contractorUpdateAgent,
   contractorLogout,
   getContractorToken,
+  contractorGetAgentStats,
+  contractorGetDialogs,
+  contractorGetDialog,
   type AgentFullOut,
   type AgentPersonaUpdate,
+  type ContractorAgentStats,
+  type ContractorDialogItem,
+  type ContractorDialogMessage,
 } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
@@ -137,6 +143,32 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [outfitAccessory, setOutfitAccessory] = useState("");
 
   const [saving, setSaving] = useState(false);
+  const [editMaxTokens, setEditMaxTokens] = useState(1000);
+  const [detailView, setDetailView] = useState<"home" | "stats" | "dialogs">("home");
+  const [stats, setStats] = useState<ContractorAgentStats | null>(null);
+  const [dialogs, setDialogs] = useState<ContractorDialogItem[]>([]);
+  const [openDialogUser, setOpenDialogUser] = useState<ContractorDialogItem | null>(null);
+  const [dialogMessages, setDialogMessages] = useState<ContractorDialogMessage[]>([]);
+
+  const loadAnalytics = useCallback(async (agentId: number) => {
+    try {
+      const [st, dl] = await Promise.all([contractorGetAgentStats(agentId), contractorGetDialogs(agentId)]);
+      setStats(st); setDialogs(dl);
+    } catch { setStats(null); setDialogs([]); }
+  }, []);
+
+  const openDialog = useCallback(async (agentId: number, d: ContractorDialogItem) => {
+    setOpenDialogUser(d);
+    try { setDialogMessages(await contractorGetDialog(agentId, d.user_id)); }
+    catch { setDialogMessages([]); }
+  }, []);
+
+  useEffect(() => {
+    if (selectedAgent && !editMode) {
+      setDetailView("home"); setOpenDialogUser(null);
+      loadAnalytics(selectedAgent.id);
+    }
+  }, [selectedAgent, editMode, loadAnalytics]);
 
   // Check existing session on open
   useEffect(() => {
@@ -198,6 +230,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     setEditGreeting(agent.greeting || "");
     setEditPrompt(agent.system_prompt || "");
     setEditModel(agent.llm_model || "gpt-4o-mini");
+    setEditMaxTokens(agent.llm_max_tokens || 1000);
     setSkillsText(agent.skills_text || "");
     setExclusionsText(agent.exclusions_text || "");
     setModesState({
@@ -244,6 +277,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
         greeting: editGreeting,
         // system_prompt: read-only for contractor
         llm_model: editModel,
+        llm_max_tokens: editMaxTokens,
         skills_text: skillsText || undefined,
         exclusions_text: exclusionsText || undefined,
         mode_walk_enabled: modesState.walk.enabled,
@@ -406,7 +440,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "main" as const, label: "AI" },
                   { id: "rules" as const, label: "Правила" },
                   { id: "skills" as const, label: "Скилы" },
-                  { id: "exclusions" as const, label: "Отмена" },
+                  { id: "exclusions" as const, label: "Запреты" },
                   { id: "modes" as const, label: "Режимы" },
                   { id: "manners" as const, label: "Манеры" },
                   { id: "knowledge" as const, label: "Знания" },
@@ -540,6 +574,18 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                         </button>
                       ))}
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider mb-1.5 block" style={{ color: "var(--text-muted)" }}>Длина ответа</label>
+                    <div className="flex gap-2">
+                      {[{ v: 400, label: "Короткий" }, { v: 1000, label: "Средний" }, { v: 2000, label: "Развёрнутый" }].map((m) => (
+                        <button key={m.v} onClick={() => setEditMaxTokens(m.v)} className="flex-1 px-3 py-2.5 rounded-xl text-[12px] transition-all text-center"
+                          style={{ background: editMaxTokens === m.v ? "var(--accent)" : "var(--bg-glass)", color: editMaxTokens === m.v ? "var(--bg-deep)" : "var(--text-secondary)", border: editMaxTokens === m.v ? "1px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Короче ответы — меньше расход баланса.</p>
                   </div>
                 </div>
               )}
@@ -736,27 +782,114 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
               </button>
             </div>
           ) : selectedAgent ? (
-            /* Детали агента */
+            /* Детали агента + аналитика */
             <div className="animate-fade-in">
               <button onClick={() => setSelectedAgent(null)} className="text-sm mb-4" style={{ color: "var(--accent)" }}>‹ Назад</button>
-              <div className="flex items-start gap-4 mb-5">
+              <div className="flex items-start gap-4 mb-4">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold shrink-0" style={{ background: `${selectedAgent.color}22`, border: `2px solid ${selectedAgent.color}55`, color: selectedAgent.color }}>{selectedAgent.name[0]}</div>
                 <div className="flex-1">
                   <h3 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>{selectedAgent.name}</h3>
                   <p className="text-[12px]" style={{ color: "var(--text-secondary)" }}>{selectedAgent.profession} &bull; {selectedAgent.brand}</p>
-                  <div className="flex items-center gap-1 mt-1"><span style={{ color: "#FFD700", fontSize: "12px" }}>★</span><span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>{selectedAgent.rating.toFixed(1)}</span></div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 mb-5">
-                {[{ label: "Диалогов", value: "—" }, { label: "Рейтинг", value: selectedAgent.rating.toFixed(1) }, { label: "Отзывов", value: String(selectedAgent.rating_count) }].map((s) => (
-                  <div key={s.label} className="rounded-xl px-3 py-3 text-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                    <div className="text-lg font-semibold" style={{ color: "var(--accent)" }}>{s.value}</div>
-                    <div className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: "var(--text-muted)" }}>{s.label}</div>
-                  </div>
+
+              <div className="flex gap-1 mb-4">
+                {([{ id: "home", label: "Обзор" }, { id: "stats", label: "Статистика" }, { id: "dialogs", label: "Диалоги" }] as const).map((t) => (
+                  <button key={t.id} onClick={() => { setDetailView(t.id); setOpenDialogUser(null); }}
+                    className="flex-1 px-3 py-2 rounded-xl text-[12px] font-medium transition-all"
+                    style={{ background: detailView === t.id ? "var(--accent)" : "var(--bg-glass)", color: detailView === t.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${detailView === t.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                    {t.label}
+                  </button>
                 ))}
               </div>
-              {selectedAgent.description && <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>{selectedAgent.description}</p>}
-              <button onClick={() => openEdit(selectedAgent)} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Настроить агента</button>
+
+              {detailView === "home" && (
+                <div className="animate-fade-in">
+                  <div className="grid grid-cols-3 gap-2 mb-5">
+                    {[{ label: "Клиентов", value: stats ? String(stats.clients_total) : "—" }, { label: "Сообщений", value: stats ? String(stats.total_messages) : "—" }, { label: "Рейтинг", value: selectedAgent.rating.toFixed(1) }].map((s) => (
+                      <div key={s.label} className="rounded-xl px-3 py-3 text-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                        <div className="text-lg font-semibold" style={{ color: "var(--accent)" }}>{s.value}</div>
+                        <div className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: "var(--text-muted)" }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedAgent.description && <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>{selectedAgent.description}</p>}
+                  <button onClick={() => openEdit(selectedAgent)} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Настроить агента</button>
+                </div>
+              )}
+
+              {detailView === "stats" && (
+                <div className="animate-fade-in flex flex-col gap-4">
+                  {!stats && <p className="text-sm text-center py-6" style={{ color: "var(--text-muted)" }}>Нет данных</p>}
+                  {stats && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[{ l: "Всего сообщений", v: stats.total_messages }, { l: "За 7 дней", v: stats.messages_7d }, { l: "Клиентов", v: stats.clients_total }, { l: "Вернулись", v: stats.returning_total }, { l: "Новых", v: stats.new_total }, { l: "Ср. длина диалога", v: stats.avg_dialog_len }].map((s) => (
+                          <div key={s.l} className="rounded-xl px-3 py-2.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                            <div className="text-base font-semibold" style={{ color: "var(--accent)" }}>{s.v}</div>
+                            <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>{s.l}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Активность по часам</p>
+                        <div className="flex items-end gap-[2px] h-16">
+                          {stats.by_hour.map((c, h) => (
+                            <div key={h} className="flex-1 rounded-sm" title={`${h}:00 — ${c}`} style={{ height: `${Math.max(3, (c / Math.max(1, ...stats!.by_hour)) * 100)}%`, background: c ? "var(--accent)" : "var(--bg-glass-border)" }} />
+                          ))}
+                        </div>
+                      </div>
+                      {stats.by_day.length > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Обращения по дням</p>
+                          <div className="flex flex-col gap-1">
+                            {stats.by_day.map((d) => (
+                              <div key={d.date} className="flex items-center gap-2">
+                                <span className="text-[10px] w-16 shrink-0" style={{ color: "var(--text-muted)" }}>{d.date.slice(5)}</span>
+                                <div className="rounded-sm h-3" style={{ width: `${(d.count / Math.max(1, ...stats!.by_day.map((x) => x.count))) * 100}%`, background: "var(--accent)", minWidth: 6 }} />
+                                <span className="text-[10px]" style={{ color: "var(--text-secondary)" }}>{d.count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {detailView === "dialogs" && (
+                <div className="animate-fade-in">
+                  {openDialogUser ? (
+                    <div>
+                      <button onClick={() => setOpenDialogUser(null)} className="text-sm mb-3" style={{ color: "var(--accent)" }}>‹ К списку</button>
+                      <p className="text-[12px] font-medium mb-2" style={{ color: "var(--text-primary)" }}>{openDialogUser.user_name}</p>
+                      <div className="flex flex-col gap-2">
+                        {dialogMessages.map((m) => (
+                          <div key={m.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-[12px] ${m.sender_type === "user" ? "self-start" : "self-end"}`}
+                            style={{ background: m.sender_type === "user" ? "var(--bg-glass)" : "var(--accent)", color: m.sender_type === "user" ? "var(--text-primary)" : "var(--bg-deep)", border: "1px solid var(--bg-glass-border)" }}>
+                            {m.text}
+                          </div>
+                        ))}
+                        {dialogMessages.length === 0 && <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>Пусто</p>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {dialogs.length === 0 ? <p className="text-sm text-center py-6" style={{ color: "var(--text-muted)" }}>Пока нет обращений</p> :
+                        dialogs.map((d) => (
+                          <button key={d.user_id} onClick={() => openDialog(selectedAgent.id, d)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{d.user_name}</span>
+                              <span className="text-[11px] truncate block" style={{ color: "var(--text-muted)" }}>{d.last_message}</span>
+                            </div>
+                            <span className="text-[10px] shrink-0" style={{ color: "var(--text-secondary)" }}>{d.message_count}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <>

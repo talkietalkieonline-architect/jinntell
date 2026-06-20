@@ -145,7 +145,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
     { id: "rules", label: "Правила", icon: "📜" },
     { id: "skills", label: "Скилы", icon: "🎯" },
     { id: "training", label: "Обучение", icon: "📚" },
-    { id: "exclusions", label: "Отмена", icon: "🚫" },
+    { id: "exclusions", label: "Запреты", icon: "🚫" },
     { id: "modes", label: "Режимы", icon: "🔄" },
     { id: "persona", label: "Персонаж", icon: "🎭" },
     ...(isSpecialist ? [{ id: "parser" as const, label: "Парсер", icon: "🔍" }] : []),
@@ -408,7 +408,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
       {tab === "exclusions" && (
         <div className="max-w-3xl">
           <div className="bg-red-900/20 border border-red-800/50 rounded-lg p-3 mb-4 text-xs text-red-300">
-            Отмена — что агент НЕ должен делать: стоп-слова, запрещённые темы, конкуренты. Редактируют: админ + контрагент.
+            Запреты — что агент НЕ должен делать: стоп-слова, запрещённые темы, конкуренты. Редактируют: админ + контрагент.
           </div>
           <FieldArea
             label="Исключения и запреты"

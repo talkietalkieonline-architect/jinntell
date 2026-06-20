@@ -50,16 +50,26 @@ async def _get_assistant_agent() -> Optional[Agent]:
         return result.scalar_one_or_none()
 
 
-async def _get_conversation_history(room: str, limit: int = 10) -> list:
-    """Получить последние сообщения для контекста LLM"""
+async def _get_conversation_history(room: str, limit: int = 10, exclude_text: Optional[str] = None) -> list:
+    """Получить последние сообщения для контекста LLM.
+
+    exclude_text — текст текущего сообщения пользователя; оно передаётся в LLM
+    отдельным аргументом user_message, поэтому его нужно убрать из истории, иначе
+    вопрос уйдёт в модель дважды (задвоение / «агент слышит сам себя»).
+    """
     async with async_session() as db:
         result = await db.execute(
             select(Message)
             .where(Message.room == room)
             .order_by(Message.created_at.desc())
-            .limit(limit)
+            .limit(limit + 1)
         )
         messages = list(reversed(result.scalars().all()))
+        # Убираем текущий вопрос пользователя — он передаётся как user_message
+        if exclude_text is not None and messages and messages[-1].sender_type == "user" \
+                and messages[-1].text == exclude_text:
+            messages = messages[:-1]
+        messages = messages[-limit:]
         history = []
         for m in messages:
             role = "user" if m.sender_type == "user" else "assistant"
@@ -122,7 +132,7 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
     })
 
     # Получаем историю для контекста
-    history = await _get_conversation_history(room)
+    history = await _get_conversation_history(room, exclude_text=user_message)
 
     # Получаем пользовательские настройки и строим дополнение к промпту
     user_persona = ""
@@ -185,7 +195,7 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         "sender_type": "agent",
     })
 
-    history = await _get_conversation_history(room)
+    history = await _get_conversation_history(room, exclude_text=user_message)
 
     # Для агентов-специалистов — RAG-поиск
     rag_context = None
