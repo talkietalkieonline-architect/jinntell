@@ -229,6 +229,7 @@ export interface AgentFullOut extends AgentOut {
   system_prompt?: string;
   llm_model: string;
   llm_max_tokens?: number;
+  photo_url?: string;
   is_active: boolean;
   created_at?: string;
   // Голос
@@ -807,6 +808,59 @@ export function contractorGetDialogs(id: number): Promise<ContractorDialogItem[]
 }
 export function contractorGetDialog(id: number, userId: number): Promise<ContractorDialogMessage[]> {
   return contractorFetch(`/api/contractor/agents/${id}/dialogs/${userId}`);
+}
+
+async function contractorUpload<T>(path: string, form: FormData): Promise<T> {
+  const token = getContractorToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body: form });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, body.detail || "Ошибка загрузки");
+  }
+  return res.json();
+}
+
+export interface WardrobeItem {
+  id: number;
+  image_url: string;
+  label: string | null;
+  occasion: string | null;
+  is_active: boolean;
+}
+export interface StorageUsage {
+  used_bytes: number;
+  used_mb: number;
+  quota_mb: number;
+  percent: number;
+}
+
+export function mediaUrl(path: string): string {
+  return path ? `${API_BASE}${path}` : "";
+}
+export function contractorUploadPhoto(agentId: number, file: File): Promise<{ photo_url: string }> {
+  const f = new FormData(); f.append("file", file);
+  return contractorUpload(`/api/contractor/agents/${agentId}/photo`, f);
+}
+export function contractorDeletePhoto(agentId: number): Promise<{ ok: boolean }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/photo`, { method: "DELETE" });
+}
+export function contractorGetWardrobe(agentId: number): Promise<WardrobeItem[]> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/wardrobe`);
+}
+export function contractorAddWardrobe(agentId: number, file: File, label?: string): Promise<WardrobeItem> {
+  const f = new FormData(); f.append("file", file); if (label) f.append("label", label);
+  return contractorUpload(`/api/contractor/agents/${agentId}/wardrobe`, f);
+}
+export function contractorActivateWardrobe(agentId: number, itemId: number): Promise<{ ok: boolean }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/wardrobe/${itemId}`, { method: "PATCH" });
+}
+export function contractorDeleteWardrobe(agentId: number, itemId: number): Promise<{ ok: boolean }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/wardrobe/${itemId}`, { method: "DELETE" });
+}
+export function contractorGetStorage(): Promise<StorageUsage> {
+  return contractorFetch(`/api/contractor/storage`);
 }
 
 /** Контрагент: выход */

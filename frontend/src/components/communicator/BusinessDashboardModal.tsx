@@ -9,11 +9,21 @@ import {
   contractorGetAgentStats,
   contractorGetDialogs,
   contractorGetDialog,
+  contractorUploadPhoto,
+  contractorDeletePhoto,
+  contractorGetWardrobe,
+  contractorAddWardrobe,
+  contractorActivateWardrobe,
+  contractorDeleteWardrobe,
+  contractorGetStorage,
+  mediaUrl,
   type AgentFullOut,
   type AgentPersonaUpdate,
   type ContractorAgentStats,
   type ContractorDialogItem,
   type ContractorDialogMessage,
+  type WardrobeItem,
+  type StorageUsage,
 } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
@@ -42,42 +52,6 @@ const TEMPERAMENTS = [
   { id: "balanced", label: "Сбалансированный" },
   { id: "energetic", label: "Энергичный" },
   { id: "reserved", label: "Сдержанный" },
-];
-
-const FACE_PRESETS = [
-  { id: "round", label: "Круглое" },
-  { id: "oval", label: "Овальное" },
-  { id: "angular", label: "Угловатое" },
-  { id: "soft", label: "Мягкое" },
-];
-
-const HAIR_PRESETS = [
-  { id: "short-dark", label: "Короткие тёмные" },
-  { id: "short-light", label: "Короткие светлые" },
-  { id: "long-dark", label: "Длинные тёмные" },
-  { id: "long-light", label: "Длинные светлые" },
-  { id: "bald", label: "Без волос" },
-];
-
-const SKIN_PRESETS = [
-  { id: "light", label: "Светлая" },
-  { id: "medium", label: "Средняя" },
-  { id: "tan", label: "Загорелая" },
-  { id: "dark", label: "Тёмная" },
-];
-
-const BODY_PRESETS = [
-  { id: "slim", label: "Стройное" },
-  { id: "average", label: "Среднее" },
-  { id: "athletic", label: "Атлетичное" },
-  { id: "large", label: "Крупное" },
-];
-
-const OUTFIT_STYLES = [
-  { id: "formal", label: "Деловой" },
-  { id: "casual", label: "Повседневный" },
-  { id: "sport", label: "Спортивный" },
-  { id: "creative", label: "Креативный" },
 ];
 
 type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "knowledge" | "voice" | "appearance" | "outfit";
@@ -149,12 +123,18 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [dialogs, setDialogs] = useState<ContractorDialogItem[]>([]);
   const [openDialogUser, setOpenDialogUser] = useState<ContractorDialogItem | null>(null);
   const [dialogMessages, setDialogMessages] = useState<ContractorDialogMessage[]>([]);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [wardrobe, setWardrobe] = useState<WardrobeItem[]>([]);
+  const [storage, setStorage] = useState<StorageUsage | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingOutfit, setUploadingOutfit] = useState(false);
 
   const loadAnalytics = useCallback(async (agentId: number) => {
     try {
       const [st, dl] = await Promise.all([contractorGetAgentStats(agentId), contractorGetDialogs(agentId)]);
       setStats(st); setDialogs(dl);
     } catch { setStats(null); setDialogs([]); }
+    try { setStorage(await contractorGetStorage()); } catch { setStorage(null); }
   }, []);
 
   const openDialog = useCallback(async (agentId: number, d: ContractorDialogItem) => {
@@ -162,6 +142,39 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     try { setDialogMessages(await contractorGetDialog(agentId, d.user_id)); }
     catch { setDialogMessages([]); }
   }, []);
+
+  const handlePhotoUpload = async (file: File) => {
+    if (!selectedAgent) return;
+    setUploadingPhoto(true);
+    try {
+      const r = await contractorUploadPhoto(selectedAgent.id, file);
+      setPhotoUrl(r.photo_url);
+      contractorGetStorage().then(setStorage).catch(() => {});
+    } catch (e) { alert(e instanceof Error ? e.message : "Ошибка загрузки"); }
+    finally { setUploadingPhoto(false); }
+  };
+  const handlePhotoDelete = async () => {
+    if (!selectedAgent) return;
+    try { await contractorDeletePhoto(selectedAgent.id); setPhotoUrl(null); } catch {}
+  };
+  const handleWardrobeUpload = async (file: File) => {
+    if (!selectedAgent) return;
+    setUploadingOutfit(true);
+    try {
+      const item = await contractorAddWardrobe(selectedAgent.id, file);
+      setWardrobe((w) => [item, ...w]);
+      contractorGetStorage().then(setStorage).catch(() => {});
+    } catch (e) { alert(e instanceof Error ? e.message : "Ошибка загрузки"); }
+    finally { setUploadingOutfit(false); }
+  };
+  const handleWardrobeActivate = async (itemId: number) => {
+    if (!selectedAgent) return;
+    try { await contractorActivateWardrobe(selectedAgent.id, itemId); setWardrobe((w) => w.map((x) => ({ ...x, is_active: x.id === itemId }))); } catch {}
+  };
+  const handleWardrobeDelete = async (itemId: number) => {
+    if (!selectedAgent) return;
+    try { await contractorDeleteWardrobe(selectedAgent.id, itemId); setWardrobe((w) => w.filter((x) => x.id !== itemId)); contractorGetStorage().then(setStorage).catch(() => {}); } catch {}
+  };
 
   useEffect(() => {
     if (selectedAgent && !editMode) {
@@ -231,6 +244,8 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     setEditPrompt(agent.system_prompt || "");
     setEditModel(agent.llm_model || "gpt-4o-mini");
     setEditMaxTokens(agent.llm_max_tokens || 1000);
+    setPhotoUrl(agent.photo_url || null);
+    contractorGetWardrobe(agent.id).then(setWardrobe).catch(() => setWardrobe([]));
     setSkillsText(agent.skills_text || "");
     setExclusionsText(agent.exclusions_text || "");
     setModesState({
@@ -696,82 +711,48 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                 </div>
               )}
 
-              {/* ═══ Секция: Внешность ═══ */}
+              {/* ═══ Секция: Внешность (фото) ═══ */}
               {activeSection === "appearance" && (
-                <div className="flex flex-col gap-4 animate-fade-in">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Лицо</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {FACE_PRESETS.map((f) => (
-                        <button key={f.id} onClick={() => setAppFace(f.id)} className="px-3 py-2.5 rounded-xl text-[12px] transition-all text-center"
-                          style={{ background: appFace === f.id ? "var(--accent)" : "var(--bg-glass)", color: appFace === f.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${appFace === f.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <div className="rounded-xl px-4 py-2.5 text-[11px]" style={{ background: "rgba(63,169,245,0.1)", border: "1px solid rgba(63,169,245,0.3)", color: "rgba(147,197,253,1)" }}>
+                    Загрузите фото — это и есть внешность агента (аватар + источник видео).
                   </div>
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Волосы</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {HAIR_PRESETS.map((h) => (
-                        <button key={h.id} onClick={() => setAppHair(h.id)} className="px-3 py-2.5 rounded-xl text-[12px] transition-all text-center"
-                          style={{ background: appHair === h.id ? "var(--accent)" : "var(--bg-glass)", color: appHair === h.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${appHair === h.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
-                          {h.label}
-                        </button>
-                      ))}
+                  <div className="flex flex-col items-center gap-3 py-2">
+                    <div className="w-40 h-40 rounded-2xl overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      {photoUrl ? <img src={mediaUrl(photoUrl)} alt="Фото агента" className="w-full h-full object-cover" /> : <span className="text-4xl opacity-40">🖼️</span>}
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Кожа</label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {SKIN_PRESETS.map((s) => (
-                        <button key={s.id} onClick={() => setAppSkin(s.id)} className="px-2 py-2.5 rounded-xl text-[11px] transition-all text-center"
-                          style={{ background: appSkin === s.id ? "var(--accent)" : "var(--bg-glass)", color: appSkin === s.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${appSkin === s.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Телосложение</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {BODY_PRESETS.map((b) => (
-                        <button key={b.id} onClick={() => setAppBody(b.id)} className="px-3 py-2.5 rounded-xl text-[12px] transition-all text-center"
-                          style={{ background: appBody === b.id ? "var(--accent)" : "var(--bg-glass)", color: appBody === b.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${appBody === b.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
-                          {b.label}
-                        </button>
-                      ))}
+                    <div className="flex gap-2">
+                      <label className="px-4 py-2 rounded-xl text-[12px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                        {uploadingPhoto ? "Загрузка..." : "Загрузить фото"}
+                        <input type="file" accept="image/*" className="hidden" disabled={uploadingPhoto} onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }} />
+                      </label>
+                      {photoUrl && <button onClick={handlePhotoDelete} className="px-4 py-2 rounded-xl text-[12px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>Удалить</button>}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* ═══ Секция: Одежда ═══ */}
+              {/* ═══ Секция: Одежда (гардероб) ═══ */}
               {activeSection === "outfit" && (
-                <div className="flex flex-col gap-4 animate-fade-in">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Стиль</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {OUTFIT_STYLES.map((s) => (
-                        <button key={s.id} onClick={() => setOutfitStyle(s.id)} className="px-3 py-2.5 rounded-xl text-[12px] transition-all text-center"
-                          style={{ background: outfitStyle === s.id ? "var(--accent)" : "var(--bg-glass)", color: outfitStyle === s.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${outfitStyle === s.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
-                          {s.label}
-                        </button>
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <div className="rounded-xl px-4 py-2.5 text-[11px]" style={{ background: "rgba(147,51,234,0.1)", border: "1px solid rgba(147,51,234,0.3)", color: "rgba(196,181,253,1)" }}>
+                    Гардероб агента: загрузите изображения нарядов, выберите активный (напр. на праздник).
+                  </div>
+                  <label className="px-4 py-2 rounded-xl text-[12px] font-medium cursor-pointer text-center" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                    {uploadingOutfit ? "Загрузка..." : "+ Добавить наряд"}
+                    <input type="file" accept="image/*" className="hidden" disabled={uploadingOutfit} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleWardrobeUpload(f); e.target.value = ""; }} />
+                  </label>
+                  {wardrobe.length === 0 ? <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>Гардероб пуст</p> : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {wardrobe.map((w) => (
+                        <div key={w.id} className="relative rounded-xl overflow-hidden aspect-square" style={{ border: `2px solid ${w.is_active ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                          <img src={mediaUrl(w.image_url)} alt={w.label || ""} className="w-full h-full object-cover cursor-pointer" onClick={() => handleWardrobeActivate(w.id)} />
+                          {w.is_active && <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>АКТИВЕН</span>}
+                          <button onClick={() => handleWardrobeDelete(w.id)} className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[11px]" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>✕</button>
+                        </div>
                       ))}
                     </div>
-                  </div>
-                  {([{ label: "Верх", val: outfitTop, set: setOutfitTop, ph: "Рубашка, пиджак, поло..." },
-                    { label: "Низ", val: outfitBottom, set: setOutfitBottom, ph: "Брюки, джинсы, юбка..." },
-                    { label: "Обувь", val: outfitShoes, set: setOutfitShoes, ph: "Кроссовки, туфли, ботинки..." },
-                    { label: "Аксессуар", val: outfitAccessory, set: setOutfitAccessory, ph: "Часы, очки, сумка..." },
-                  ] as const).map((item) => (
-                    <div key={item.label}>
-                      <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>{item.label}</label>
-                      <input type="text" value={item.val} onChange={(e) => item.set(e.target.value)} placeholder={item.ph}
-                        className="w-full rounded-xl px-4 py-2.5 text-sm bg-transparent outline-none"
-                        style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
-                    </div>
-                  ))}
+                  )}
                 </div>
               )}
 
@@ -814,6 +795,17 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                     ))}
                   </div>
                   {selectedAgent.description && <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--text-secondary)" }}>{selectedAgent.description}</p>}
+                  {storage && (
+                    <div className="rounded-xl px-4 py-2.5 mb-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Данные на сервере</span>
+                        <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>{storage.used_mb} / {storage.quota_mb} МБ</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--bg-glass-border)" }}>
+                        <div className="h-full rounded-full" style={{ width: `${storage.percent}%`, background: "var(--accent)" }} />
+                      </div>
+                    </div>
+                  )}
                   <button onClick={() => openEdit(selectedAgent)} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Настроить агента</button>
                 </div>
               )}

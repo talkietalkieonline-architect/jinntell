@@ -1,8 +1,11 @@
 """JinnTell — FastAPI Backend"""
 from contextlib import asynccontextmanager
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import engine, Base, async_session
@@ -62,6 +65,11 @@ app.include_router(contractor_auth_router)
 app.include_router(contractor_agents_router)
 app.include_router(rag_router)
 app.include_router(ws_router)
+
+# Хранилище загруженных файлов (фото агентов, гардероб, в будущем RAG-база контрагента)
+STORAGE_ROOT = "/app/storage"
+os.makedirs(STORAGE_ROOT, exist_ok=True)
+app.mount("/api/storage", StaticFiles(directory=STORAGE_ROOT), name="storage")
 
 
 @app.get("/api/health")

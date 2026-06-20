@@ -73,6 +73,7 @@ class AgentDetailOut(AgentOut):
     appearance_hair: Optional[str] = None
     appearance_skin: Optional[str] = None
     appearance_body: Optional[str] = None
+    photo_url: Optional[str] = None
 
     # Outfit
     outfit_style: Optional[str] = None

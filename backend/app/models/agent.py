@@ -111,6 +111,24 @@ class Agent(Base):
     mode_work_rules: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     mode_work_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Фото агента (внешность = загруженное фото; аватар + источник видео)
+    photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class AgentWardrobe(Base):
+    """Гардероб агента — коллекция изображений нарядов (загруженных/сгенерированных)."""
+    __tablename__ = "agent_wardrobe"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_id: Mapped[int] = mapped_column(Integer, ForeignKey("agents.id"), index=True)
+    image_url: Mapped[str] = mapped_column(String(500))
+    label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    occasion: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

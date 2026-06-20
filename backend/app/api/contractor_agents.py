@@ -2,15 +2,17 @@
 Contractor Agents API — управление агентами контрагента + аналитика диалогов.
 Контрагент видит только свои агенты, может настраивать их и смотреть статистику.
 """
+import os
+import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_contractor_token
-from app.models.agent import Agent
+from app.models.agent import Agent, AgentWardrobe
 from app.models.contractor import Contractor
 from app.models.message import Message
 from app.models.user import User
@@ -268,3 +270,187 @@ async def contractor_agent_dialog(
         "text": m.text,
         "created_at": m.created_at.isoformat(),
     } for m in msgs]
+
+
+# ════════════════════════════════════════════════════════════════
+#  Хранилище: фото агента, гардероб, объём данных контрагента
+# ════════════════════════════════════════════════════════════════
+STORAGE_ROOT = "/app/storage"
+STORAGE_QUOTA_MB = 500
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+_ALLOWED_IMAGE = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+}
+
+
+def _contractor_dir(cid: int) -> str:
+    return os.path.join(STORAGE_ROOT, "contractors", str(cid))
+
+
+def _agent_dir(cid: int, aid: int) -> str:
+    return os.path.join(_contractor_dir(cid), "agents", str(aid))
+
+
+def _dir_size(path: str) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for fn in files:
+            try:
+                total += os.path.getsize(os.path.join(root, fn))
+            except OSError:
+                pass
+    return total
+
+
+async def _save_upload(file: UploadFile, dest_dir: str, basename: str) -> str:
+    ext = _ALLOWED_IMAGE.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(400, "Только изображения: jpg, png, webp, gif")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(400, "Файл больше 20 МБ")
+    os.makedirs(dest_dir, exist_ok=True)
+    fname = f"{basename}.{ext}"
+    with open(os.path.join(dest_dir, fname), "wb") as f:
+        f.write(data)
+    return fname
+
+
+def _remove_by_url(image_url: str) -> None:
+    if not image_url:
+        return
+    rel = image_url.replace("/api/storage/", "", 1)
+    try:
+        os.remove(os.path.join(STORAGE_ROOT, rel))
+    except OSError:
+        pass
+
+
+@router.get("/storage")
+async def contractor_storage_usage(
+    contractor: Contractor = Depends(_require_contractor),
+):
+    """Объём данных контрагента на сервере (фото, гардероб, в будущем RAG-база)."""
+    used = _dir_size(_contractor_dir(contractor.id))
+    return {
+        "used_bytes": used,
+        "used_mb": round(used / 1048576, 2),
+        "quota_mb": STORAGE_QUOTA_MB,
+        "percent": round(min(100.0, used / (STORAGE_QUOTA_MB * 1048576) * 100), 1),
+    }
+
+
+@router.post("/agents/{agent_id}/photo")
+async def contractor_upload_photo(
+    agent_id: int,
+    file: UploadFile = File(...),
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить фото агента (внешность = фото). Заменяет прежнее."""
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    d = _agent_dir(contractor.id, agent_id)
+    if os.path.isdir(d):
+        for fn in os.listdir(d):
+            if fn.startswith("photo."):
+                try:
+                    os.remove(os.path.join(d, fn))
+                except OSError:
+                    pass
+    fname = await _save_upload(file, d, "photo")
+    url = f"/api/storage/contractors/{contractor.id}/agents/{agent_id}/{fname}"
+    agent.photo_url = url
+    await db.flush()
+    return {"photo_url": url}
+
+
+@router.delete("/agents/{agent_id}/photo")
+async def contractor_delete_photo(
+    agent_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    if agent.photo_url:
+        _remove_by_url(agent.photo_url)
+        agent.photo_url = None
+        await db.flush()
+    return {"ok": True}
+
+
+@router.get("/agents/{agent_id}/wardrobe")
+async def contractor_wardrobe_list(
+    agent_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_agent(agent_id, contractor, db)
+    rows = (await db.execute(
+        select(AgentWardrobe).where(AgentWardrobe.agent_id == agent_id)
+        .order_by(AgentWardrobe.created_at.desc())
+    )).scalars().all()
+    return [{
+        "id": w.id, "image_url": w.image_url, "label": w.label,
+        "occasion": w.occasion, "is_active": w.is_active,
+    } for w in rows]
+
+
+@router.post("/agents/{agent_id}/wardrobe")
+async def contractor_wardrobe_add(
+    agent_id: int,
+    file: UploadFile = File(...),
+    label: str = Form(None),
+    occasion: str = Form(None),
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_agent(agent_id, contractor, db)
+    d = os.path.join(_agent_dir(contractor.id, agent_id), "wardrobe")
+    fname = await _save_upload(file, d, uuid.uuid4().hex)
+    url = f"/api/storage/contractors/{contractor.id}/agents/{agent_id}/wardrobe/{fname}"
+    item = AgentWardrobe(agent_id=agent_id, image_url=url, label=label or None, occasion=occasion or None)
+    db.add(item)
+    await db.flush()
+    return {"id": item.id, "image_url": url, "label": item.label, "occasion": item.occasion, "is_active": item.is_active}
+
+
+@router.patch("/agents/{agent_id}/wardrobe/{item_id}")
+async def contractor_wardrobe_activate(
+    agent_id: int,
+    item_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сделать наряд активным (остальные — снять)."""
+    await _get_owned_agent(agent_id, contractor, db)
+    items = (await db.execute(
+        select(AgentWardrobe).where(AgentWardrobe.agent_id == agent_id)
+    )).scalars().all()
+    found = False
+    for w in items:
+        w.is_active = (w.id == item_id)
+        if w.id == item_id:
+            found = True
+    if not found:
+        raise HTTPException(404, "Наряд не найден")
+    await db.flush()
+    return {"ok": True, "active_id": item_id}
+
+
+@router.delete("/agents/{agent_id}/wardrobe/{item_id}")
+async def contractor_wardrobe_delete(
+    agent_id: int,
+    item_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_owned_agent(agent_id, contractor, db)
+    w = (await db.execute(
+        select(AgentWardrobe).where(AgentWardrobe.id == item_id, AgentWardrobe.agent_id == agent_id)
+    )).scalar_one_or_none()
+    if not w:
+        raise HTTPException(404, "Наряд не найден")
+    _remove_by_url(w.image_url)
+    await db.delete(w)
+    await db.flush()
+    return {"ok": True}
