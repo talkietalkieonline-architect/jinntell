@@ -20,7 +20,7 @@ from app.websocket.manager import manager
 router = APIRouter()
 
 # Regex для определения комнаты агента: agent-{id}
-_AGENT_ROOM_RE = re.compile(r"^agent-(\d+)$")
+_AGENT_ROOM_RE = re.compile(r"^agent-(\d+)(?:-u\d+)?$")
 
 # Имя помощника по умолчанию (пользователь может менять)
 DEFAULT_ASSISTANT_NAME = "Джим"

@@ -23,6 +23,16 @@ const ContactsModal = dynamic(() => import("@/components/communicator/ContactsMo
 const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
 
 /** Персональная комната чата с помощником (по userId из сессии) — НЕ общая на всех */
+function getUserId(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const s = JSON.parse(localStorage.getItem("jinntell_session") || "{}");
+    return s.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function getJimRoom(): string {
   if (typeof window === "undefined") return "general";
   try {
@@ -60,7 +70,8 @@ export default function Home() {
 
   /** Открыть личный чат с агентом */
   const openAgentChat = useCallback((agentId: number) => {
-    setRoom(`agent-${agentId}`);
+    const uid = getUserId();
+    setRoom(uid ? `agent-${agentId}-u${uid}` : `agent-${agentId}`);
     setAgentsOpen(false);
     setCityOpen(false);
   }, [setRoom]);
