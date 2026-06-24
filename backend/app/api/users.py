@@ -1,11 +1,14 @@
 """API пользователя — профиль, настройки"""
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.core.security import create_access_token
+from app.models.contractor import Contractor
 from app.models.user import User
 from app.schemas.user import UserOut, UserUpdate
 
@@ -55,3 +58,36 @@ async def update_me(
         user.assistant_photo = body.assistant_photo
     await db.flush()
     return UserOut.from_user(user)
+
+
+@router.get("/me/businesses")
+async def my_businesses(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Бизнес-аккаунты, привязанные к текущему пользователю (для переключателя ролей)."""
+    rows = (await db.execute(
+        select(Contractor).where(Contractor.user_id == user.id, Contractor.is_active == True)
+        .order_by(Contractor.company_name)
+    )).scalars().all()
+    return [{"id": c.id, "company_name": c.company_name} for c in rows]
+
+
+@router.post("/me/businesses/{contractor_id}/token")
+async def my_business_token(
+    contractor_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Выдать токен бизнес-кабинета по пользовательской сессии — без отдельного пароля."""
+    c = (await db.execute(
+        select(Contractor).where(
+            Contractor.id == contractor_id,
+            Contractor.user_id == user.id,
+            Contractor.is_active == True,
+        )
+    )).scalar_one_or_none()
+    if not c:
+        raise HTTPException(404, "Бизнес-аккаунт не найден или не привязан к вам")
+    token = create_access_token(c.id, token_type="contractor")
+    return {"access_token": token, "company_name": c.company_name, "contractor_id": c.id}

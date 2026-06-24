@@ -6,6 +6,9 @@ import {
   contractorUpdateAgent,
   contractorLogout,
   getContractorToken,
+  setContractorToken,
+  getMyBusinesses,
+  getBusinessToken,
   contractorGetAgentStats,
   contractorGetDialogs,
   contractorGetDialog,
@@ -183,20 +186,34 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     }
   }, [selectedAgent, editMode, loadAnalytics]);
 
-  // Check existing session on open
+  // Проверка сессии / авто-вход по привязанному бизнесу (без второго пароля)
   useEffect(() => {
-    if (isOpen) {
-      const token = getContractorToken();
-      if (token) {
-        setIsAuthed(true);
-        const session = localStorage.getItem("jinntell_contractor_session");
-        if (session) {
-          try { setCompanyName(JSON.parse(session).companyName || ""); } catch {}
-        }
-      } else {
-        setIsAuthed(false);
+    if (!isOpen) return;
+    const token = getContractorToken();
+    if (token) {
+      setIsAuthed(true);
+      const session = localStorage.getItem("jinntell_contractor_session");
+      if (session) {
+        try { setCompanyName(JSON.parse(session).companyName || ""); } catch {}
       }
+      return;
     }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getMyBusinesses();
+        if (!cancelled && list.length > 0) {
+          const t = await getBusinessToken(list[0].id);
+          setContractorToken(t.access_token);
+          localStorage.setItem("jinntell_contractor_session", JSON.stringify({ contractorId: t.contractor_id, companyName: t.company_name }));
+          setCompanyName(t.company_name);
+          setIsAuthed(true);
+          return;
+        }
+      } catch { /* нет привязки — покажем форму входа */ }
+      if (!cancelled) setIsAuthed(false);
+    })();
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   const loadMyAgents = useCallback(async () => {

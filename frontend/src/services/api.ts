@@ -1033,6 +1033,13 @@ export interface UserProfile {
 export function getMe(): Promise<UserProfile> {
   return apiFetch("/api/users/me");
 }
+export interface LinkedBusiness { id: number; company_name: string; }
+export function getMyBusinesses(): Promise<LinkedBusiness[]> {
+  return apiFetch("/api/users/me/businesses");
+}
+export function getBusinessToken(contractorId: number): Promise<{ access_token: string; company_name: string; contractor_id: number }> {
+  return apiFetch(`/api/users/me/businesses/${contractorId}/token`, { method: "POST" });
+}
 
 /** Обновить профиль */
 export function updateMe(data: Partial<UserProfile>): Promise<UserProfile> {

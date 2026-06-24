@@ -5,6 +5,7 @@ import {
   register as apiRegister,
   forgotPassword,
   resetPassword,
+  contractorLogin,
   getOAuthVKUrl,
   getOAuthYandexUrl,
   type UserProfile,
@@ -27,7 +28,7 @@ function onlyDigits(s: string): string {
   return s.replace(/\D/g, "");
 }
 
-export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<UserProfile>) => void }) {
+export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (userData?: Partial<UserProfile>) => void; onBusinessLogin?: () => void }) {
   const [step, setStep] = useState<AuthStep>("login");
   const [digits, setDigits] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +40,9 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [accountMode, setAccountMode] = useState<"user" | "business">("user");
+  const [bizLogin, setBizLogin] = useState("");
+  const [bizPassword, setBizPassword] = useState("");
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -65,7 +69,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
     localStorage.setItem("jinntell_phone", digits);
     try {
       const res = await apiLogin(fullPhone, password);
-      onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name } as Partial<UserProfile>);
+      onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name, is_admin: res.is_admin } as Partial<UserProfile>);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Ошибка входа";
       // Fallback: оффлайн-режим
@@ -93,7 +97,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
         password,
         email: email || undefined,
       });
-      onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name } as Partial<UserProfile>);
+      onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name, is_admin: res.is_admin } as Partial<UserProfile>);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка регистрации");
     } finally { setSending(false); }
@@ -119,7 +123,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
     setError(""); setSending(true);
     try {
       const res = await resetPassword({ email, code: resetCode, new_password: newPassword });
-      onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name } as Partial<UserProfile>);
+      onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name, is_admin: res.is_admin } as Partial<UserProfile>);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка");
     } finally { setSending(false); }
@@ -128,6 +132,17 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
   // === OAuth ===
   const handleOAuthVK = () => { window.location.href = getOAuthVKUrl(); };
   const handleOAuthYandex = () => { window.location.href = getOAuthYandexUrl(); };
+
+  const handleBusinessLogin = async () => {
+    if (!bizLogin || !bizPassword) return;
+    setError(""); setSending(true);
+    try {
+      await contractorLogin(bizLogin, bizPassword);
+      onBusinessLogin?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Ошибка входа");
+    } finally { setSending(false); }
+  };
 
   // ======= Общие компоненты =======
 
@@ -298,15 +313,39 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
           </span>
         </div>
 
+        {/* Переключатель Пользователь / Бизнес */}
+        <div className="flex gap-1 mb-5 p-1 rounded-xl" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+          {([{ id: "user", label: "Пользователь" }, { id: "business", label: "Бизнес" }] as const).map((m) => (
+            <button key={m.id} onClick={() => { setAccountMode(m.id); setError(""); }}
+              className="flex-1 py-2 rounded-lg text-[13px] font-medium transition-all"
+              style={{ background: accountMode === m.id ? "var(--accent)" : "transparent", color: accountMode === m.id ? "var(--bg-deep)" : "var(--text-secondary)" }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {accountMode === "business" && (
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-sm mb-1" style={{ color: "var(--text-secondary)" }}>Вход в кабинет бизнеса</p>
+            {InputField({ value: bizLogin, onChange: setBizLogin, placeholder: "Логин компании" })}
+            {PasswordField({ value: bizPassword, onChange: setBizPassword, placeholder: "Пароль", onSubmit: handleBusinessLogin })}
+            <ErrorMsg />
+            <SubmitButton onClick={handleBusinessLogin} disabled={!bizLogin || !bizPassword || sending}>
+              {sending ? "Вход..." : "Войти как бизнес"}
+            </SubmitButton>
+            <p className="text-[11px] text-center mt-1" style={{ color: "var(--text-muted)" }}>Логин и пароль выдаёт администратор платформы.</p>
+          </div>
+        )}
+
         {/* === ВХОД === */}
-        {step === "login" && (
+        {accountMode === "user" && step === "login" && (
           <div className="flex flex-col gap-3">
             <p className="text-center text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
               Войдите в аккаунт
             </p>
 
-            <PhoneField />
-            <PasswordField value={password} onChange={setPassword} onSubmit={handleLogin} />
+            {PhoneField()}
+            {PasswordField({ value: password, onChange: setPassword, onSubmit: handleLogin })}
             <ErrorMsg />
 
             <SubmitButton onClick={handleLogin} disabled={!isPhoneComplete || !password || sending}>
@@ -335,16 +374,16 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
         )}
 
         {/* === РЕГИСТРАЦИЯ === */}
-        {step === "register" && (
+        {accountMode === "user" && step === "register" && (
           <div className="flex flex-col gap-3">
             <p className="text-center text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
               Создайте аккаунт
             </p>
 
-            <PhoneField />
-            <InputField value={email} onChange={setEmail} placeholder="Email (для восстановления пароля)" type="email" />
-            <PasswordField value={password} onChange={setPassword} placeholder="Придумайте пароль (мин. 6 симв.)" />
-            <PasswordField value={confirmPassword} onChange={setConfirmPassword} placeholder="Повторите пароль" onSubmit={handleRegister} />
+            {PhoneField()}
+            {InputField({ value: email, onChange: setEmail, placeholder: "Email (для восстановления пароля)", type: "email" })}
+            {PasswordField({ value: password, onChange: setPassword, placeholder: "Придумайте пароль (мин. 6 симв.)" })}
+            {PasswordField({ value: confirmPassword, onChange: setConfirmPassword, placeholder: "Повторите пароль", onSubmit: handleRegister })}
             <ErrorMsg />
 
             <SubmitButton onClick={handleRegister} disabled={!isPhoneComplete || !password || !confirmPassword || sending}>
@@ -364,7 +403,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
         )}
 
         {/* === ЗАБЫЛ ПАРОЛЬ === */}
-        {step === "forgot" && (
+        {accountMode === "user" && step === "forgot" && (
           <div className="flex flex-col gap-3">
             <p className="text-center text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
               Восстановление пароля
@@ -373,7 +412,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
               Введите email, указанный при регистрации
             </p>
 
-            <InputField value={email} onChange={setEmail} placeholder="Ваш email" type="email" onSubmit={handleForgotPassword} />
+            {InputField({ value: email, onChange: setEmail, placeholder: "Ваш email", type: "email", onSubmit: handleForgotPassword })}
             <ErrorMsg />
 
             <SubmitButton onClick={handleForgotPassword} disabled={!email || sending}>
@@ -391,7 +430,7 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
         )}
 
         {/* === СБРОС ПАРОЛЯ === */}
-        {step === "reset_code" && (
+        {accountMode === "user" && step === "reset_code" && (
           <div className="flex flex-col gap-3">
             <p className="text-center text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
               Новый пароль
@@ -406,8 +445,8 @@ export default function LoginScreen({ onLogin }: { onLogin: (userData?: Partial<
               </p>
             )}
 
-            <InputField value={resetCode} onChange={setResetCode} placeholder="Код из письма (6 цифр)" />
-            <PasswordField value={newPassword} onChange={setNewPassword} placeholder="Новый пароль (мин. 6 симв.)" onSubmit={handleResetPassword} />
+            {InputField({ value: resetCode, onChange: setResetCode, placeholder: "Код из письма (6 цифр)" })}
+            {PasswordField({ value: newPassword, onChange: setNewPassword, placeholder: "Новый пароль (мин. 6 симв.)", onSubmit: handleResetPassword })}
             <ErrorMsg />
 
             <SubmitButton onClick={handleResetPassword} disabled={!resetCode || !newPassword || sending}>

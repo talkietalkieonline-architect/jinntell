@@ -16,8 +16,9 @@ import MyAgentsModal from "@/components/communicator/MyAgentsModal";
 import AgentCityModal from "@/components/communicator/AgentCityModal";
 import ContactsModal from "@/components/communicator/ContactsModal";
 import BusinessDashboardModal from "@/components/communicator/BusinessDashboardModal";
+import { contractorLogout, getContractorToken } from "@/services/api";
 
-type AppScreen = "splash" | "login" | "communicator";
+type AppScreen = "splash" | "login" | "communicator" | "business";
 
 export default function Home() {
   const { isLoggedIn, isAdmin, login, logout, user } = useAuth();
@@ -73,16 +74,23 @@ export default function Home() {
   // Заставка — после неё проверяем сессию через AuthContext
   if (screen === "splash") {
     return <SplashScreen onFinish={() => {
-      setScreen(isLoggedIn ? "communicator" : "login");
+      setScreen(isLoggedIn ? "communicator" : (getContractorToken() ? "business" : "login"));
     }} />;
   }
 
   // Экран входа
   if (screen === "login") {
-    return <LoginScreen onLogin={(userData) => {
-      login(userData || {});
-      setScreen("communicator");
-    }} />;
+    return <LoginScreen
+      onLogin={(userData) => {
+        login(userData || {});
+        setScreen("communicator");
+      }}
+      onBusinessLogin={() => setScreen("business")}
+    />;
+  }
+
+  if (screen === "business") {
+    return <BusinessDashboardModal isOpen onClose={() => { contractorLogout(); setScreen("login"); }} />;
   }
 
   // Коммуникатор
