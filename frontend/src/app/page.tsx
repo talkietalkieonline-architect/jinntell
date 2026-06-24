@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/hooks/useChat";
 import SplashScreen from "@/components/auth/SplashScreen";
 import LoginScreen from "@/components/auth/LoginScreen";
+import dynamic from "next/dynamic";
 import Particles from "@/components/communicator/Particles";
 import TopBar from "@/components/communicator/TopBar";
 import BottomBar from "@/components/communicator/BottomBar";
@@ -11,13 +12,15 @@ import ChatArea from "@/components/communicator/ChatArea";
 import SideTab from "@/components/communicator/SideTab";
 import LeftPanel from "@/components/communicator/LeftPanel";
 import RightPanel from "@/components/communicator/RightPanel";
-import SettingsModal from "@/components/communicator/SettingsModal";
-import MyAgentsModal from "@/components/communicator/MyAgentsModal";
-import AgentCityModal from "@/components/communicator/AgentCityModal";
-import ContactsModal from "@/components/communicator/ContactsModal";
-import BusinessDashboardModal from "@/components/communicator/BusinessDashboardModal";
 import { contractorLogout } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
+
+// Тяжёлые модалки — ленивая загрузка (грузятся только при открытии)
+const SettingsModal = dynamic(() => import("@/components/communicator/SettingsModal"));
+const MyAgentsModal = dynamic(() => import("@/components/communicator/MyAgentsModal"));
+const AgentCityModal = dynamic(() => import("@/components/communicator/AgentCityModal"));
+const ContactsModal = dynamic(() => import("@/components/communicator/ContactsModal"));
+const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
 
 type AppScreen = "splash" | "login" | "communicator" | "business";
 
@@ -176,6 +179,7 @@ export default function Home() {
       />
 
       {/* Центр Управления */}
+      {settingsOpen && (
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -184,8 +188,10 @@ export default function Home() {
           setScreen("login");
         }}
       />
+      )}
 
       {/* Мои Джинны */}
+      {agentsOpen && (
       <MyAgentsModal
         isOpen={agentsOpen}
         onClose={() => setAgentsOpen(false)}
@@ -195,8 +201,10 @@ export default function Home() {
         }}
         onStartChat={openAgentChat}
       />
+      )}
 
       {/* Город Джиннов */}
+      {cityOpen && (
       <AgentCityModal
         isOpen={cityOpen}
         onClose={() => setCityOpen(false)}
@@ -211,18 +219,23 @@ export default function Home() {
           window.location.href = "/admin";
         }}
       />
+      )}
 
       {/* Мои контакты */}
+      {contactsOpen && (
       <ContactsModal
         isOpen={contactsOpen}
         onClose={() => setContactsOpen(false)}
       />
+      )}
 
       {/* ЛК Бизнеса (настройка привязанных агентов) */}
+      {businessOpen && (
       <BusinessDashboardModal
         isOpen={businessOpen}
         onClose={() => setBusinessOpen(false)}
       />
+      )}
 
 
     </div>
