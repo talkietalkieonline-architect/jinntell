@@ -22,6 +22,17 @@ const AgentCityModal = dynamic(() => import("@/components/communicator/AgentCity
 const ContactsModal = dynamic(() => import("@/components/communicator/ContactsModal"));
 const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
 
+/** Персональная комната чата с помощником (по userId из сессии) — НЕ общая на всех */
+function getJimRoom(): string {
+  if (typeof window === "undefined") return "general";
+  try {
+    const s = JSON.parse(localStorage.getItem("jinntell_session") || "{}");
+    return s.userId ? `jim-${s.userId}` : "general";
+  } catch {
+    return "general";
+  }
+}
+
 type AppScreen = "splash" | "login" | "communicator" | "business";
 
 export default function Home() {
@@ -45,7 +56,7 @@ export default function Home() {
   const {
     messages, isTyping, typingName, isConnected,
     sendMessage, attachMedia, room, setRoom, agentInfo,
-  } = useChat("general");
+  } = useChat(getJimRoom());
 
   /** Открыть личный чат с агентом */
   const openAgentChat = useCallback((agentId: number) => {
@@ -56,7 +67,7 @@ export default function Home() {
 
   /** Вернуться в общую комнату */
   const backToGeneral = useCallback(() => {
-    setRoom("general");
+    setRoom(getJimRoom());
   }, [setRoom]);
 
   const closeLeft = useCallback(() => setLeftOpen(false), []);
