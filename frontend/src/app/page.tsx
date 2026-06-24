@@ -16,7 +16,8 @@ import MyAgentsModal from "@/components/communicator/MyAgentsModal";
 import AgentCityModal from "@/components/communicator/AgentCityModal";
 import ContactsModal from "@/components/communicator/ContactsModal";
 import BusinessDashboardModal from "@/components/communicator/BusinessDashboardModal";
-import { contractorLogout, getContractorToken } from "@/services/api";
+import { contractorLogout } from "@/services/api";
+import HomeRoom from "@/components/communicator/HomeRoom";
 
 type AppScreen = "splash" | "login" | "communicator" | "business";
 
@@ -31,7 +32,7 @@ export default function Home() {
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [activeMode, setActiveMode] = useState("Общение");
-  const [activeRoom, setActiveRoom] = useState("Общая комната");
+  const [activeRoom, setActiveRoom] = useState("Главная");
   const [topBarH, setTopBarH] = useState(80);
   const [bottomBarH, setBottomBarH] = useState(130);
   const [micActive, setMicActive] = useState(false);
@@ -74,7 +75,7 @@ export default function Home() {
   // Заставка — после неё проверяем сессию через AuthContext
   if (screen === "splash") {
     return <SplashScreen onFinish={() => {
-      setScreen(isLoggedIn ? "communicator" : (getContractorToken() ? "business" : "login"));
+      setScreen(isLoggedIn ? "communicator" : "login");
     }} />;
   }
 
@@ -101,7 +102,6 @@ export default function Home() {
 
       {/* Верхняя панель */}
       <TopBar
-        tickerActive={!agentInfo}
         onHeightChange={setTopBarH}
         agentInfo={agentInfo}
         onBackToGeneral={backToGeneral}
@@ -135,23 +135,32 @@ export default function Home() {
       {/* Правая панель — Помощник + Участники */}
       <RightPanel isOpen={rightOpen} onClose={closeRight} />
 
-      {/* Центральная область чата */}
-      <ChatArea
-        messages={messages}
-        isTyping={isTyping}
-        typingName={typingName}
-        topPad={topBarH}
-        bottomPad={bottomBarH}
-        autoSpeak={micActive}
-        agentInfo={agentInfo}
-      />
+      {/* Центральная область — Главная (лента) или чат */}
+      {!agentInfo && activeMode === "Общение" && activeRoom === "Главная" ? (
+        <HomeRoom
+          topPad={topBarH}
+          bottomPad={bottomBarH}
+          assistantName={user?.assistant_name || "Джим"}
+          onOpenAssistant={() => setActiveRoom("Чат помощника")}
+        />
+      ) : (
+        <ChatArea
+          messages={messages}
+          isTyping={isTyping}
+          typingName={typingName}
+          topPad={topBarH}
+          bottomPad={bottomBarH}
+          autoSpeak={micActive}
+          agentInfo={agentInfo}
+        />
+      )}
 
       {/* Нижняя панель — ввод + кнопки */}
       <BottomBar
         onSettingsClick={() => setSettingsOpen(true)}
         onContactsClick={() => setContactsOpen(true)}
         onAgentsClick={() => setAgentsOpen(true)}
-        onSendMessage={sendMessage}
+        onSendMessage={(text) => { if (activeRoom === "Главная") setActiveRoom("Чат помощника"); sendMessage(text); }}
         onAttachMedia={attachMedia}
         onHeightChange={setBottomBarH}
         onMicStateChange={(active) => setMicActive(active)}

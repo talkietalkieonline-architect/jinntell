@@ -4,12 +4,10 @@ import type { AgentRoomInfo } from "@/hooks/useChat";
 
 /** Верхняя панель — лого + ЭФИР / заголовок агента */
 export default function TopBar({
-  tickerActive,
   onHeightChange,
   agentInfo,
   onBackToGeneral,
 }: {
-  tickerActive: boolean;
   onHeightChange?: (h: number) => void;
   agentInfo?: import("@/hooks/useChat").AgentRoomInfo | null;
   onBackToGeneral?: () => void;
@@ -99,30 +97,6 @@ export default function TopBar({
           <div className="ml-auto flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
             <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span>
-          </div>
-        </div>
-      ) : tickerActive ? (
-        /* Бегущая строка ЭФИР */
-        <div
-          className="flex items-center gap-2 rounded-lg overflow-hidden px-3 py-1.5"
-          style={{
-            background: "var(--bg-glass)",
-            border: "1px solid var(--bg-glass-border)",
-          }}
-        >
-          <span
-            className="text-[10px] uppercase tracking-widest font-semibold shrink-0"
-            style={{ color: "var(--accent)" }}
-          >
-            Эфир
-          </span>
-          <div className="overflow-hidden flex-1 relative">
-            <div
-              className="whitespace-nowrap ticker-scroll"
-              style={{ color: "var(--text-secondary)", fontSize: "13px" }}
-            >
-              Пробки: КАД у Мурино — задержка до 18 мин &nbsp;•&nbsp; Погода: до +6°, к вечеру слабый снег &nbsp;•&nbsp; МЧС: учения на набережной завершены, проезд свободен &nbsp;•&nbsp; Спортмастер: -20% на термобельё &nbsp;•&nbsp; JinnTell: новые агенты в Городе!
-            </div>
           </div>
         </div>
       ) : null}
