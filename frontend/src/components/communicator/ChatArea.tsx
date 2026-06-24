@@ -188,7 +188,6 @@ function BubbleContextMenu({
         marginTop: "-8px",
         background: "var(--panel-bg)",
         border: "1px solid var(--panel-border)",
-        backdropFilter: "blur(20px)",
         zIndex: 100,
         minWidth: "160px",
       }}

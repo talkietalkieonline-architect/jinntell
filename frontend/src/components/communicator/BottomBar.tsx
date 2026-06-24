@@ -454,7 +454,6 @@ export default function BottomBar({
               style={{
                 background: "var(--panel-bg)",
                 border: "1px solid var(--panel-border)",
-                backdropFilter: "blur(20px)",
                 minWidth: "140px",
               }}
             >
