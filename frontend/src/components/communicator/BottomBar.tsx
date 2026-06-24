@@ -76,6 +76,7 @@ export default function BottomBar({
   const onSendRef = useRef(onSendMessage);
   const micStateRef = useRef(micState);
   const startRecognitionRef = useRef<(() => void) | undefined>(undefined);
+  const ttsSpeakingRef = useRef(false);
 
   useEffect(() => { onSendRef.current = onSendMessage; }, [onSendMessage]);
   useEffect(() => {
@@ -95,6 +96,7 @@ export default function BottomBar({
     recognition.interimResults = true;
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
+      if (ttsSpeakingRef.current || window.speechSynthesis?.speaking) return;
       let transcript = "";
       for (let i = 0; i < event.results.length; i++) {
         transcript += event.results[i][0].transcript;
@@ -113,6 +115,7 @@ export default function BottomBar({
     };
 
     recognition.onend = () => {
+      if (ttsSpeakingRef.current) return;
       if (micStateRef.current === "always") {
         setTimeout(() => startRecognitionRef.current?.(), 300);
       } else {
@@ -126,6 +129,21 @@ export default function BottomBar({
   }, []);
 
   useEffect(() => { startRecognitionRef.current = startRecognition; }, [startRecognition]);
+
+  // Анти-эхо: глушим распознавание, пока помощник озвучивается (TTS)
+  useEffect(() => {
+    const onTtsStart = () => { ttsSpeakingRef.current = true; recognitionRef.current?.abort(); };
+    const onTtsEnd = () => {
+      ttsSpeakingRef.current = false;
+      if (micStateRef.current === "always") setTimeout(() => startRecognitionRef.current?.(), 300);
+    };
+    window.addEventListener("jinntell_tts_start", onTtsStart);
+    window.addEventListener("jinntell_tts_end", onTtsEnd);
+    return () => {
+      window.removeEventListener("jinntell_tts_start", onTtsStart);
+      window.removeEventListener("jinntell_tts_end", onTtsEnd);
+    };
+  }, []);
 
   const stopRecognition = useCallback(() => {
     if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null; }
@@ -178,6 +196,7 @@ export default function BottomBar({
     wakeLastStart.current = Date.now();
 
     r.onresult = (event: SpeechRecognitionEvent) => {
+      if (window.speechSynthesis?.speaking) return;
       wakeFailCount.current = 0;
       const last = event.results[event.results.length - 1];
       if (!last.isFinal) return;

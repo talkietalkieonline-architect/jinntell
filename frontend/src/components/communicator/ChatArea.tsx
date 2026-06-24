@@ -422,6 +422,9 @@ export default function ChatArea({
         const utt = new SpeechSynthesisUtterance(msg.text);
         utt.lang = "ru-RU";
         utt.rate = 1;
+        utt.onstart = () => window.dispatchEvent(new Event("jinntell_tts_start"));
+        utt.onend = () => window.dispatchEvent(new Event("jinntell_tts_end"));
+        utt.onerror = () => window.dispatchEvent(new Event("jinntell_tts_end"));
         window.speechSynthesis.speak(utt);
       }
     }
