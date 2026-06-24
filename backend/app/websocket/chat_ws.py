@@ -265,6 +265,19 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
     await manager.broadcast(room, msg_data)
 
 
+async def _set_user_offline(user_id: int) -> None:
+    """Сбросить online-статус пользователя при отключении WebSocket."""
+    try:
+        async with async_session() as db:
+            u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+            if u:
+                u.is_online = False
+                u.last_seen = datetime.now(timezone.utc)
+                await db.commit()
+    except Exception:
+        pass
+
+
 @router.websocket("/ws/chat/{room}")
 async def chat_websocket(websocket: WebSocket, room: str):
     """
@@ -288,6 +301,8 @@ async def chat_websocket(websocket: WebSocket, room: str):
             return
         user_name = user.display_name
         assistant_name = user.assistant_name or DEFAULT_ASSISTANT_NAME
+        user.is_online = True
+        await db.commit()
 
     # Если комната агента — загружаем агента
     agent_id = _parse_agent_room(room)
@@ -353,11 +368,12 @@ async def chat_websocket(websocket: WebSocket, room: str):
 
             if agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
-            elif room == "general":
+            elif room == "general" or room.startswith("jim-"):
                 asyncio.create_task(_assistant_reply(room, text, assistant_name, user_id))
 
     except WebSocketDisconnect:
         manager.disconnect(room, user_id)
+        await _set_user_offline(user_id)
         await manager.broadcast(room, {
             "type": "user_left",
             "user_id": user_id,
@@ -367,3 +383,4 @@ async def chat_websocket(websocket: WebSocket, room: str):
     except Exception as e:
         print(f"[ws] Error: {e}")
         manager.disconnect(room, user_id)
+        await _set_user_offline(user_id)
