@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
+import { ttsBlobUrl } from "@/services/api";
 
 export interface ChatMessage {
   id: string;
@@ -20,6 +21,33 @@ const WAVE_BARS = Array.from({ length: 20 }, (_, i) => {
   const h = 4 + Math.abs(Math.sin(i * 0.7)) * 12 + (i % 3) * 2;
   return Math.round(h);
 });
+
+let _ttsAudio: HTMLAudioElement | null = null;
+/** Озвучка через сервер (Yandex SpeechKit) с анти-эхо событиями и фолбэком */
+async function playServerTTS(text: string) {
+  try { _ttsAudio?.pause(); } catch {}
+  _ttsAudio = null;
+  window.dispatchEvent(new Event("jinntell_tts_start"));
+  const url = await ttsBlobUrl(text);
+  if (!url) {
+    if ("speechSynthesis" in window) {
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.lang = "ru-RU";
+      utt.onend = () => window.dispatchEvent(new Event("jinntell_tts_end"));
+      utt.onerror = () => window.dispatchEvent(new Event("jinntell_tts_end"));
+      window.speechSynthesis.speak(utt);
+    } else {
+      window.dispatchEvent(new Event("jinntell_tts_end"));
+    }
+    return;
+  }
+  const audio = new Audio(url);
+  _ttsAudio = audio;
+  const done = () => { window.dispatchEvent(new Event("jinntell_tts_end")); try { URL.revokeObjectURL(url); } catch {} };
+  audio.onended = done;
+  audio.onerror = done;
+  audio.play().catch(() => done());
+}
 
 /** Голосовой пузырь в стиле Telegram — волновая дорожка + play */
 function VoiceBubble({ text, accent }: { text: string; accent?: boolean }) {
@@ -288,15 +316,7 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
               className="opacity-40 hover:opacity-80 transition-opacity"
               style={{ color: "var(--text-muted)" }}
               title="Прослушать"
-              onClick={() => {
-                if ("speechSynthesis" in window) {
-                  window.speechSynthesis.cancel();
-                  const utt = new SpeechSynthesisUtterance(msg.text);
-                  utt.lang = "ru-RU";
-                  utt.rate = 1;
-                  window.speechSynthesis.speak(utt);
-                }
-              }}
+              onClick={() => { playServerTTS(msg.text); }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -418,14 +438,8 @@ export default function ChatArea({
 
     // Озвучиваем только ответы агентов / дворецкого
     for (const msg of newMsgs) {
-      if (msg.sender !== "user" && msg.text && "speechSynthesis" in window) {
-        const utt = new SpeechSynthesisUtterance(msg.text);
-        utt.lang = "ru-RU";
-        utt.rate = 1;
-        utt.onstart = () => window.dispatchEvent(new Event("jinntell_tts_start"));
-        utt.onend = () => window.dispatchEvent(new Event("jinntell_tts_end"));
-        utt.onerror = () => window.dispatchEvent(new Event("jinntell_tts_end"));
-        window.speechSynthesis.speak(utt);
+      if (msg.sender !== "user" && msg.text) {
+        playServerTTS(msg.text);
       }
     }
   }, [messages, autoSpeak]);
