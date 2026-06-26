@@ -348,27 +348,6 @@ const _av = user.assistant_voice || "ermil";
                 </label>
               </div>
 
-              {/* Фоновая анимация */}
-              <div>
-                <label className="flex items-center justify-between cursor-pointer gap-3">
-                  <span className="flex flex-col">
-                    <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Фоновая анимация</span>
-                    <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Частицы на фоне. Отключите для скорости и экономии батареи</span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={animOn}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setAnimOn(on);
-                      localStorage.setItem("jinntell_anim_off", on ? "0" : "1");
-                      window.dispatchEvent(new Event("jinntell_anim_change"));
-                    }}
-                    className="w-5 h-5 shrink-0 cursor-pointer"
-                    style={{ accentColor: "var(--accent)" }}
-                  />
-                </label>
-              </div>
 
               {/* Пол помощника */}
               <div>
@@ -478,7 +457,26 @@ const _av = user.assistant_voice || "ermil";
                 </button>
               ))}
             </div>
-            <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>Анимацию фона можно выключить в «Помощник → Фоновая анимация».</p>
+            <div className="mt-4">
+              <label className="flex items-center justify-between cursor-pointer gap-3">
+                <span className="flex flex-col">
+                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Анимация фона</span>
+                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Отключите для скорости и экономии батареи (слабые устройства)</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={animOn}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setAnimOn(on);
+                    localStorage.setItem("jinntell_anim_off", on ? "0" : "1");
+                    window.dispatchEvent(new Event("jinntell_anim_change"));
+                  }}
+                  className="w-5 h-5 shrink-0 cursor-pointer"
+                  style={{ accentColor: "var(--accent)" }}
+                />
+              </label>
+            </div>
           </div>
         )}
 
