@@ -7,7 +7,6 @@ import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/App
 const THEMES = [
   { id: "light", name: "Светлая", desc: "Белый фон, тёмный текст" },
   { id: "dark", name: "Тёмная", desc: "Тёмный + золото" },
-  { id: "custom", name: "Кастомная", desc: "Свои цвета и фон" },
 ];
 
 const GENDERS = [
