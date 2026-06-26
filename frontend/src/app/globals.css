@@ -154,8 +154,8 @@ body {
 .glass {
   background: var(--bg-glass);
   border: 1px solid var(--bg-glass-border);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .glass:hover {

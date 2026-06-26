@@ -79,7 +79,7 @@ export default function ContactsModal({
         style={{
           background: "var(--panel-bg)",
           border: "1px solid var(--panel-border)",
-          backdropFilter: "blur(30px)",
+          backdropFilter: "blur(12px)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
