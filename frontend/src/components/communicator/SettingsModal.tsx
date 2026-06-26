@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { updateMe, type UserProfile } from "@/services/api";
+import { BACKGROUNDS } from "@/components/communicator/AppBackground";
 
 const THEMES = [
   { id: "noir-gold", name: "Noir Gold", desc: "Тёмный + золото" },
@@ -49,6 +50,7 @@ export default function SettingsModal({
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [currentTheme, setCurrentTheme] = useState("noir-gold");
+  const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
 
   // Персональные данные
   const [firstName, setFirstName] = useState("");
@@ -465,6 +467,18 @@ const _av = user.assistant_voice || "ermil";
                 </button>
               ))}
             </div>
+
+            <h3 className="text-sm font-medium mb-3 mt-6" style={{ color: "var(--text-primary)" }}>Фон</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {BACKGROUNDS.map((b) => (
+                <button key={b.id} onClick={() => { setBgId(b.id); localStorage.setItem("jinntell_bg", b.id); window.dispatchEvent(new Event("jinntell_bg_change")); }}
+                  className="rounded-xl overflow-hidden transition-all" style={{ border: bgId === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
+                  <div className="h-12 w-full" style={{ background: b.preview }} />
+                  <div className="text-[10px] py-1 text-center" style={{ color: bgId === b.id ? "var(--accent)" : "var(--text-muted)" }}>{b.name}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>Анимацию фона можно выключить в «Помощник → Фоновая анимация».</p>
           </div>
         )}
 

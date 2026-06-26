@@ -5,7 +5,7 @@ import { useChat } from "@/hooks/useChat";
 import SplashScreen from "@/components/auth/SplashScreen";
 import LoginScreen from "@/components/auth/LoginScreen";
 import dynamic from "next/dynamic";
-import Particles from "@/components/communicator/Particles";
+import AppBackground from "@/components/communicator/AppBackground";
 import TopBar from "@/components/communicator/TopBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
@@ -55,7 +55,6 @@ export default function Home() {
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
-  const [animOn, setAnimOn] = useState(true);
   const [activeMode, setActiveMode] = useState("Общение");
   const [activeRoom, setActiveRoom] = useState("Главная");
   const [topBarH, setTopBarH] = useState(80);
@@ -83,13 +82,6 @@ export default function Home() {
 
   const closeLeft = useCallback(() => setLeftOpen(false), []);
   const closeRight = useCallback(() => setRightOpen(false), []);
-
-  useEffect(() => {
-    const read = () => setAnimOn(localStorage.getItem("jinntell_anim_off") !== "1");
-    read();
-    window.addEventListener("jinntell_anim_change", read);
-    return () => window.removeEventListener("jinntell_anim_change", read);
-  }, []);
 
   // Подхват JinnTell Link: если в localStorage есть jinntell_open_agent — открываем чат
   useEffect(() => {
@@ -131,7 +123,7 @@ export default function Home() {
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* Фоновые частицы */}
-      {animOn && <Particles />}
+      <AppBackground />
 
       {/* Верхняя панель */}
       <TopBar
