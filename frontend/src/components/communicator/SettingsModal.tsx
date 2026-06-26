@@ -18,11 +18,14 @@ const GENDERS = [
 ];
 
 const VOICES = [
-  { id: "male_low", name: "Мужской низкий", desc: "Спокойный, глубокий", gender: "male" },
-  { id: "male_high", name: "Мужской высокий", desc: "Энергичный, молодой", gender: "male" },
-  { id: "female_soft", name: "Женский мягкий", desc: "Тёплый, спокойный", gender: "female" },
-  { id: "female_energy", name: "Женский энергичный", desc: "Бодрый, уверенный", gender: "female" },
-  { id: "neutral", name: "Нейтральный", desc: "Без выраженного пола", gender: "neutral" },
+  { id: "ermil", name: "Эрмил", desc: "Мужской, спокойный", gender: "male" },
+  { id: "zahar", name: "Захар", desc: "Мужской, уверенный", gender: "male" },
+  { id: "filipp", name: "Филипп", desc: "Мужской, мягкий", gender: "male" },
+  { id: "madirus", name: "Мадирус", desc: "Мужской, нейтральный", gender: "male" },
+  { id: "alena", name: "Алёна", desc: "Женский, тёплый", gender: "female" },
+  { id: "jane", name: "Джейн", desc: "Женский, эмоциональный", gender: "female" },
+  { id: "oksana", name: "Оксана", desc: "Женский, классический", gender: "female" },
+  { id: "omazh", name: "Омаж", desc: "Женский, выразительный", gender: "female" },
 ];
 
 const SECTIONS = [
@@ -87,7 +90,9 @@ export default function SettingsModal({
       setAboutField(user.about || "");
       setAssistantName(user.assistant_name || "Джим");
       setAssistantGender(user.assistant_gender || "male");
-      setAssistantVoice(user.assistant_voice || "male_low");
+const _av = user.assistant_voice || "ermil";
+      setAssistantVoice(_av);
+      if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
       setUserAge(user.user_age ? String(user.user_age) : "");
     }
   }, [user, isOpen]);
@@ -127,6 +132,7 @@ export default function SettingsModal({
         assistant_voice: assistantVoice,
         user_age: userAge ? parseInt(userAge) : undefined,
       } as Partial<UserProfile>);
+      localStorage.setItem("jinntell_assistant_voice", assistantVoice);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: unknown) {
@@ -140,9 +146,7 @@ export default function SettingsModal({
     color: "var(--text-primary)",
   };
 
-  const filteredVoices = VOICES.filter(
-    (v) => v.gender === assistantGender || v.gender === "neutral"
-  );
+  const filteredVoices = VOICES;
 
   return (
     <div

@@ -24,11 +24,17 @@ const WAVE_BARS = Array.from({ length: 20 }, (_, i) => {
 
 let _ttsAudio: HTMLAudioElement | null = null;
 /** Озвучка через сервер (Yandex SpeechKit) с анти-эхо событиями и фолбэком */
-async function playServerTTS(text: string) {
+function ttsVoice(sender?: string): string {
+  if (sender === "agent") return "ermil"; // голос агента — следующим шагом
+  if (typeof window === "undefined") return "ermil";
+  return localStorage.getItem("jinntell_assistant_voice") || "ermil";
+}
+
+async function playServerTTS(text: string, voice: string = "ermil") {
   try { _ttsAudio?.pause(); } catch {}
   _ttsAudio = null;
   window.dispatchEvent(new Event("jinntell_tts_start"));
-  const url = await ttsBlobUrl(text);
+  const url = await ttsBlobUrl(text, voice);
   if (!url) {
     if ("speechSynthesis" in window) {
       const utt = new SpeechSynthesisUtterance(text);
@@ -316,7 +322,7 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
               className="opacity-40 hover:opacity-80 transition-opacity"
               style={{ color: "var(--text-muted)" }}
               title="Прослушать"
-              onClick={() => { playServerTTS(msg.text); }}
+              onClick={() => { playServerTTS(msg.text, ttsVoice(msg.sender)); }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -439,7 +445,7 @@ export default function ChatArea({
     // Озвучиваем только ответы агентов / дворецкого
     for (const msg of newMsgs) {
       if (msg.sender !== "user" && msg.text) {
-        playServerTTS(msg.text);
+        playServerTTS(msg.text, ttsVoice(msg.sender));
       }
     }
   }, [messages, autoSpeak]);
