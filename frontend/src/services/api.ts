@@ -106,13 +106,13 @@ export async function register(data: {
 
 /** Вход (телефон + пароль) */
 /** Синтез речи через бэкенд (Yandex SpeechKit) -> blob URL для проигрывания */
-export async function ttsBlobUrl(text: string, voice = "ermil"): Promise<string | null> {
+export async function ttsBlobUrl(text: string, voice = "ermil", emotion = "neutral"): Promise<string | null> {
   const token = getToken();
   try {
     const res = await fetch(`${API_BASE}/api/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ text: text.slice(0, 5000), voice }),
+      body: JSON.stringify({ text: text.slice(0, 5000), voice, emotion }),
     });
     if (!res.ok) return null;
     const blob = await res.blob();

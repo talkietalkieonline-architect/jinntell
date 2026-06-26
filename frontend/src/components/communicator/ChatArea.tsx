@@ -30,18 +30,19 @@ function ttsVoice(sender?: string): string {
   return localStorage.getItem("jinntell_assistant_voice") || "ermil";
 }
 
-async function playServerTTS(text: string, voice: string = "ermil") {
+async function playServerTTS(text: string, voice: string = "ermil", emotion: string = "neutral") {
   try { _ttsAudio?.pause(); } catch {}
   _ttsAudio = null;
   window.dispatchEvent(new Event("jinntell_tts_start"));
-  const url = await ttsBlobUrl(text, voice);
+  const url = await ttsBlobUrl(text, voice, emotion);
   if (!url) {
-    if ("speechSynthesis" in window) {
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (synth) {
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = "ru-RU";
       utt.onend = () => window.dispatchEvent(new Event("jinntell_tts_end"));
       utt.onerror = () => window.dispatchEvent(new Event("jinntell_tts_end"));
-      window.speechSynthesis.speak(utt);
+      synth.speak(utt);
     } else {
       window.dispatchEvent(new Event("jinntell_tts_end"));
     }
@@ -387,7 +388,7 @@ export default function ChatArea({
   bottomPad?: number;
   /** Автоозвучка ответов агентов (голосовой режим) */
   autoSpeak?: boolean;
-  agentInfo?: { id: number; name: string; color: string; greeting?: string } | null;
+  agentInfo?: { id: number; name: string; color: string; greeting?: string; tts_voice_id?: string; tts_emotion?: string } | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -445,7 +446,9 @@ export default function ChatArea({
     // Озвучиваем только ответы агентов / дворецкого
     for (const msg of newMsgs) {
       if (msg.sender !== "user" && msg.text) {
-        playServerTTS(msg.text, ttsVoice(msg.sender));
+        const v = msg.sender === "agent" ? (agentInfo?.tts_voice_id || "ermil") : ttsVoice(msg.sender);
+        const emo = msg.sender === "agent" ? (agentInfo?.tts_emotion || "neutral") : "neutral";
+        playServerTTS(msg.text, v, emo);
       }
     }
   }, [messages, autoSpeak]);

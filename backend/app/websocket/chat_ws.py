@@ -329,6 +329,8 @@ async def chat_websocket(websocket: WebSocket, room: str):
             "brand": agent.brand,
             "color": agent.color,
             "greeting": agent.greeting,
+            "tts_voice_id": agent.tts_voice_id,
+            "tts_emotion": agent.tts_emotion,
         }
     await manager.broadcast(room, join_data)
 

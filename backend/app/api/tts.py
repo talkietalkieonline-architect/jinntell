@@ -27,24 +27,31 @@ async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
     if not text:
         raise HTTPException(400, "Пустой текст")
 
-    data = {
+    base = {
         "text": text[:5000],
         "lang": "ru-RU",
         "voice": body.voice or "ermil",
-        "emotion": body.emotion or "neutral",
         "speed": str(max(0.1, min(3.0, body.speed or 1.0))),
         "format": "oggopus",
     }
     if settings.YANDEX_SPEECHKIT_FOLDER_ID:
-        data["folderId"] = settings.YANDEX_SPEECHKIT_FOLDER_ID
+        base["folderId"] = settings.YANDEX_SPEECHKIT_FOLDER_ID
+
+    headers = {"Authorization": f"Api-Key {settings.YANDEX_SPEECHKIT_API_KEY}"}
+    emotion = body.emotion or "neutral"
+
+    async def _post(emo: str):
+        data = dict(base)
+        if emo and emo != "neutral":
+            data["emotion"] = emo
+        async with httpx.AsyncClient(timeout=30) as client:
+            return await client.post(settings.YANDEX_SPEECHKIT_URL, headers=headers, data=data)
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(
-                settings.YANDEX_SPEECHKIT_URL,
-                headers={"Authorization": f"Api-Key {settings.YANDEX_SPEECHKIT_API_KEY}"},
-                data=data,
-            )
+        r = await _post(emotion)
+        # Если голос не поддерживает эмоцию — повторяем без неё
+        if r.status_code != 200 and emotion != "neutral":
+            r = await _post("neutral")
     except Exception as e:
         raise HTTPException(502, f"SpeechKit недоступен: {e}")
 

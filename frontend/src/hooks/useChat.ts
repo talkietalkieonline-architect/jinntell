@@ -94,6 +94,8 @@ export interface AgentRoomInfo {
   brand: string;
   color: string;
   greeting?: string;
+  tts_voice_id?: string;
+  tts_emotion?: string;
 }
 
 interface UseChatResult {

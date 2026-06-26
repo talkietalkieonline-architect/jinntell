@@ -54,6 +54,17 @@ const KNOWN_MODELS = [
   "gpt-4o-mini", "gpt-4o", "gemini-2.0-flash", "llama-3.3-70b-versatile",
 ];
 
+const YANDEX_VOICES = [
+  { id: "ermil", name: "Эрмил", desc: "муж., спокойный" },
+  { id: "zahar", name: "Захар", desc: "муж., уверенный" },
+  { id: "filipp", name: "Филипп", desc: "муж., мягкий" },
+  { id: "madirus", name: "Мадирус", desc: "муж., нейтральный" },
+  { id: "alena", name: "Алёна", desc: "жен., тёплый" },
+  { id: "jane", name: "Джейн", desc: "жен., эмоциональный" },
+  { id: "oksana", name: "Оксана", desc: "жен., классический" },
+  { id: "omazh", name: "Омаж", desc: "жен., выразительный" },
+];
+
 export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: Props) {
   const [agent, setAgent] = useState<AgentDetailOut | null>(null);
   const [tab, setTab] = useState<SettingsTab>("basic");
@@ -525,7 +536,13 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                   <option value="self">Self-hosted (своё железо)</option>
                 </select>
               </div>
-              <Field label="Voice ID" value={f("tts_voice_id")} onChange={(v) => setF("tts_voice_id", v)} placeholder="alyona" />
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Голос</label>
+                <select value={f("tts_voice_id") || ""} onChange={(e) => setF("tts_voice_id", e.target.value)} className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
+                  <option value="">— выбрать —</option>
+                  {YANDEX_VOICES.map((vv) => (<option key={vv.id} value={vv.id}>{vv.name} — {vv.desc}</option>))}
+                </select>
+              </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Эмоция</label>
                 <select value={f("tts_emotion") || "neutral"} onChange={(e) => setF("tts_emotion", e.target.value)} className="w-full px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
