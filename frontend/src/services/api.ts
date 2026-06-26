@@ -253,6 +253,8 @@ export interface AgentFullOut extends AgentOut {
   voice_id?: string;
   voice_speed: number;
   voice_pitch: number;
+  tts_voice_id?: string;
+  tts_emotion?: string;
   // Внешность
   appearance_preset?: string;
   appearance_face?: string;
@@ -310,6 +312,8 @@ export interface AgentPersonaUpdate {
   voice_id?: string;
   voice_speed?: number;
   voice_pitch?: number;
+  tts_voice_id?: string;
+  tts_emotion?: string;
   // Внешность
   appearance_preset?: string;
   appearance_face?: string;

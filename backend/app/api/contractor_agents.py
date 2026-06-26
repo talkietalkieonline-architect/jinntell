@@ -116,7 +116,7 @@ async def contractor_update_agent(
         "description", "greeting", "system_prompt", "llm_model", "llm_max_tokens",
         "manner_style", "manner_temperament", "manner_humor", "manner_emoji_use",
         "knowledge_text", "knowledge_urls", "knowledge_files",
-        "voice_id", "voice_speed", "voice_pitch",
+        "voice_id", "voice_speed", "voice_pitch", "tts_voice_id", "tts_emotion",
         "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
         "outfit_style", "outfit_top", "outfit_bottom", "outfit_shoes", "outfit_accessory",
         "unavailable_message",

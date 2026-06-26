@@ -35,12 +35,15 @@ import {
    ══════════════════════════════════════════════════════════════ */
 
 // ── Справочники пресетов ──
-const VOICE_PRESETS = [
-  { id: "male-deep", label: "Мужской низкий", icon: "🗣" },
-  { id: "male-medium", label: "Мужской средний", icon: "🗣" },
-  { id: "female-warm", label: "Женский тёплый", icon: "👩" },
-  { id: "female-bright", label: "Женский яркий", icon: "👩" },
-  { id: "neutral", label: "Нейтральный", icon: "🤖" },
+const YANDEX_VOICES = [
+  { id: "ermil", name: "Эрмил", desc: "муж., спокойный" },
+  { id: "zahar", name: "Захар", desc: "муж., уверенный" },
+  { id: "filipp", name: "Филипп", desc: "муж., мягкий" },
+  { id: "madirus", name: "Мадирус", desc: "муж., нейтральный" },
+  { id: "alena", name: "Алёна", desc: "жен., тёплый" },
+  { id: "jane", name: "Джейн", desc: "жен., эмоциональный" },
+  { id: "oksana", name: "Оксана", desc: "жен., классический" },
+  { id: "omazh", name: "Омаж", desc: "жен., выразительный" },
 ];
 
 const MANNER_STYLES = [
@@ -107,6 +110,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [voiceId, setVoiceId] = useState("");
   const [voiceSpeed, setVoiceSpeed] = useState(1.0);
   const [voicePitch, setVoicePitch] = useState(1.0);
+  const [voiceEmotion, setVoiceEmotion] = useState("neutral");
   // Внешность
   const [appFace, setAppFace] = useState("");
   const [appHair, setAppHair] = useState("");
@@ -280,7 +284,8 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     // Знания
     setKnowledgeText(agent.knowledge_text || "");
     // Голос
-    setVoiceId(agent.voice_id || "");
+    setVoiceId(agent.tts_voice_id || agent.voice_id || "");
+    setVoiceEmotion(agent.tts_emotion || "neutral");
     setVoiceSpeed(agent.voice_speed ?? 1.0);
     setVoicePitch(agent.voice_pitch ?? 1.0);
     // Внешность
@@ -333,6 +338,8 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
         manner_emoji_use: mannerEmoji,
         knowledge_text: knowledgeText || undefined,
         voice_id: voiceId || undefined,
+        tts_voice_id: voiceId || undefined,
+        tts_emotion: voiceEmotion,
         voice_speed: voiceSpeed,
         voice_pitch: voicePitch,
         appearance_face: appFace || undefined,
@@ -698,16 +705,19 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
               {activeSection === "voice" && (
                 <div className="flex flex-col gap-4 animate-fade-in">
                   <div>
-                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Тип голоса</label>
-                    <div className="flex flex-col gap-1.5">
-                      {VOICE_PRESETS.map((v) => (
-                        <button key={v.id} onClick={() => setVoiceId(v.id)} className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all"
-                          style={{ background: voiceId === v.id ? "rgba(212,168,67,0.12)" : "var(--bg-glass)", border: `1px solid ${voiceId === v.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
-                          <span className="text-base">{v.icon}</span>
-                          <span className="text-[12px]" style={{ color: voiceId === v.id ? "var(--accent)" : "var(--text-secondary)" }}>{v.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Голос</label>
+                    <select value={voiceId} onChange={(e) => setVoiceId(e.target.value)} className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}>
+                      <option value="">— выбрать голос —</option>
+                      {YANDEX_VOICES.map((v) => (<option key={v.id} value={v.id}>{v.name} — {v.desc}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Эмоция</label>
+                    <select value={voiceEmotion} onChange={(e) => setVoiceEmotion(e.target.value)} className="w-full rounded-xl px-4 py-2.5 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}>
+                      <option value="neutral">Нейтральная</option>
+                      <option value="good">Добрая</option>
+                      <option value="evil">Строгая</option>
+                    </select>
                   </div>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Скорость: {voiceSpeed.toFixed(1)}x</label>
