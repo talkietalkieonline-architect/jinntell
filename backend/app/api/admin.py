@@ -967,3 +967,40 @@ async def admin_test_agent(
         max_tokens=agent.llm_max_tokens or 1000,
     )
     return {"reply": reply, "model": agent.llm_model, "rag_used": bool(rag_context), "response_time_ms": int((_t.time() - start) * 1000)}
+
+
+INTEGRATION_KEYS = [
+    {"key": "YANDEX_SPEECHKIT_API_KEY", "label": "Yandex SpeechKit — API-ключ"},
+    {"key": "YANDEX_SPEECHKIT_FOLDER_ID", "label": "Yandex SpeechKit — Folder ID"},
+]
+
+
+@router.get("/integrations")
+async def admin_get_integrations(admin: User = Depends(get_admin_user)):
+    """Список ключей интеграций (значения замаскированы)."""
+    from app.services.settings_store import get_setting
+    out = []
+    for it in INTEGRATION_KEYS:
+        val = await get_setting(it["key"])
+        if not val:
+            masked = ""
+        elif len(val) > 8:
+            masked = val[:4] + "…" + val[-4:]
+        else:
+            masked = "•••"
+        out.append({"key": it["key"], "label": it["label"], "is_set": bool(val), "masked": masked})
+    return out
+
+
+@router.patch("/integrations/{key}")
+async def admin_set_integration(
+    key: str,
+    value: str = Body(..., embed=True),
+    admin: User = Depends(get_admin_user),
+):
+    """Установить значение ключа интеграции."""
+    if key not in {k["key"] for k in INTEGRATION_KEYS}:
+        raise HTTPException(404, "Неизвестный ключ")
+    from app.services.settings_store import set_setting
+    await set_setting(key, value.strip())
+    return {"ok": True}

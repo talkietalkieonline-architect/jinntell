@@ -21,7 +21,10 @@ class TTSRequest(BaseModel):
 @router.post("")
 async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
     """Синтез речи: текст -> аудио (Ogg Opus)."""
-    if not settings.YANDEX_SPEECHKIT_API_KEY:
+    from app.services.settings_store import get_setting
+    api_key = await get_setting("YANDEX_SPEECHKIT_API_KEY")
+    folder = await get_setting("YANDEX_SPEECHKIT_FOLDER_ID")
+    if not api_key:
         raise HTTPException(503, "TTS не настроен")
     text = (body.text or "").strip()
     if not text:
@@ -34,10 +37,10 @@ async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
         "speed": str(max(0.1, min(3.0, body.speed or 1.0))),
         "format": "oggopus",
     }
-    if settings.YANDEX_SPEECHKIT_FOLDER_ID:
-        base["folderId"] = settings.YANDEX_SPEECHKIT_FOLDER_ID
+    if folder:
+        base["folderId"] = folder
 
-    headers = {"Authorization": f"Api-Key {settings.YANDEX_SPEECHKIT_API_KEY}"}
+    headers = {"Authorization": f"Api-Key {api_key}"}
     emotion = body.emotion or "neutral"
 
     async def _post(emo: str):

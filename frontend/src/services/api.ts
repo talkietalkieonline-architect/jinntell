@@ -540,6 +540,14 @@ export function adminGetCoreAgents(): Promise<AgentDetailOut[]> {
   return apiFetch("/api/admin/core-agents");
 }
 
+export interface IntegrationItem { key: string; label: string; is_set: boolean; masked: string; }
+export function adminGetIntegrations(): Promise<IntegrationItem[]> {
+  return apiFetch("/api/admin/integrations");
+}
+export function adminSetIntegration(key: string, value: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/admin/integrations/${key}`, { method: "PATCH", body: JSON.stringify({ value }) });
+}
+
 // ═══════════════════════════════════════════════
 //  ADMIN: SYSTEM INFO
 // ═══════════════════════════════════════════════

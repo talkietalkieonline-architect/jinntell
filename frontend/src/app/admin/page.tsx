@@ -13,6 +13,9 @@ import {
   adminGetSystemSettings,
   adminUpdateSystemSettings,
   adminGetCoreAgents,
+  adminGetIntegrations,
+  adminSetIntegration,
+  type IntegrationItem,
   adminGetSystemInfo,
   adminGetContractors,
   adminCreateContractor,
@@ -37,7 +40,7 @@ import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
    Управление агентами, пользователями, статистика
    ══════════════════════════════════════════════════════════════ */
 
-type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats";
+type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations";
 
 const AGENT_TYPES = [
   { id: "", label: "Все" },
@@ -94,6 +97,8 @@ export default function AdminPage() {
 
   // System info
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
+  const [intDraft, setIntDraft] = useState<Record<string, string>>({});
 
 
   // Contractors state
@@ -189,6 +194,10 @@ export default function AdminPage() {
     } catch {}
   }, []);
 
+  const loadIntegrations = useCallback(async () => {
+    try { setIntegrations(await adminGetIntegrations()); } catch {}
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
     const load = async () => {
@@ -198,9 +207,10 @@ export default function AdminPage() {
       if (tab === "users") await loadUsers();
       if (tab === "system") await loadSystemInfo();
       if (tab === "stats") await loadStats();
+      if (tab === "integrations") await loadIntegrations();
     };
     load();
-  }, [tab, isAdmin, loadAgents, loadCoreAgents, loadContractors, loadUsers, loadSystemInfo, loadStats]);
+  }, [tab, isAdmin, loadAgents, loadCoreAgents, loadContractors, loadUsers, loadSystemInfo, loadStats, loadIntegrations]);
 
   // Actions
   const handleCreate = async () => {
@@ -353,6 +363,7 @@ export default function AdminPage() {
             { id: "users" as Tab, label: "Пользователи", icon: "👥" },
             { id: "system" as Tab, label: "Система", icon: "🖥️" },
             { id: "stats" as Tab, label: "Статистика", icon: "📊" },
+            { id: "integrations" as Tab, label: "Интеграции", icon: "🔌" },
           ]).map((item) => (
             <button
               key={item.id}
@@ -1020,6 +1031,25 @@ export default function AdminPage() {
 
 
           {/* ═══ SYSTEM TAB ═══ */}
+          {tab === "integrations" && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-400">Ключи интеграций. Сохраняются в БД и применяются сразу — без правки .env.</p>
+              {integrations.map((it) => (
+                <div key={it.key} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-white">{it.label}</span>
+                    <span className="text-[11px] text-gray-500">{it.is_set ? `задан: ${it.masked}` : "не задан"}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input type="password" placeholder="Новое значение" value={intDraft[it.key] || ""} onChange={(e) => setIntDraft({ ...intDraft, [it.key]: e.target.value })} className="flex-1 px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500" />
+                    <button onClick={async () => { await adminSetIntegration(it.key, intDraft[it.key] || ""); setIntDraft({ ...intDraft, [it.key]: "" }); loadIntegrations(); }} disabled={!intDraft[it.key]} className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-500 text-black disabled:opacity-40">Сохранить</button>
+                  </div>
+                </div>
+              ))}
+              {integrations.length === 0 && <p className="text-sm text-gray-500">Загрузка…</p>}
+            </div>
+          )}
+
           {tab === "system" && (
             <div>
               <h2 className="text-lg font-semibold mb-6">Система</h2>
