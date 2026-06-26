@@ -109,6 +109,7 @@ const _av = user.assistant_voice || "ermil";
     localStorage.setItem("jinntell_bg", bg);
     window.dispatchEvent(new Event("jinntell_theme_change"));
     window.dispatchEvent(new Event("jinntell_bg_change"));
+    updateMe({ theme: themeId, background: bg } as Partial<UserProfile>).catch(() => {});
   };
 
   const handleSavePersonal = async () => {
@@ -455,7 +456,7 @@ const _av = user.assistant_voice || "ermil";
             <h3 className="text-sm font-medium mb-3 mt-6" style={{ color: "var(--text-primary)" }}>Фон</h3>
             <div className="grid grid-cols-3 gap-2">
               {backgroundsForTheme(currentTheme).map((b) => (
-                <button key={b.id} onClick={() => { setBgId(b.id); localStorage.setItem("jinntell_bg", b.id); window.dispatchEvent(new Event("jinntell_bg_change")); }}
+                <button key={b.id} onClick={() => { setBgId(b.id); localStorage.setItem("jinntell_bg", b.id); window.dispatchEvent(new Event("jinntell_bg_change")); updateMe({ background: b.id } as Partial<UserProfile>).catch(() => {}); }}
                   className="rounded-xl overflow-hidden transition-all" style={{ border: bgId === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
                   <div className="h-12 w-full" style={{ background: b.preview }} />
                   <div className="text-[10px] py-1 text-center" style={{ color: bgId === b.id ? "var(--accent)" : "var(--text-muted)" }}>{b.name}</div>
@@ -465,7 +466,7 @@ const _av = user.assistant_voice || "ermil";
             {currentTheme === "custom" && (
               <div className="mt-4 flex items-center gap-3">
                 <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Цвет акцента</span>
-                <input type="color" value={customAccent} onChange={(e) => { const c = e.target.value; setCustomAccent(c); document.documentElement.style.setProperty("--custom-accent", c); localStorage.setItem("jinntell_accent", c); }} className="w-12 h-8 rounded cursor-pointer bg-transparent border-0" />
+                <input type="color" value={customAccent} onChange={(e) => { const c = e.target.value; setCustomAccent(c); document.documentElement.style.setProperty("--custom-accent", c); localStorage.setItem("jinntell_accent", c); updateMe({ custom_accent: c } as Partial<UserProfile>).catch(() => {}); }} className="w-12 h-8 rounded cursor-pointer bg-transparent border-0" />
                 <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Загрузка своих обоев — скоро</span>
               </div>
             )}

@@ -32,6 +32,10 @@ async def update_me(
         user.theme = body.theme
     if body.avatar_color is not None:
         user.avatar_color = body.avatar_color
+    if body.background is not None:
+        user.background = body.background
+    if body.custom_accent is not None:
+        user.custom_accent = body.custom_accent
     if body.bio is not None:
         user.bio = body.bio
     # Персональные данные

@@ -1036,6 +1036,8 @@ export interface UserProfile {
   jinntell_link?: string;
   theme: string;
   avatar_color: string;
+  background?: string;
+  custom_accent?: string;
   is_online: boolean;
   is_admin: boolean;
   bio?: string;

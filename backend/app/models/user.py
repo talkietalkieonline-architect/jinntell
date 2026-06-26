@@ -47,8 +47,10 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Настройки
-    theme: Mapped[str] = mapped_column(String(50), default="noir-gold")
+    theme: Mapped[str] = mapped_column(String(50), default="light")
     avatar_color: Mapped[str] = mapped_column(String(20), default="#d4a843")
+    background: Mapped[str] = mapped_column(String(50), default="soft")
+    custom_accent: Mapped[str] = mapped_column(String(20), default="#6c7bff")
 
     # SMS-верификация (legacy)
     sms_code: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)

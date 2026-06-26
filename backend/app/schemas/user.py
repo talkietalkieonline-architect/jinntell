@@ -11,6 +11,8 @@ class UserOut(BaseModel):
     jinntell_link: Optional[str] = None
     theme: str
     avatar_color: str
+    background: str
+    custom_accent: str
     is_online: bool
     is_admin: bool = False
     # Персональные данные
@@ -43,6 +45,8 @@ class UserOut(BaseModel):
             jinntell_link=user.jinntell_link,
             theme=user.theme,
             avatar_color=user.avatar_color,
+            background=user.background,
+            custom_accent=user.custom_accent,
             is_online=user.is_online,
             is_admin=user.is_admin,
             email=user.email,
@@ -66,6 +70,8 @@ class UserUpdate(BaseModel):
     display_name: Optional[str] = None
     theme: Optional[str] = None
     avatar_color: Optional[str] = None
+    background: Optional[str] = None
+    custom_accent: Optional[str] = None
     bio: Optional[str] = None
     # Персональные данные
     email: Optional[str] = None

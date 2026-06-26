@@ -115,6 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getMe()
         .then((profile) => {
           setUser(profile);
+          if (typeof document !== "undefined") {
+            if (profile.theme) document.documentElement.setAttribute("data-theme", profile.theme);
+            if (profile.custom_accent) document.documentElement.style.setProperty("--custom-accent", profile.custom_accent);
+            if (profile.theme) localStorage.setItem("jinntell_theme", profile.theme);
+            if (profile.background) localStorage.setItem("jinntell_bg", profile.background);
+            if (profile.custom_accent) localStorage.setItem("jinntell_accent", profile.custom_accent);
+            window.dispatchEvent(new Event("jinntell_theme_change"));
+            window.dispatchEvent(new Event("jinntell_bg_change"));
+          }
           setIsOnline(true);
           setIsLoggedIn(true);
           setIsAdmin(profile.is_admin || false);
