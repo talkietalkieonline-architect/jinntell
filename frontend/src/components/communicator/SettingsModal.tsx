@@ -2,14 +2,12 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { updateMe, type UserProfile } from "@/services/api";
-import { BACKGROUNDS } from "@/components/communicator/AppBackground";
+import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
-  { id: "noir-gold", name: "Noir Gold", desc: "Тёмный + золото" },
-  { id: "cyberpunk", name: "Cyberpunk", desc: "Тёмный + неон" },
-  { id: "arctic", name: "Arctic", desc: "Светлый + лёд" },
-  { id: "midnight", name: "Midnight", desc: "Глубокий синий" },
-  { id: "sunset", name: "Sunset", desc: "Тёплые градиенты" },
+  { id: "light", name: "Светлая", desc: "Белый фон, тёмный текст" },
+  { id: "dark", name: "Тёмная", desc: "Тёмный + золото" },
+  { id: "custom", name: "Кастомная", desc: "Свои цвета и фон" },
 ];
 
 const GENDERS = [
@@ -49,7 +47,8 @@ export default function SettingsModal({
 }) {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [currentTheme, setCurrentTheme] = useState("noir-gold");
+  const [currentTheme, setCurrentTheme] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_theme") || "light" : "light"));
+  const [customAccent, setCustomAccent] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_accent") || "#6c7bff" : "#6c7bff"));
   const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
 
   // Персональные данные
@@ -104,6 +103,12 @@ const _av = user.assistant_voice || "ermil";
   const changeTheme = (themeId: string) => {
     setCurrentTheme(themeId);
     document.documentElement.setAttribute("data-theme", themeId);
+    localStorage.setItem("jinntell_theme", themeId);
+    const bg = defaultBgFor(themeId);
+    setBgId(bg);
+    localStorage.setItem("jinntell_bg", bg);
+    window.dispatchEvent(new Event("jinntell_theme_change"));
+    window.dispatchEvent(new Event("jinntell_bg_change"));
   };
 
   const handleSavePersonal = async () => {
@@ -449,7 +454,7 @@ const _av = user.assistant_voice || "ermil";
 
             <h3 className="text-sm font-medium mb-3 mt-6" style={{ color: "var(--text-primary)" }}>Фон</h3>
             <div className="grid grid-cols-3 gap-2">
-              {BACKGROUNDS.map((b) => (
+              {backgroundsForTheme(currentTheme).map((b) => (
                 <button key={b.id} onClick={() => { setBgId(b.id); localStorage.setItem("jinntell_bg", b.id); window.dispatchEvent(new Event("jinntell_bg_change")); }}
                   className="rounded-xl overflow-hidden transition-all" style={{ border: bgId === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
                   <div className="h-12 w-full" style={{ background: b.preview }} />
@@ -457,6 +462,13 @@ const _av = user.assistant_voice || "ermil";
                 </button>
               ))}
             </div>
+            {currentTheme === "custom" && (
+              <div className="mt-4 flex items-center gap-3">
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Цвет акцента</span>
+                <input type="color" value={customAccent} onChange={(e) => { const c = e.target.value; setCustomAccent(c); document.documentElement.style.setProperty("--custom-accent", c); localStorage.setItem("jinntell_accent", c); }} className="w-12 h-8 rounded cursor-pointer bg-transparent border-0" />
+                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Загрузка своих обоев — скоро</span>
+              </div>
+            )}
             <div className="mt-4">
               <label className="flex items-center justify-between cursor-pointer gap-3">
                 <span className="flex flex-col">

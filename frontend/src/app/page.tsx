@@ -83,6 +83,13 @@ export default function Home() {
   const closeLeft = useCallback(() => setLeftOpen(false), []);
   const closeRight = useCallback(() => setRightOpen(false), []);
 
+  useEffect(() => {
+    const t = localStorage.getItem("jinntell_theme");
+    if (t) document.documentElement.setAttribute("data-theme", t);
+    const a = localStorage.getItem("jinntell_accent");
+    if (a) document.documentElement.style.setProperty("--custom-accent", a);
+  }, []);
+
   // Подхват JinnTell Link: если в localStorage есть jinntell_open_agent — открываем чат
   useEffect(() => {
     if (screen === "communicator") {

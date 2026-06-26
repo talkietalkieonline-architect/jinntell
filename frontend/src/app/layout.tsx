@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" data-theme="noir-gold">
+    <html lang="ru" data-theme="light">
       <head>
         <style>{`
           @keyframes marquee {

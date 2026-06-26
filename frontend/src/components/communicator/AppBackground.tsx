@@ -4,47 +4,76 @@ import { useEffect, useRef, useState } from "react";
 export interface BgPreset {
   id: string;
   name: string;
+  theme: "light" | "dark";
   kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust";
   css?: string;
   preview: string;
 }
 
 export const BACKGROUNDS: BgPreset[] = [
-  { id: "graphite", name: "Графит", kind: "gradient", css: "linear-gradient(160deg,#0d1322,#160f28,#0a0e1a)", preview: "linear-gradient(160deg,#0d1322,#160f28)" },
-  { id: "indigo", name: "Индиго-перелив", kind: "anim-gradient", css: "linear-gradient(-45deg,#1a1140,#0e1430,#2a124e,#0b0f1f)", preview: "linear-gradient(135deg,#1a1140,#2a124e)" },
-  { id: "emerald", name: "Изумруд", kind: "anim-gradient", css: "linear-gradient(-45deg,#06231c,#0a1726,#0d3226,#08121a)", preview: "linear-gradient(135deg,#06231c,#0d3226)" },
-  { id: "midnight", name: "Полночь", kind: "gradient", css: "radial-gradient(circle at 50% -10%,#1c2748,#0a0e18 60%)", preview: "radial-gradient(circle at 50% 0%,#1c2748,#0a0e18)" },
-  { id: "stars", name: "Звёзды", kind: "stars", preview: "radial-gradient(circle,#0b1020,#05060c)" },
-  { id: "lava", name: "Лава-лампа", kind: "lava", preview: "linear-gradient(160deg,#2a124e,#0d3226)" },
-  { id: "dust", name: "Золотая пыль", kind: "dust", preview: "radial-gradient(circle,#15110a,#0a0a0a)" },
+  // Светлые
+  { id: "white", name: "Белый", theme: "light", kind: "gradient", css: "#eef1f6", preview: "#eef1f6" },
+  { id: "soft", name: "Светлый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#eef2f8,#e6ecf5)", preview: "linear-gradient(160deg,#eef2f8,#e6ecf5)" },
+  { id: "sky", name: "Небо", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#e7f0fb,#dfeaf8)", preview: "linear-gradient(160deg,#e7f0fb,#dfeaf8)" },
+  { id: "cream", name: "Тёплый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#faf6ee,#f2ebdd)", preview: "linear-gradient(160deg,#faf6ee,#f2ebdd)" },
+  // Тёмные
+  { id: "graphite", name: "Графит", theme: "dark", kind: "gradient", css: "linear-gradient(160deg,#0d1322,#160f28,#0a0e1a)", preview: "linear-gradient(160deg,#0d1322,#160f28)" },
+  { id: "indigo", name: "Индиго", theme: "dark", kind: "anim-gradient", css: "linear-gradient(-45deg,#1a1140,#0e1430,#2a124e,#0b0f1f)", preview: "linear-gradient(135deg,#1a1140,#2a124e)" },
+  { id: "emerald", name: "Изумруд", theme: "dark", kind: "anim-gradient", css: "linear-gradient(-45deg,#06231c,#0a1726,#0d3226,#08121a)", preview: "linear-gradient(135deg,#06231c,#0d3226)" },
+  { id: "midnight", name: "Полночь", theme: "dark", kind: "gradient", css: "radial-gradient(circle at 50% -10%,#1c2748,#0a0e18 60%)", preview: "radial-gradient(circle at 50% 0%,#1c2748,#0a0e18)" },
+  { id: "stars", name: "Звёзды", theme: "dark", kind: "stars", preview: "radial-gradient(circle,#0b1020,#05060c)" },
+  { id: "lava", name: "Лава-лампа", theme: "dark", kind: "lava", preview: "linear-gradient(160deg,#2a124e,#0d3226)" },
+  { id: "dust", name: "Золотая пыль", theme: "dark", kind: "dust", preview: "radial-gradient(circle,#15110a,#0a0a0a)" },
 ];
 
-export const DEFAULT_BG = "indigo";
+const DEFAULT_BG_FOR: Record<string, string> = { light: "soft", dark: "indigo", custom: "graphite" };
 
-function readBg(): string {
-  try { return localStorage.getItem("jinntell_bg") || DEFAULT_BG; } catch { return DEFAULT_BG; }
+export function backgroundsForTheme(theme: string): BgPreset[] {
+  if (theme === "custom") return BACKGROUNDS;
+  return BACKGROUNDS.filter((b) => b.theme === theme);
+}
+export function defaultBgFor(theme: string): string {
+  return DEFAULT_BG_FOR[theme] || "graphite";
+}
+
+function curTheme(): string {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.getAttribute("data-theme") || "light";
 }
 function animEnabled(): boolean {
   try { return localStorage.getItem("jinntell_anim_off") !== "1"; } catch { return true; }
 }
 
 export default function AppBackground() {
-  const [bgId, setBgId] = useState(DEFAULT_BG);
+  const [bgId, setBgId] = useState("soft");
+  const [theme, setTheme] = useState("light");
   const [anim, setAnim] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const read = () => { setBgId(readBg()); setAnim(animEnabled()); };
+    const read = () => {
+      const t = curTheme();
+      setTheme(t);
+      setAnim(animEnabled());
+      let id = "";
+      try { id = localStorage.getItem("jinntell_bg") || ""; } catch { id = ""; }
+      const found = BACKGROUNDS.find((b) => b.id === id);
+      // фон должен подходить теме (для custom — любой)
+      if (!found || (t !== "custom" && found.theme !== t)) id = defaultBgFor(t);
+      setBgId(id);
+    };
     read();
     window.addEventListener("jinntell_bg_change", read);
+    window.addEventListener("jinntell_theme_change", read);
     window.addEventListener("jinntell_anim_change", read);
     return () => {
       window.removeEventListener("jinntell_bg_change", read);
+      window.removeEventListener("jinntell_theme_change", read);
       window.removeEventListener("jinntell_anim_change", read);
     };
   }, []);
 
-  const bg = BACKGROUNDS.find((b) => b.id === bgId) || BACKGROUNDS[0];
+  const bg = BACKGROUNDS.find((b) => b.id === bgId) || BACKGROUNDS.find((b) => b.id === defaultBgFor(theme)) || BACKGROUNDS[0];
 
   useEffect(() => {
     if (bg.kind !== "stars" && bg.kind !== "dust") return;
@@ -92,7 +121,7 @@ export default function AppBackground() {
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, [bg.kind, anim]);
 
-  const base = bg.kind === "stars"
+  const baseStyle = bg.kind === "stars"
     ? "radial-gradient(circle at 50% 30%,#0b1020,#05060c)"
     : bg.kind === "dust"
       ? "radial-gradient(circle at 50% 40%,#14110a,#08080a)"
@@ -105,14 +134,12 @@ export default function AppBackground() {
       <div
         className="absolute inset-0"
         style={{
-          background: base,
+          background: baseStyle,
           backgroundSize: bg.kind === "anim-gradient" ? "300% 300%" : "cover",
           animation: bg.kind === "anim-gradient" && anim ? "bgShift 22s ease infinite" : undefined,
         }}
       />
-      {(bg.kind === "stars" || bg.kind === "dust") && (
-        <canvas ref={canvasRef} className="absolute inset-0" />
-      )}
+      {(bg.kind === "stars" || bg.kind === "dust") && <canvas ref={canvasRef} className="absolute inset-0" />}
       {bg.kind === "lava" && anim && (
         <>
           <div className="lava-blob" style={{ background: "radial-gradient(circle,#3a1d6e,transparent 60%)", left: "8%", top: "18%", animationDelay: "0s" }} />
