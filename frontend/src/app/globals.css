@@ -303,10 +303,10 @@ input::placeholder {
 
 /* ════════ ТЕМЫ (Светлая / Тёмная / Кастомная) ════════ */
 [data-theme="light"] {
-  --bg-deep: #eef1f5;
+  --bg-deep: #e7e1cf;
   --bg-mid: #f5f7fa;
   --bg-surface: #ffffff;
-  --bg-glass: rgba(255,255,255,0.72);
+  --bg-glass: rgba(255,253,245,0.78);
   --bg-glass-hover: rgba(0,0,0,0.05);
   --bg-glass-border: rgba(0,0,0,0.10);
   --text-primary: #1a1d24;

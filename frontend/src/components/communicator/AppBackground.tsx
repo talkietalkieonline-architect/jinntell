@@ -13,7 +13,7 @@ export interface BgPreset {
 export const BACKGROUNDS: BgPreset[] = [
   // Светлые
   { id: "white", name: "Белый", theme: "light", kind: "gradient", css: "#eef1f6", preview: "#eef1f6" },
-  { id: "soft", name: "Светлый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#eef2f8,#e6ecf5)", preview: "linear-gradient(160deg,#eef2f8,#e6ecf5)" },
+  { id: "soft", name: "Серо-жёлтый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#ebe6d4,#e1dbc4)", preview: "linear-gradient(160deg,#ebe6d4,#e1dbc4)" },
   { id: "sky", name: "Небо", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#e7f0fb,#dfeaf8)", preview: "linear-gradient(160deg,#e7f0fb,#dfeaf8)" },
   { id: "cream", name: "Тёплый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#faf6ee,#f2ebdd)", preview: "linear-gradient(160deg,#faf6ee,#f2ebdd)" },
   // Тёмные
