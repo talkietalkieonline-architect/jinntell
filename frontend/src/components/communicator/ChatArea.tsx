@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
-import { ttsBlobUrl } from "@/services/api";
+import { ttsBlobUrl, mediaUrl } from "@/services/api";
 
 export interface ChatMessage {
   id: string;
@@ -379,6 +379,7 @@ export default function ChatArea({
   topPad = 80,
   bottomPad = 130,
   autoSpeak = false,
+  assistantPhoto = null,
   agentInfo,
 }: {
   messages: ChatMessage[];
@@ -388,6 +389,7 @@ export default function ChatArea({
   bottomPad?: number;
   /** Автоозвучка ответов агентов (голосовой режим) */
   autoSpeak?: boolean;
+  assistantPhoto?: string | null;
   agentInfo?: { id: number; name: string; color: string; greeting?: string; tts_voice_id?: string; tts_emotion?: string } | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -503,17 +505,21 @@ export default function ChatArea({
                     <MessageBubble msg={msg} userSide={userSide} />
                   </div>
 
-                  {/* Аватар агента (справа) */}
+                  {/* Аватар агента/помощника (справа) */}
                   {!userSide && (
                     <div
-                      className="w-7 h-7 rounded-full shrink-0 ml-2 mt-1 flex items-center justify-center text-[9px] font-bold"
+                      className="w-7 h-7 rounded-full shrink-0 ml-2 mt-1 overflow-hidden flex items-center justify-center text-[9px] font-bold"
                       style={{
                         background: `${msg.color || "var(--accent)"}1F`,
                         border: `1.5px solid ${msg.color || "var(--accent)"}55`,
                         color: msg.color || "var(--accent)",
                       }}
                     >
-                      {msg.name[0]}
+                      {msg.sender !== "agent" && assistantPhoto ? (
+                        <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        msg.name[0]
+                      )}
                     </div>
                   )}
                 </div>

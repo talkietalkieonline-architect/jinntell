@@ -183,6 +183,7 @@ export default function Home() {
           topPad={topBarH}
           bottomPad={bottomBarH}
           autoSpeak={micActive}
+          assistantPhoto={user?.assistant_photo || null}
           agentInfo={agentInfo}
         />
       )}
