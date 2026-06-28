@@ -135,12 +135,12 @@ const _av = user.assistant_voice || "ermil";
 
   const handlePhotoUpload = async (file: File) => {
     setPhotoUploading(true); setError("");
-    try { const r = await uploadAssistantPhoto(file); setAssistantPhoto(r.photo_url); }
+    try { const r = await uploadAssistantPhoto(file); setAssistantPhoto(r.photo_url); window.dispatchEvent(new CustomEvent("jinntell_assistant_photo", { detail: r.photo_url })); }
     catch (e: unknown) { setError(e instanceof Error ? e.message : "Ошибка загрузки"); }
     finally { setPhotoUploading(false); }
   };
   const handlePhotoDelete = async () => {
-    try { await deleteAssistantPhoto(); setAssistantPhoto(null); } catch { /* noop */ }
+    try { await deleteAssistantPhoto(); setAssistantPhoto(null); window.dispatchEvent(new CustomEvent("jinntell_assistant_photo", { detail: null })); } catch { /* noop */ }
   };
 
   const handleSaveAssistant = async () => {

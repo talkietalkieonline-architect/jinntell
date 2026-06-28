@@ -55,6 +55,7 @@ export default function Home() {
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
+  const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [activeMode, setActiveMode] = useState("Общение");
   const [activeRoom, setActiveRoom] = useState("Главная");
   const [topBarH, setTopBarH] = useState(80);
@@ -88,6 +89,13 @@ export default function Home() {
     if (t) document.documentElement.setAttribute("data-theme", t);
     const a = localStorage.getItem("jinntell_accent");
     if (a) document.documentElement.style.setProperty("--custom-accent", a);
+  }, []);
+
+  useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
+  useEffect(() => {
+    const onPhoto = (e: Event) => setAssistantPhoto((e as CustomEvent).detail ?? null);
+    window.addEventListener("jinntell_assistant_photo", onPhoto);
+    return () => window.removeEventListener("jinntell_assistant_photo", onPhoto);
   }, []);
 
   // Подхват JinnTell Link: если в localStorage есть jinntell_open_agent — открываем чат
@@ -183,7 +191,7 @@ export default function Home() {
           topPad={topBarH}
           bottomPad={bottomBarH}
           autoSpeak={micActive}
-          assistantPhoto={user?.assistant_photo || null}
+          assistantPhoto={assistantPhoto}
           agentInfo={agentInfo}
         />
       )}
