@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, type UserProfile } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, mediaUrl, type UserProfile } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -64,6 +64,8 @@ export default function SettingsModal({
   const [assistantName, setAssistantName] = useState("Джим");
   const [assistantGender, setAssistantGender] = useState("male");
   const [assistantVoice, setAssistantVoice] = useState("male_low");
+  const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [userAge, setUserAge] = useState("");
   const [wakeEnabled, setWakeEnabled] = useState(
     typeof window !== "undefined" && localStorage.getItem("jinntell_wake_enabled") === "1"
@@ -90,6 +92,7 @@ export default function SettingsModal({
       setAboutField(user.about || "");
       setAssistantName(user.assistant_name || "Джим");
       setAssistantGender(user.assistant_gender || "male");
+      setAssistantPhoto(user.assistant_photo || null);
 const _av = user.assistant_voice || "ermil";
       setAssistantVoice(_av);
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
@@ -128,6 +131,16 @@ const _av = user.assistant_voice || "ermil";
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally { setSaving(false); }
+  };
+
+  const handlePhotoUpload = async (file: File) => {
+    setPhotoUploading(true); setError("");
+    try { const r = await uploadAssistantPhoto(file); setAssistantPhoto(r.photo_url); }
+    catch (e: unknown) { setError(e instanceof Error ? e.message : "Ошибка загрузки"); }
+    finally { setPhotoUploading(false); }
+  };
+  const handlePhotoDelete = async () => {
+    try { await deleteAssistantPhoto(); setAssistantPhoto(null); } catch { /* noop */ }
   };
 
   const handleSaveAssistant = async () => {
@@ -320,6 +333,20 @@ const _av = user.assistant_voice || "ermil";
             </p>
 
             <div className="flex flex-col gap-4">
+              {/* Фото помощника */}
+              <div className="flex flex-col items-center gap-2 mb-4">
+                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  {assistantPhoto ? <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="Помощник" className="w-full h-full object-cover" /> : <span className="text-3xl opacity-40">🧞</span>}
+                </div>
+                <div className="flex gap-2">
+                  <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                    {photoUploading ? "Загрузка..." : "Загрузить фото"}
+                    <input type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }} />
+                  </label>
+                  {assistantPhoto && <button onClick={handlePhotoDelete} className="px-3 py-1.5 rounded-lg text-[11px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>Удалить</button>}
+                </div>
+              </div>
+
               {/* Имя помощника */}
               <div>
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Имя помощника</label>

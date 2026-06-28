@@ -1064,6 +1064,20 @@ export interface UserProfile {
 export function getMe(): Promise<UserProfile> {
   return apiFetch("/api/users/me");
 }
+export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: string }> {
+  const token = getToken();
+  const f = new FormData();
+  f.append("file", file);
+  const res = await fetch(`${API_BASE}/api/users/me/assistant-photo`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: f });
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, b.detail || "Ошибка загрузки");
+  }
+  return res.json();
+}
+export function deleteAssistantPhoto(): Promise<{ ok: boolean }> {
+  return apiFetch("/api/users/me/assistant-photo", { method: "DELETE" });
+}
 export interface LinkedBusiness { id: number; company_name: string; }
 export function getMyBusinesses(): Promise<LinkedBusiness[]> {
   return apiFetch("/api/users/me/businesses");

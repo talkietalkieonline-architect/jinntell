@@ -1,7 +1,9 @@
 """API пользователя — профиль, настройки"""
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+import os
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,3 +97,53 @@ async def my_business_token(
         raise HTTPException(404, "Бизнес-аккаунт не найден или не привязан к вам")
     token = create_access_token(c.id, token_type="contractor")
     return {"access_token": token, "company_name": c.company_name, "contractor_id": c.id}
+
+
+_STORAGE_ROOT = "/app/storage"
+_ALLOWED_IMG = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+
+
+@router.post("/me/assistant-photo")
+async def upload_assistant_photo(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить фото/изображение для своего помощника."""
+    ext = _ALLOWED_IMG.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(400, "Только изображения: jpg, png, webp, gif")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(400, "Файл больше 20 МБ")
+    d = os.path.join(_STORAGE_ROOT, "users", str(user.id))
+    os.makedirs(d, exist_ok=True)
+    for fn in os.listdir(d):
+        if fn.startswith("assistant."):
+            try:
+                os.remove(os.path.join(d, fn))
+            except OSError:
+                pass
+    fname = f"assistant.{ext}"
+    with open(os.path.join(d, fname), "wb") as f:
+        f.write(data)
+    url = f"/api/storage/users/{user.id}/{fname}"
+    user.assistant_photo = url
+    await db.flush()
+    return {"photo_url": url}
+
+
+@router.delete("/me/assistant-photo")
+async def delete_assistant_photo(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.assistant_photo and user.assistant_photo.startswith("/api/storage/"):
+        rel = user.assistant_photo.replace("/api/storage/", "", 1)
+        try:
+            os.remove(os.path.join(_STORAGE_ROOT, rel))
+        except OSError:
+            pass
+    user.assistant_photo = None
+    await db.flush()
+    return {"ok": True}
