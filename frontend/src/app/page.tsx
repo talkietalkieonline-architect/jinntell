@@ -11,6 +11,7 @@ import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
 import { contractorLogout } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
+import ChatJournal from "@/components/communicator/ChatJournal";
 
 // Тяжёлые модалки — ленивая загрузка (грузятся только при открытии)
 const SettingsModal = dynamic(() => import("@/components/communicator/SettingsModal"));
@@ -46,6 +47,12 @@ function openChatsKey(): string {
   return uid ? `jinntell_open_chats_${uid}` : "jinntell_open_chats";
 }
 
+/** Ключ хранения закрытых (архивных) чатов — персональный */
+function archivedKey(): string {
+  const uid = getUserId();
+  return uid ? `jinntell_archived_chats_${uid}` : "jinntell_archived_chats";
+}
+
 type AppScreen = "splash" | "login" | "communicator" | "business";
 
 export default function Home() {
@@ -58,6 +65,7 @@ export default function Home() {
   const [businessOpen, setBusinessOpen] = useState(false);
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
+  const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
   const [view, setView] = useState<"feed" | "chat">("feed");
   const [drive, setDrive] = useState(false);
   const [topBarH, setTopBarH] = useState(120);
@@ -79,8 +87,11 @@ export default function Home() {
     try {
       const raw = localStorage.getItem(openChatsKey());
       setOpenChats(raw ? JSON.parse(raw) : []);
+      const ar = localStorage.getItem(archivedKey());
+      setArchivedChats(ar ? JSON.parse(ar) : []);
     } catch {
       setOpenChats([]);
+      setArchivedChats([]);
     }
     loadedRef.current = true;
   }, [user?.id]);
@@ -94,6 +105,16 @@ export default function Home() {
       /* noop */
     }
   }, [openChats]);
+
+  // Сохранение закрытых (архивных) чатов
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    try {
+      localStorage.setItem(archivedKey(), JSON.stringify(archivedChats));
+    } catch {
+      /* noop */
+    }
+  }, [archivedChats]);
 
   /** Открыть личный чат с агентом (добавить в ленту открытых + переключиться) */
   const openAgentChat = useCallback((agentId: number) => {
@@ -126,14 +147,29 @@ export default function Home() {
     setView("chat");
   }, [setRoom]);
 
-  /** Закрыть (убрать из ленты) открытый чат */
+  /** Закрыть чат — в архив (история сохраняется), а не удалить */
   const closeChat = useCallback((r: string) => {
-    setOpenChats((prev) => prev.filter((c) => c.room !== r));
+    setOpenChats((prev) => {
+      const closed = prev.find((c) => c.room === r);
+      if (closed) setArchivedChats((a) => [closed, ...a.filter((c) => c.room !== r)]);
+      return prev.filter((c) => c.room !== r);
+    });
     if (room === r) {
       setRoom(assistantRoom);
       setView("feed");
     }
   }, [room, setRoom, assistantRoom]);
+
+  /** Переоткрыть закрытый чат (история подтянется по комнате) */
+  const reopenChat = useCallback((r: string) => {
+    setArchivedChats((prev) => {
+      const found = prev.find((c) => c.room === r);
+      if (found) setOpenChats((o) => (o.some((c) => c.room === r) ? o : [...o, found]));
+      return prev.filter((c) => c.room !== r);
+    });
+    setRoom(r);
+    setView("chat");
+  }, [setRoom]);
 
   useEffect(() => {
     const read = () => setDrive(localStorage.getItem("jinntell_drive") === "1");
@@ -244,6 +280,10 @@ export default function Home() {
           autoSpeak={micActive || drive}
           assistantPhoto={assistantPhoto}
           agentInfo={agentInfo}
+          topAlign={room === assistantRoom}
+          headerSlot={room === assistantRoom ? (
+            <ChatJournal openChats={openChats} archivedChats={archivedChats} onSelect={selectChat} onReopen={reopenChat} />
+          ) : null}
         />
       )}
 

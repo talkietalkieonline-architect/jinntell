@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, type ReactNode } from "react";
 import { ttsBlobUrl, mediaUrl } from "@/services/api";
 
 export interface ChatMessage {
@@ -381,6 +381,8 @@ export default function ChatArea({
   autoSpeak = false,
   assistantPhoto = null,
   agentInfo,
+  headerSlot = null,
+  topAlign = false,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -391,6 +393,8 @@ export default function ChatArea({
   autoSpeak?: boolean;
   assistantPhoto?: string | null;
   agentInfo?: { id: number; name: string; color: string; greeting?: string; tts_voice_id?: string; tts_emotion?: string } | null;
+  headerSlot?: ReactNode;
+  topAlign?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -469,8 +473,9 @@ export default function ChatArea({
         style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}
       >
         {/* Сообщения прижаты к низу (как Telegram) */}
-        <div className="flex flex-col justify-end items-center min-h-full w-full">
+        <div className={`flex flex-col items-center min-h-full w-full ${topAlign ? "justify-start" : "justify-end"}`}>
           <div className="flex flex-col gap-3 w-full max-w-[620px] mx-auto py-4 pb-6 px-4">
+            {headerSlot}
             {messages.map((msg) => {
               const userSide = isUser(msg.sender);
 
