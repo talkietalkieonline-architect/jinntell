@@ -134,6 +134,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
     if (!token) return;
 
     if (wsRef.current) {
+      wsRef.current.onclose = null;
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -232,6 +233,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
 
     return () => {
       if (wsRef.current) {
+        wsRef.current.onclose = null;
         wsRef.current.close();
         wsRef.current = null;
       }
