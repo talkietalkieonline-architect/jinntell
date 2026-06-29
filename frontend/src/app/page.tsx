@@ -247,7 +247,7 @@ export default function Home() {
         onSelectChat={selectChat}
         onCloseChat={closeChat}
         onFavorites={() => setAgentsOpen(true)}
-        onFeed={() => setView("feed")}
+        onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
       />
 
       {/* Индикатор подключения к серверу */}
