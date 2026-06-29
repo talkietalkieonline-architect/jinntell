@@ -74,6 +74,43 @@ def _pick_addressed_agent(room: str, text: str, members: list) -> Agent:
     return members[0]
 
 
+async def _get_room_memory_digest(user_id: int) -> str:
+    """«Память» помощника: дайджест последних сообщений из всех комнат пользователя.
+    Помощник «слышал» эти разговоры и может пересказать без повторного вызова джиннов."""
+    from app.models.room import Room, RoomMember
+    async with async_session() as db:
+        rooms_res = await db.execute(
+            select(Room).where(Room.owner_user_id == user_id).order_by(Room.id.desc()).limit(10)
+        )
+        rooms = list(rooms_res.scalars().all())
+        if not rooms:
+            return ""
+        parts = []
+        for r in rooms:
+            mem_res = await db.execute(
+                select(Agent.name).join(RoomMember, RoomMember.agent_id == Agent.id).where(RoomMember.room_id == r.id)
+            )
+            names = [n for n in mem_res.scalars().all()]
+            msg_res = await db.execute(
+                select(Message).where(Message.room == f"room-{r.id}").order_by(Message.created_at.desc()).limit(15)
+            )
+            msgs = list(reversed(msg_res.scalars().all()))
+            if not msgs:
+                continue
+            lines = "\n".join(f"  {m.sender_name}: {m.text}" for m in msgs)
+            parts.append(f"Комната с {', '.join(names) or 'джиннами'}:\n{lines}")
+        if not parts:
+            return ""
+        digest = "\n\n".join(parts)[:4000]
+        return (
+            "\n\n=== ПАМЯТЬ О КОМНАТАХ (ты слышал эти разговоры пользователя с джиннами) ===\n"
+            + digest
+            + "\n=== КОНЕЦ ПАМЯТИ ===\n"
+            "Если пользователь спрашивает, что обсуждали в комнате или с конкретным джинном, "
+            "отвечай ИЗ ЭТОЙ ПАМЯТИ своими словами, НЕ вызывая джиннов заново."
+        )
+
+
 async def _get_assistant_agent() -> Optional[Agent]:
     """Core-агент «Помощник Джим» — единый источник настроек помощника (мозг/промпт)"""
     async with async_session() as db:
@@ -178,6 +215,10 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
     if user_id:
         settings = await _get_user_assistant_settings(user_id)
         user_persona = _build_user_persona_injection(settings)
+        try:
+            user_persona += await _get_room_memory_digest(user_id)
+        except Exception as e:
+            print(f"[ws] room memory digest error: {e}")
 
     # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
     # Мозг и промпт берём из карточки core-агента «Помощник Джим» (единый источник)
