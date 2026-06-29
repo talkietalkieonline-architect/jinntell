@@ -14,6 +14,8 @@ export default function NavBar({
   activeRoom,
   view,
   activeAgent,
+  roomMembers,
+  onInviteJinn,
   onSelectChat,
   onCloseChat,
   onFavorites,
@@ -27,6 +29,8 @@ export default function NavBar({
   activeRoom: string;
   view: "feed" | "chat";
   activeAgent: { name: string; profession: string; brand: string; color: string; photo_url?: string } | null;
+  roomMembers: { id: number; name: string; color: string; photo_url?: string }[];
+  onInviteJinn: () => void;
   onSelectChat: (room: string) => void;
   onCloseChat: (room: string) => void;
   onFavorites: () => void;
@@ -96,7 +100,47 @@ export default function NavBar({
       {/* Шапка активного чата */}
       {view === "chat" && (() => {
         const isAssistant = activeRoom === assistantRoom;
+        const isRoom = roomMembers.length > 0;
         const activeOpen = openChats.find((c) => c.room === activeRoom);
+        const inviteBtn = (
+          <button
+            onClick={onInviteJinn}
+            title="Позвать джинна"
+            className="ml-auto shrink-0 px-2 py-1 rounded-lg text-[11px] font-medium transition-all hover:scale-105"
+            style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}
+          >
+            + джинн
+          </button>
+        );
+        if (isRoom) {
+          return (
+            <div
+              className="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-1.5"
+              style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
+            >
+              <div className="flex shrink-0">
+                {roomMembers.slice(0, 3).map((m, i) => (
+                  <div
+                    key={m.id}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold overflow-hidden"
+                    style={{ background: m.photo_url ? "transparent" : "var(--bg-glass)", border: `1.5px solid ${m.color}`, color: m.color, marginLeft: i === 0 ? 0 : -10 }}
+                  >
+                    {m.photo_url ? (
+                      <img src={m.photo_url.startsWith("data:") ? m.photo_url : mediaUrl(m.photo_url)} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      m.name[0]
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{roomMembers.map((m) => m.name).join(" + ")}</span>
+                <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>комната • {roomMembers.length} джиннов</span>
+              </div>
+              {inviteBtn}
+            </div>
+          );
+        }
         const name = isAssistant ? assistantName : (activeAgent?.name || activeOpen?.name || "Джинн");
         const sub = isAssistant
           ? "ваш помощник"
@@ -124,10 +168,14 @@ export default function NavBar({
               <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{name}</span>
               {sub && <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{sub}</span>}
             </div>
-            <div className="ml-auto flex items-center gap-1 shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span>
-            </div>
+            {isAssistant ? (
+              <div className="ml-auto flex items-center gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span>
+              </div>
+            ) : (
+              inviteBtn
+            )}
           </div>
         );
       })()}

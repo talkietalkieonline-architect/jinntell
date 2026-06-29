@@ -109,6 +109,7 @@ interface UseChatResult {
   room: string;
   setRoom: (room: string) => void;
   agentInfo: AgentRoomInfo | null;
+  roomMembers: AgentRoomInfo[];
 }
 
 export function useChat(initialRoom: string = "general"): UseChatResult {
@@ -121,6 +122,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   const [isConnected, setIsConnected] = useState(false);
   const [room, setRoom] = useState(initialRoom);
   const [agentInfo, setAgentInfo] = useState<AgentRoomInfo | null>(null);
+  const [roomMembers, setRoomMembers] = useState<AgentRoomInfo[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const msgCounter = useRef(100);
   const reconnectTimer = useRef<NodeJS.Timeout | null>(null);
@@ -158,21 +160,24 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         setIsTyping(true);
       } else if (data.type === "typing_stop") {
         setIsTyping(false);
-      } else if (data.type === "user_joined" && data.agent_info) {
-        const info = data.agent_info as AgentRoomInfo;
-        setAgentInfo(info);
-        if (info.greeting) {
-          setMessages((prev) => {
-            if (prev.length > 0) return prev;
-            return [{
-              id: "agent-greeting",
-              sender: "agent" as const,
-              name: info.name,
-              text: info.greeting!,
-              color: info.color || "var(--accent)",
-              timestamp: new Date(),
-            }];
-          });
+      } else if (data.type === "user_joined") {
+        if (data.room_members) setRoomMembers(data.room_members as AgentRoomInfo[]);
+        if (data.agent_info) {
+          const info = data.agent_info as AgentRoomInfo;
+          setAgentInfo(info);
+          if (info.greeting) {
+            setMessages((prev) => {
+              if (prev.length > 0) return prev;
+              return [{
+                id: "agent-greeting",
+                sender: "agent" as const,
+                name: info.name,
+                text: info.greeting!,
+                color: info.color || "var(--accent)",
+                timestamp: new Date(),
+              }];
+            });
+          }
         }
       }
     });
@@ -226,6 +231,9 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   useEffect(() => {
     if (!room.startsWith("agent-")) {
       setAgentInfo(null);
+    }
+    if (!room.startsWith("room-")) {
+      setRoomMembers([]);
     }
     setIsTyping(false);
     loadHistory();
@@ -352,5 +360,6 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
     room,
     setRoom,
     agentInfo,
+    roomMembers,
   };
 }

@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -63,6 +63,7 @@ export default function Home() {
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
+  const [inviteContext, setInviteContext] = useState<{ type: "agent"; agentId: number } | { type: "room"; roomId: number } | null>(null);
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
@@ -76,7 +77,7 @@ export default function Home() {
   // Чат — через хук (WebSocket + offline fallback)
   const {
     messages, isTyping, typingName, isConnected,
-    sendMessage, attachMedia, room, setRoom, agentInfo,
+    sendMessage, attachMedia, room, setRoom, agentInfo, roomMembers,
   } = useChat(getJimRoom());
 
   const assistantName = user?.assistant_name || "Джим";
@@ -128,6 +129,35 @@ export default function Home() {
     setAgentsOpen(false);
     setCityOpen(false);
   }, [setRoom]);
+
+  /** Кнопка «позвать джинна»: из 1:1 чата создаём комнату, из комнаты — приглашаем */
+  const onInviteJinn = useCallback(() => {
+    if (room.startsWith("room-")) {
+      setInviteContext({ type: "room", roomId: parseInt(room.slice(5), 10) });
+    } else if (agentInfo) {
+      setInviteContext({ type: "agent", agentId: agentInfo.id });
+    } else {
+      return;
+    }
+    setAgentsOpen(true);
+  }, [room, agentInfo]);
+
+  /** Выбор джинна в модалке: либо обычное открытие, либо приглашение в комнату */
+  const handlePickAgent = useCallback((agentId: number) => {
+    if (!inviteContext) { openAgentChat(agentId); return; }
+    const ic = inviteContext;
+    setInviteContext(null);
+    setAgentsOpen(false);
+    setCityOpen(false);
+    const p = ic.type === "agent" ? createRoom([ic.agentId, agentId]) : inviteToRoom(ic.roomId, agentId);
+    p.then((rd) => {
+      const first = rd.members[0];
+      const entry = { room: rd.room, agentId: first?.id ?? 0, name: rd.members.map((m) => m.name).join(" + "), color: first?.color || "#6c7bff", photo: first?.photo_url ?? null };
+      setOpenChats((prev) => (prev.some((c) => c.room === rd.room) ? prev.map((c) => (c.room === rd.room ? entry : c)) : [...prev, entry]));
+      setRoom(rd.room);
+      setView("chat");
+    }).catch(() => {});
+  }, [inviteContext, openAgentChat, setRoom]);
 
   // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
   useEffect(() => {
@@ -248,6 +278,8 @@ export default function Home() {
         onCloseChat={closeChat}
         onFavorites={() => setAgentsOpen(true)}
         onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
+        roomMembers={roomMembers}
+        onInviteJinn={onInviteJinn}
       />
 
       {/* Индикатор подключения к серверу */}
@@ -320,7 +352,7 @@ export default function Home() {
           setAgentsOpen(false);
           setCityOpen(true);
         }}
-        onStartChat={openAgentChat}
+        onStartChat={handlePickAgent}
       />
       )}
 
@@ -333,7 +365,7 @@ export default function Home() {
           setCityOpen(false);
           setBusinessOpen(true);
         }}
-        onStartChat={openAgentChat}
+        onStartChat={handlePickAgent}
         isAdmin={isAdmin}
         onOpenAdmin={() => {
           setCityOpen(false);

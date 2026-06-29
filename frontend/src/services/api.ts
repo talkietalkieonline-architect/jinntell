@@ -1099,6 +1099,26 @@ export function markFeedRead(id: number): Promise<{ ok: boolean }> {
 export function dismissFeed(id: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/feed/${id}`, { method: "DELETE" });
 }
+
+export interface RoomMember {
+  id: number;
+  name: string;
+  profession: string;
+  color: string;
+  photo_url?: string | null;
+}
+export interface RoomData {
+  id: number;
+  room: string;
+  title?: string | null;
+  members: RoomMember[];
+}
+export function createRoom(agentIds: number[], title?: string): Promise<RoomData> {
+  return apiFetch("/api/rooms", { method: "POST", body: JSON.stringify({ agent_ids: agentIds, title }) });
+}
+export function inviteToRoom(roomId: number, agentId: number): Promise<RoomData> {
+  return apiFetch(`/api/rooms/${roomId}/invite`, { method: "POST", body: JSON.stringify({ agent_id: agentId }) });
+}
 export interface LinkedBusiness { id: number; company_name: string; }
 export function getMyBusinesses(): Promise<LinkedBusiness[]> {
   return apiFetch("/api/users/me/businesses");
