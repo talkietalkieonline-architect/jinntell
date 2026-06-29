@@ -21,6 +21,9 @@ router = APIRouter()
 
 # Regex для определения комнаты агента: agent-{id}
 _AGENT_ROOM_RE = re.compile(r"^agent-(\d+)(?:-u\d+)?$")
+_ROOM_RE = re.compile(r"^room-(\d+)$")
+# Запоминаем, к какому джинну последний раз обращались в комнате (для маршрутизации без явного имени)
+_room_last_agent: dict = {}
 
 # Имя помощника по умолчанию (пользователь может менять)
 DEFAULT_ASSISTANT_NAME = "Джим"
@@ -39,6 +42,36 @@ async def _load_agent(agent_id: int) -> Optional[Agent]:
             select(Agent).where(Agent.id == agent_id, Agent.is_active == True)
         )
         return result.scalar_one_or_none()
+
+
+async def _load_room_members(room_id: int) -> list:
+    """Агенты-участники комнаты room-{id}"""
+    from app.models.room import RoomMember
+    async with async_session() as db:
+        result = await db.execute(
+            select(Agent)
+            .join(RoomMember, RoomMember.agent_id == Agent.id)
+            .where(RoomMember.room_id == room_id, Agent.is_active == True)
+        )
+        return list(result.scalars().all())
+
+
+def _pick_addressed_agent(room: str, text: str, members: list) -> Agent:
+    """Кому адресован вопрос в комнате: по имени/профессии в тексте; иначе — последний адресат; иначе — первый."""
+    low = (text or "").lower()
+    for a in members:
+        name = (a.name or "").lower()
+        prof = (a.profession or "").lower()
+        if (name and name in low) or (prof and prof in low):
+            _room_last_agent[room] = a.id
+            return a
+    last_id = _room_last_agent.get(room)
+    if last_id:
+        for a in members:
+            if a.id == last_id:
+                return a
+    _room_last_agent[room] = members[0].id
+    return members[0]
 
 
 async def _get_assistant_agent() -> Optional[Agent]:
@@ -319,6 +352,12 @@ async def chat_websocket(websocket: WebSocket, room: str):
             await websocket.close(code=4004, reason="Agent not found")
             return
 
+    # Комната с несколькими джиннами — room-{id}
+    room_members: list = []
+    _rm = _ROOM_RE.match(room)
+    if _rm:
+        room_members = await _load_room_members(int(_rm.group(1)))
+
     await manager.connect(websocket, room, user_id)
 
     join_data = {
@@ -339,6 +378,11 @@ async def chat_websocket(websocket: WebSocket, room: str):
             "tts_voice_id": agent.tts_voice_id,
             "tts_emotion": agent.tts_emotion,
         }
+    if room_members:
+        join_data["room_members"] = [
+            {"id": a.id, "name": a.name, "profession": a.profession, "brand": a.brand,
+             "color": a.color, "photo_url": a.photo_url} for a in room_members
+        ]
     await manager.broadcast(room, join_data)
 
     try:
@@ -377,6 +421,9 @@ async def chat_websocket(websocket: WebSocket, room: str):
 
             if agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
+            elif room_members:
+                target = _pick_addressed_agent(room, text, room_members)
+                asyncio.create_task(_agent_reply(room, target, text))
             elif room == "general" or room.startswith("jim-"):
                 asyncio.create_task(_assistant_reply(room, text, assistant_name, user_id))
 
