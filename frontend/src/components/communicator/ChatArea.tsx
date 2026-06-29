@@ -14,6 +14,8 @@ export interface ChatMessage {
   /** URL медиа (картинка/видео) */
   mediaUrl?: string;
   mediaType?: "image" | "video";
+  /** Реплика из другой комнаты (контекст) — показываем приглушённо */
+  context?: boolean;
 }
 
 /** Стабильные высоты волновых столбиков (без рандома при каждом рендере) */
@@ -280,6 +282,7 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
           background: userSide ? "var(--bubble-user)" : "var(--bubble-agent)",
           border: "1px solid var(--bubble-border)",
           color: "var(--text-primary)",
+          opacity: msg.context ? 0.7 : 1,
           borderBottomLeftRadius: userSide ? "6px" : undefined,
           borderBottomRightRadius: !userSide ? "6px" : undefined,
           WebkitUserSelect: "text",
@@ -290,6 +293,9 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
       >
+        {msg.context && (
+          <div className="text-[9px] mb-1 italic" style={{ color: "var(--text-muted)" }}>💬 из комнаты</div>
+        )}
         {/* Медиа (картинка / видео) */}
         {msg.mediaUrl && msg.mediaType === "image" && (
           <img

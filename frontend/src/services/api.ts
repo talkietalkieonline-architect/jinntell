@@ -1010,6 +1010,7 @@ export interface MessageOut {
   sender_name: string;
   text: string;
   created_at: string;
+  context?: boolean;
 }
 
 /** История сообщений */

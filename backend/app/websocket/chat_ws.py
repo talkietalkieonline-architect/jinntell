@@ -128,9 +128,22 @@ async def _get_conversation_history(room: str, limit: int = 10, exclude_text: Op
     вопрос уйдёт в модель дважды (задвоение / «агент слышит сам себя»).
     """
     async with async_session() as db:
+        rooms = [room]
+        primary_agent_id = None
+        am = re.match(r"^agent-(\d+)-u(\d+)$", room)
+        if am:
+            primary_agent_id = int(am.group(1))
+            uid = int(am.group(2))
+            from app.models.room import Room, RoomMember
+            rids = (await db.execute(
+                select(Room.id)
+                .join(RoomMember, RoomMember.room_id == Room.id)
+                .where(Room.owner_user_id == uid, RoomMember.agent_id == primary_agent_id)
+            )).scalars().all()
+            rooms += [f"room-{rid}" for rid in rids]
         result = await db.execute(
             select(Message)
-            .where(Message.room == room)
+            .where(Message.room.in_(rooms))
             .order_by(Message.created_at.desc())
             .limit(limit + 1)
         )
@@ -143,7 +156,11 @@ async def _get_conversation_history(room: str, limit: int = 10, exclude_text: Op
         history = []
         for m in messages:
             role = "user" if m.sender_type == "user" else "assistant"
-            history.append({"role": role, "content": m.text})
+            content = m.text
+            # В мультиспикерном контексте помечаем «чужого» джинна его именем
+            if m.sender_type == "agent" and m.sender_agent_id is not None and m.sender_agent_id != primary_agent_id:
+                content = f"[{m.sender_name}]: {m.text}"
+            history.append({"role": role, "content": content})
         return history
 
 

@@ -5,7 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+import re
+
 from app.models.message import Message
+from app.models.room import Room, RoomMember
 from app.models.user import User
 from app.schemas.message import MessageOut, SendMessageRequest
 
@@ -19,16 +22,33 @@ async def get_history(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Получить историю сообщений в комнате"""
+    """История сообщений. Для чата джинна (agent-{id}) агрегируем 1:1 + комнаты с этим джинном."""
+    m = re.match(r"^agent-(\d+)(?:-u\d+)?$", room)
+    rooms = [room]
+    agent_id = None
+    if m:
+        agent_id = int(m.group(1))
+        rids = (await db.execute(
+            select(Room.id)
+            .join(RoomMember, RoomMember.room_id == Room.id)
+            .where(Room.owner_user_id == user.id, RoomMember.agent_id == agent_id)
+        )).scalars().all()
+        rooms += [f"room-{rid}" for rid in rids]
     result = await db.execute(
         select(Message)
-        .where(Message.room == room)
+        .where(Message.room.in_(rooms))
         .order_by(Message.created_at.desc())
         .limit(limit)
     )
-    messages = result.scalars().all()
-    # Возвращаем в хронологическом порядке
-    return [MessageOut.model_validate(m) for m in reversed(messages)]
+    messages = list(reversed(result.scalars().all()))
+    out = []
+    for msg in messages:
+        mo = MessageOut.model_validate(msg)
+        if agent_id is not None and msg.sender_type == "agent" \
+                and msg.sender_agent_id is not None and msg.sender_agent_id != agent_id:
+            mo.context = True
+        out.append(mo)
+    return out
 
 
 @router.post("/send", response_model=MessageOut)

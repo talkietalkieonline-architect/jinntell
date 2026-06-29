@@ -83,6 +83,7 @@ function apiMsgToChat(msg: MessageOut): ChatMessage {
     text: msg.text,
     color: msg.sender_type === "user" ? "" : "var(--accent)",
     timestamp: new Date(msg.created_at),
+    context: msg.context,
   };
 }
 

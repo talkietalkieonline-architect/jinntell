@@ -11,6 +11,7 @@ class MessageOut(BaseModel):
     sender_name: str
     text: str
     created_at: datetime
+    context: bool = False
 
     class Config:
         from_attributes = True
