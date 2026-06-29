@@ -166,7 +166,7 @@ const _av = user.assistant_voice || "ermil";
     color: "var(--text-primary)",
   };
 
-  const filteredVoices = VOICES;
+  const filteredVoices = assistantGender === "male" || assistantGender === "female" ? VOICES.filter((v) => v.gender === assistantGender) : VOICES;
 
   return (
     <div
@@ -391,9 +391,9 @@ const _av = user.assistant_voice || "ermil";
                       onClick={() => {
                         setAssistantGender(g.id);
                         // Авто-переключение голоса при смене пола
-                        if (g.id === "male") setAssistantVoice("male_low");
-                        else if (g.id === "female") setAssistantVoice("female_soft");
-                        else setAssistantVoice("neutral");
+                        if (g.id === "male") setAssistantVoice("ermil");
+                        else if (g.id === "female") setAssistantVoice("alena");
+                        else setAssistantVoice("ermil");
                       }}
                       className="flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-sm transition-all"
                       style={{
