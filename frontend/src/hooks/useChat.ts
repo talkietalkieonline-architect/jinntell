@@ -125,6 +125,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   const msgCounter = useRef(100);
   const reconnectTimer = useRef<NodeJS.Timeout | null>(null);
   const connectWSRef = useRef<(() => void) | undefined>(undefined);
+  const assistantNameRef = useRef(assistantName);
+  useEffect(() => { assistantNameRef.current = assistantName; }, [assistantName]);
 
   // Подключаемся к WebSocket при монтировании
   const connectWS = useCallback(() => {
@@ -151,7 +153,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         setMessages((prev) => [...prev, chatMsg]);
         setIsTyping(false);
       } else if (data.type === "typing") {
-        setTypingName(data.sender_name || assistantName);
+        setTypingName(data.sender_name || assistantNameRef.current);
         setIsTyping(true);
       } else if (data.type === "typing_stop") {
         setIsTyping(false);
@@ -195,7 +197,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
 
     wsRef.current = ws;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, assistantName]);
+  }, [room]);
 
   useEffect(() => { connectWSRef.current = connectWS; }, [connectWS]);
 
@@ -208,7 +210,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
       if (isAgentRoom) {
         setMessages(chatMessages);
       } else {
-        const welcome = buildWelcome(history.length > 0, assistantName);
+        const welcome = buildWelcome(history.length > 0, assistantNameRef.current);
         setMessages(history.length > 0 ? [welcome, ...chatMessages] : [welcome]);
       }
     } catch {
@@ -216,7 +218,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         setMessages([]);
       }
     }
-  }, [room, assistantName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
 
   // Инициализация при смене комнаты
   useEffect(() => {
@@ -236,7 +239,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         clearTimeout(reconnectTimer.current);
       }
     };
-  }, [room, loadHistory, connectWS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
 
   // === Offline: ответ помощника ===
   const offlineAssistantReply = useCallback(() => {
