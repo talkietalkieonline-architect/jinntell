@@ -1,17 +1,14 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/hooks/useChat";
 import SplashScreen from "@/components/auth/SplashScreen";
 import LoginScreen from "@/components/auth/LoginScreen";
 import dynamic from "next/dynamic";
 import AppBackground from "@/components/communicator/AppBackground";
-import TopBar from "@/components/communicator/TopBar";
+import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import SideTab from "@/components/communicator/SideTab";
-import LeftPanel from "@/components/communicator/LeftPanel";
-import RightPanel from "@/components/communicator/RightPanel";
 import { contractorLogout } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 
@@ -43,24 +40,30 @@ function getJimRoom(): string {
   }
 }
 
+/** Ключ хранения открытых чатов — персональный (на каждого пользователя свой) */
+function openChatsKey(): string {
+  const uid = getUserId();
+  return uid ? `jinntell_open_chats_${uid}` : "jinntell_open_chats";
+}
+
 type AppScreen = "splash" | "login" | "communicator" | "business";
 
 export default function Home() {
   const { isLoggedIn, isAdmin, login, logout, user } = useAuth();
   const [screen, setScreen] = useState<AppScreen>("splash");
-  const [leftOpen, setLeftOpen] = useState(false);
-  const [rightOpen, setRightOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
-  const [activeMode, setActiveMode] = useState("Общение");
-  const [activeRoom, setActiveRoom] = useState("Главная");
-  const [topBarH, setTopBarH] = useState(80);
+  const [openChats, setOpenChats] = useState<OpenChat[]>([]);
+  const [view, setView] = useState<"feed" | "chat">("feed");
+  const [drivingMode, setDrivingMode] = useState(false);
+  const [topBarH, setTopBarH] = useState(120);
   const [bottomBarH, setBottomBarH] = useState(130);
   const [micActive, setMicActive] = useState(false);
+  const loadedRef = useRef(false);
 
   // Чат — через хук (WebSocket + offline fallback)
   const {
@@ -68,21 +71,68 @@ export default function Home() {
     sendMessage, attachMedia, room, setRoom, agentInfo,
   } = useChat(getJimRoom());
 
-  /** Открыть личный чат с агентом */
+  const assistantName = user?.assistant_name || "Джим";
+  const assistantRoom = getJimRoom();
+
+  // Загрузка открытых чатов из localStorage (на смену пользователя — перечитываем его список)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(openChatsKey());
+      setOpenChats(raw ? JSON.parse(raw) : []);
+    } catch {
+      setOpenChats([]);
+    }
+    loadedRef.current = true;
+  }, [user?.id]);
+
+  // Сохранение открытых чатов
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    try {
+      localStorage.setItem(openChatsKey(), JSON.stringify(openChats));
+    } catch {
+      /* noop */
+    }
+  }, [openChats]);
+
+  /** Открыть личный чат с агентом (добавить в ленту открытых + переключиться) */
   const openAgentChat = useCallback((agentId: number) => {
     const uid = getUserId();
-    setRoom(uid ? `agent-${agentId}-u${uid}` : `agent-${agentId}`);
+    const r = uid ? `agent-${agentId}-u${uid}` : `agent-${agentId}`;
+    setOpenChats((prev) =>
+      prev.some((c) => c.room === r) ? prev : [...prev, { room: r, agentId, name: "Джинн", color: "#6c7bff" }]
+    );
+    setRoom(r);
+    setView("chat");
     setAgentsOpen(false);
     setCityOpen(false);
   }, [setRoom]);
 
-  /** Вернуться в общую комнату */
-  const backToGeneral = useCallback(() => {
-    setRoom(getJimRoom());
+  // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
+  useEffect(() => {
+    if (agentInfo && room.startsWith("agent-")) {
+      setOpenChats((prev) =>
+        prev.map((c) =>
+          c.room === room ? { ...c, name: agentInfo.name, color: agentInfo.color, agentId: agentInfo.id } : c
+        )
+      );
+    }
+  }, [agentInfo, room]);
+
+  /** Переключиться на чат из ленты аватаров */
+  const selectChat = useCallback((r: string) => {
+    setRoom(r);
+    setView("chat");
   }, [setRoom]);
 
-  const closeLeft = useCallback(() => setLeftOpen(false), []);
-  const closeRight = useCallback(() => setRightOpen(false), []);
+  /** Закрыть (убрать из ленты) открытый чат */
+  const closeChat = useCallback((r: string) => {
+    setOpenChats((prev) => prev.filter((c) => c.room !== r));
+    if (room === r) {
+      setRoom(assistantRoom);
+      setView("feed");
+    }
+  }, [room, setRoom, assistantRoom]);
 
   useEffect(() => {
     const t = localStorage.getItem("jinntell_theme");
@@ -137,14 +187,24 @@ export default function Home() {
   // Коммуникатор
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      {/* Фоновые частицы */}
+      {/* Фон */}
       <AppBackground />
 
-      {/* Верхняя панель */}
-      <TopBar
+      {/* Верхняя панель + лента открытых чатов */}
+      <NavBar
         onHeightChange={setTopBarH}
-        agentInfo={agentInfo}
-        onBackToGeneral={backToGeneral}
+        assistantName={assistantName}
+        assistantPhoto={assistantPhoto}
+        assistantRoom={assistantRoom}
+        openChats={openChats}
+        activeRoom={room}
+        view={view}
+        onSelectChat={selectChat}
+        onCloseChat={closeChat}
+        onFavorites={() => setAgentsOpen(true)}
+        onFeed={() => setView("feed")}
+        drivingMode={drivingMode}
+        onToggleDriving={() => setDrivingMode((v) => !v)}
       />
 
       {/* Индикатор подключения к серверу */}
@@ -158,30 +218,13 @@ export default function Home() {
         </div>
       )}
 
-      {/* Боковые язычки — всегда видны, сдвигаются с панелью */}
-      <SideTab side="left" panelOpen={leftOpen} onClick={() => setLeftOpen(!leftOpen)} />
-      <SideTab side="right" panelOpen={rightOpen} onClick={() => setRightOpen(!rightOpen)} />
-
-      {/* Левая панель — Режимы + Комнаты */}
-      <LeftPanel
-        isOpen={leftOpen}
-        onClose={closeLeft}
-        activeMode={activeMode}
-        activeRoom={activeRoom}
-        onModeChange={setActiveMode}
-        onRoomChange={setActiveRoom}
-      />
-
-      {/* Правая панель — Помощник + Участники */}
-      <RightPanel isOpen={rightOpen} onClose={closeRight} />
-
-      {/* Центральная область — Главная (лента) или чат */}
-      {!agentInfo && activeMode === "Общение" && activeRoom === "Главная" ? (
+      {/* Центральная область — Лента (события) или активный чат */}
+      {view === "feed" ? (
         <HomeRoom
           topPad={topBarH}
           bottomPad={bottomBarH}
-          assistantName={user?.assistant_name || "Джим"}
-          onOpenAssistant={() => setActiveRoom("Чат помощника")}
+          assistantName={assistantName}
+          onOpenAssistant={() => { setRoom(assistantRoom); setView("chat"); }}
         />
       ) : (
         <ChatArea
@@ -201,11 +244,11 @@ export default function Home() {
         onSettingsClick={() => setSettingsOpen(true)}
         onContactsClick={() => setContactsOpen(true)}
         onAgentsClick={() => setAgentsOpen(true)}
-        onSendMessage={(text) => { if (activeRoom === "Главная") setActiveRoom("Чат помощника"); sendMessage(text); }}
+        onSendMessage={(text) => { if (view === "feed") { setRoom(assistantRoom); setView("chat"); } sendMessage(text); }}
         onAttachMedia={attachMedia}
         onHeightChange={setBottomBarH}
         onMicStateChange={(active) => setMicActive(active)}
-        assistantName={user?.assistant_name || "Джим"}
+        assistantName={assistantName}
       />
 
       {/* Центр Управления */}
@@ -220,7 +263,7 @@ export default function Home() {
       />
       )}
 
-      {/* Мои Джинны */}
+      {/* Мои Джинны (избранное) */}
       {agentsOpen && (
       <MyAgentsModal
         isOpen={agentsOpen}
@@ -266,8 +309,6 @@ export default function Home() {
         onClose={() => setBusinessOpen(false)}
       />
       )}
-
-
     </div>
   );
 }

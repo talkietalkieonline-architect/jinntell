@@ -1,0 +1,193 @@
+"use client";
+import { useRef, useEffect } from "react";
+import { mediaUrl } from "@/services/api";
+
+export type OpenChat = { room: string; agentId: number; name: string; color: string };
+
+/** Верхняя панель + горизонтальная лента открытых чатов (вместо боковых створок). */
+export default function NavBar({
+  onHeightChange,
+  assistantName,
+  assistantPhoto,
+  assistantRoom,
+  openChats,
+  activeRoom,
+  view,
+  onSelectChat,
+  onCloseChat,
+  onFavorites,
+  onFeed,
+  drivingMode,
+  onToggleDriving,
+}: {
+  onHeightChange?: (h: number) => void;
+  assistantName: string;
+  assistantPhoto?: string | null;
+  assistantRoom: string;
+  openChats: OpenChat[];
+  activeRoom: string;
+  view: "feed" | "chat";
+  onSelectChat: (room: string) => void;
+  onCloseChat: (room: string) => void;
+  onFavorites: () => void;
+  onFeed: () => void;
+  drivingMode: boolean;
+  onToggleDriving: () => void;
+}) {
+  const barRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!barRef.current || !onHeightChange) return;
+    const ro = new ResizeObserver(() => {
+      if (barRef.current) onHeightChange(barRef.current.offsetHeight);
+    });
+    ro.observe(barRef.current);
+    onHeightChange(barRef.current.offsetHeight);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
+
+  const isActive = (room: string) => view === "chat" && activeRoom === room;
+
+  return (
+    <div
+      ref={barRef}
+      className="fixed top-0 left-0 right-0 px-3 pt-3 pb-2"
+      style={{ zIndex: 40, background: "var(--bar-bg)" }}
+    >
+      {/* Панель: лого + иконки */}
+      <div className="flex items-center justify-between mb-2">
+        <span
+          className="text-[11px] uppercase tracking-[0.3em] font-semibold"
+          style={{ color: "var(--text-muted)" }}
+        >
+          JinnTell
+        </span>
+        <div className="flex items-center gap-1.5">
+          <PanelBtn active={drivingMode} title="За рулём" onClick={onToggleDriving}>
+            🚗
+          </PanelBtn>
+          <PanelBtn title="Избранное" onClick={onFavorites}>
+            ☆
+          </PanelBtn>
+          <PanelBtn active={view === "feed"} title="Лента" onClick={onFeed}>
+            🔔
+          </PanelBtn>
+        </div>
+      </div>
+
+      {/* Лента открытых чатов */}
+      <div className="flex items-end gap-2 overflow-x-auto no-scrollbar pb-0.5">
+        {/* Помощник — закреплён первым */}
+        <ChatAvatar
+          active={isActive(assistantRoom)}
+          name={assistantName}
+          color="var(--accent)"
+          photo={assistantPhoto}
+          onClick={() => onSelectChat(assistantRoom)}
+        />
+        {openChats.map((c) => (
+          <ChatAvatar
+            key={c.room}
+            active={isActive(c.room)}
+            name={c.name}
+            color={c.color}
+            onClick={() => onSelectChat(c.room)}
+            onClose={() => onCloseChat(c.room)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PanelBtn({
+  children,
+  title,
+  active = false,
+  onClick,
+}: {
+  children: React.ReactNode;
+  title: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="w-9 h-9 rounded-full flex items-center justify-center text-[15px] transition-all hover:scale-110 active:scale-95"
+      style={{
+        background: active ? "var(--bg-glass-hover)" : "var(--bg-glass)",
+        border: active ? "1px solid var(--accent)" : "1px solid var(--bg-glass-border)",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChatAvatar({
+  active,
+  name,
+  color,
+  photo,
+  onClick,
+  onClose,
+}: {
+  active: boolean;
+  name: string;
+  color: string;
+  photo?: string | null;
+  onClick: () => void;
+  onClose?: () => void;
+}) {
+  const size = active ? 54 : 42;
+  return (
+    <div className="flex flex-col items-center gap-1 shrink-0 relative" style={{ width: 62 }}>
+      <button
+        onClick={onClick}
+        className="rounded-full flex items-center justify-center font-bold transition-all overflow-hidden"
+        style={{
+          width: size,
+          height: size,
+          background: photo ? "transparent" : "var(--bg-glass)",
+          border: active ? `2px solid ${color}` : "1.5px solid var(--bg-glass-border)",
+          color,
+        }}
+      >
+        {photo ? (
+          <img
+            src={photo.startsWith("data:") ? photo : mediaUrl(photo)}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          name[0]
+        )}
+      </button>
+      {onClose && active && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          title="Закрыть чат"
+          className="absolute top-0 right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px]"
+          style={{
+            background: "var(--bg-glass-hover)",
+            border: "1px solid var(--bg-glass-border)",
+            color: "var(--text-muted)",
+          }}
+        >
+          ✕
+        </button>
+      )}
+      <span
+        className="text-[9px] truncate max-w-[58px] text-center"
+        style={{ color: active ? "var(--text-primary)" : "var(--text-muted)" }}
+      >
+        {name}
+      </span>
+    </div>
+  );
+}

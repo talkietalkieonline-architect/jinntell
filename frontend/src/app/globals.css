@@ -371,3 +371,6 @@ input::placeholder {
   --bar-border: rgba(255,255,255,0.08);
   --danger: #e74c3c; --success: #2ecc71; --online: #2ecc71; --offline: #666;
 }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
