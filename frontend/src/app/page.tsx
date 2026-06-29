@@ -152,7 +152,7 @@ export default function Home() {
     const p = ic.type === "agent" ? createRoom([ic.agentId, agentId]) : inviteToRoom(ic.roomId, agentId);
     p.then((rd) => {
       const first = rd.members[0];
-      const entry = { room: rd.room, agentId: first?.id ?? 0, name: rd.members.map((m) => m.name).join(" + "), color: first?.color || "#6c7bff", photo: first?.photo_url ?? null };
+      const entry = { room: rd.room, agentId: first?.id ?? 0, name: rd.members.map((m) => m.name).join(" + "), color: first?.color || "#6c7bff", photo: first?.photo_url ?? null, count: rd.members.length };
       setOpenChats((prev) => (prev.some((c) => c.room === rd.room) ? prev.map((c) => (c.room === rd.room ? entry : c)) : [...prev, entry]));
       setRoom(rd.room);
       setView("chat");

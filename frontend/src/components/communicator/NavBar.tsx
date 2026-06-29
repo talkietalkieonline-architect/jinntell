@@ -2,7 +2,7 @@
 import { useRef, useEffect } from "react";
 import { mediaUrl } from "@/services/api";
 
-export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null };
+export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number };
 
 /** Верхняя панель + горизонтальная лента открытых чатов (вместо боковых створок). */
 export default function NavBar({
@@ -91,6 +91,7 @@ export default function NavBar({
             name={c.name}
             color={c.color}
             photo={c.photo}
+            count={c.count}
             onClick={() => onSelectChat(c.room)}
             onClose={() => onCloseChat(c.room)}
           />
@@ -216,6 +217,7 @@ function ChatAvatar({
   photo,
   onClick,
   onClose,
+  count,
 }: {
   active: boolean;
   name: string;
@@ -223,6 +225,7 @@ function ChatAvatar({
   photo?: string | null;
   onClick: () => void;
   onClose?: () => void;
+  count?: number;
 }) {
   const size = active ? 54 : 42;
   return (
@@ -265,6 +268,14 @@ function ChatAvatar({
           ✕
         </button>
       )}
+      {count && count > 1 ? (
+        <span
+          className="absolute top-0 left-1 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[8px] font-bold"
+          style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
+        >
+          {count}
+        </span>
+      ) : null}
       <span
         className="text-[9px] truncate max-w-[58px] text-center"
         style={{ color: active ? "var(--text-primary)" : "var(--text-muted)" }}
