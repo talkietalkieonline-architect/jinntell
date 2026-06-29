@@ -111,11 +111,12 @@ export default function Home() {
   // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
   useEffect(() => {
     if (agentInfo && room.startsWith("agent-")) {
-      setOpenChats((prev) =>
-        prev.map((c) =>
-          c.room === room ? { ...c, name: agentInfo.name, color: agentInfo.color, agentId: agentInfo.id, photo: agentInfo.photo_url ?? null } : c
-        )
-      );
+      setOpenChats((prev) => {
+        const entry = { room, agentId: agentInfo.id, name: agentInfo.name, color: agentInfo.color, photo: agentInfo.photo_url ?? null };
+        return prev.some((c) => c.room === room)
+          ? prev.map((c) => (c.room === room ? { ...c, ...entry } : c))
+          : [...prev, entry];
+      });
     }
   }, [agentInfo, room]);
 
@@ -231,6 +232,7 @@ export default function Home() {
           bottomPad={bottomBarH}
           assistantName={assistantName}
           onOpenAssistant={() => { setRoom(assistantRoom); setView("chat"); }}
+          onOpenChat={(r) => { setRoom(r); setView("chat"); }}
         />
       ) : (
         <ChatArea

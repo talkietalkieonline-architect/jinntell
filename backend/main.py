@@ -18,6 +18,7 @@ from app.api.contractor_auth import router as contractor_auth_router
 from app.api.contractor_agents import router as contractor_agents_router
 from app.api.rag import router as rag_router
 from app.api.tts import router as tts_router
+from app.api.feed import router as feed_router
 from app.websocket.chat_ws import router as ws_router
 from app.services.seed import seed_agents, seed_core_agents
 
@@ -66,6 +67,7 @@ app.include_router(contractor_auth_router)
 app.include_router(contractor_agents_router)
 app.include_router(rag_router)
 app.include_router(tts_router)
+app.include_router(feed_router)
 app.include_router(ws_router)
 
 # Хранилище загруженных файлов (фото агентов, гардероб, в будущем RAG-база контрагента)

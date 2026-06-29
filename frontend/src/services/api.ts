@@ -1078,6 +1078,27 @@ export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: str
 export function deleteAssistantPhoto(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/assistant-photo", { method: "DELETE" });
 }
+
+export interface FeedEvent {
+  id: number;
+  kind: string;
+  icon?: string | null;
+  title: string;
+  body?: string | null;
+  link_room?: string | null;
+  agent_id?: number | null;
+  is_read: boolean;
+  created_at: string;
+}
+export function getFeed(): Promise<FeedEvent[]> {
+  return apiFetch("/api/feed");
+}
+export function markFeedRead(id: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/feed/${id}/read`, { method: "POST" });
+}
+export function dismissFeed(id: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/feed/${id}`, { method: "DELETE" });
+}
 export interface LinkedBusiness { id: number; company_name: string; }
 export function getMyBusinesses(): Promise<LinkedBusiness[]> {
   return apiFetch("/api/users/me/businesses");

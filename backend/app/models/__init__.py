@@ -4,5 +4,6 @@ from app.models.message import Message
 from app.models.contractor import Contractor
 from app.models.rag import AgentSource, AgentRAGChunk, AgentParseLog
 from app.models.app_setting import AppSetting
+from app.models.feed import FeedEvent
 
-__all__ = ["User", "Agent", "AgentWardrobe", "Message", "Contractor", "AgentSource", "AgentRAGChunk", "AgentParseLog", "AppSetting"]
+__all__ = ["User", "Agent", "AgentWardrobe", "Message", "Contractor", "AgentSource", "AgentRAGChunk", "AgentParseLog", "AppSetting", "FeedEvent"]
