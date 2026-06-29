@@ -73,6 +73,9 @@ export default function SettingsModal({
   const [animOn, setAnimOn] = useState(
     typeof window === "undefined" || localStorage.getItem("jinntell_anim_off") !== "1"
   );
+  const [driveOn, setDriveOn] = useState(
+    typeof window !== "undefined" && localStorage.getItem("jinntell_drive") === "1"
+  );
 
   // Состояние сохранения
   const [saving, setSaving] = useState(false);
@@ -510,6 +513,26 @@ const _av = user.assistant_voice || "ermil";
                     setAnimOn(on);
                     localStorage.setItem("jinntell_anim_off", on ? "0" : "1");
                     window.dispatchEvent(new Event("jinntell_anim_change"));
+                  }}
+                  className="w-5 h-5 shrink-0 cursor-pointer"
+                  style={{ accentColor: "var(--accent)" }}
+                />
+              </label>
+            </div>
+            <div className="mt-4">
+              <label className="flex items-center justify-between cursor-pointer gap-3">
+                <span className="flex flex-col">
+                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Режим «За рулём»</span>
+                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Всегда озвучивать ответы голосом (hands-free)</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={driveOn}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setDriveOn(on);
+                    localStorage.setItem("jinntell_drive", on ? "1" : "0");
+                    window.dispatchEvent(new Event("jinntell_drive_change"));
                   }}
                   className="w-5 h-5 shrink-0 cursor-pointer"
                   style={{ accentColor: "var(--accent)" }}

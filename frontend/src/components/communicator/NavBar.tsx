@@ -17,8 +17,6 @@ export default function NavBar({
   onCloseChat,
   onFavorites,
   onFeed,
-  drivingMode,
-  onToggleDriving,
 }: {
   onHeightChange?: (h: number) => void;
   assistantName: string;
@@ -31,8 +29,6 @@ export default function NavBar({
   onCloseChat: (room: string) => void;
   onFavorites: () => void;
   onFeed: () => void;
-  drivingMode: boolean;
-  onToggleDriving: () => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -63,9 +59,6 @@ export default function NavBar({
           JinnTell
         </span>
         <div className="flex items-center gap-1.5">
-          <PanelBtn active={drivingMode} title="За рулём" onClick={onToggleDriving}>
-            🚗
-          </PanelBtn>
           <PanelBtn title="Избранное" onClick={onFavorites}>
             ☆
           </PanelBtn>

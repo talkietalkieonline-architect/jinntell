@@ -59,7 +59,7 @@ export default function Home() {
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [view, setView] = useState<"feed" | "chat">("feed");
-  const [drivingMode, setDrivingMode] = useState(false);
+  const [drive, setDrive] = useState(false);
   const [topBarH, setTopBarH] = useState(120);
   const [bottomBarH, setBottomBarH] = useState(130);
   const [micActive, setMicActive] = useState(false);
@@ -135,6 +135,13 @@ export default function Home() {
   }, [room, setRoom, assistantRoom]);
 
   useEffect(() => {
+    const read = () => setDrive(localStorage.getItem("jinntell_drive") === "1");
+    read();
+    window.addEventListener("jinntell_drive_change", read);
+    return () => window.removeEventListener("jinntell_drive_change", read);
+  }, []);
+
+  useEffect(() => {
     const t = localStorage.getItem("jinntell_theme");
     if (t) document.documentElement.setAttribute("data-theme", t);
     const a = localStorage.getItem("jinntell_accent");
@@ -203,8 +210,6 @@ export default function Home() {
         onCloseChat={closeChat}
         onFavorites={() => setAgentsOpen(true)}
         onFeed={() => setView("feed")}
-        drivingMode={drivingMode}
-        onToggleDriving={() => setDrivingMode((v) => !v)}
       />
 
       {/* Индикатор подключения к серверу */}
@@ -233,7 +238,7 @@ export default function Home() {
           typingName={typingName}
           topPad={topBarH}
           bottomPad={bottomBarH}
-          autoSpeak={micActive}
+          autoSpeak={micActive || drive}
           assistantPhoto={assistantPhoto}
           agentInfo={agentInfo}
         />
