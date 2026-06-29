@@ -113,7 +113,7 @@ export default function Home() {
     if (agentInfo && room.startsWith("agent-")) {
       setOpenChats((prev) =>
         prev.map((c) =>
-          c.room === room ? { ...c, name: agentInfo.name, color: agentInfo.color, agentId: agentInfo.id } : c
+          c.room === room ? { ...c, name: agentInfo.name, color: agentInfo.color, agentId: agentInfo.id, photo: agentInfo.photo_url ?? null } : c
         )
       );
     }
@@ -206,6 +206,7 @@ export default function Home() {
         openChats={openChats}
         activeRoom={room}
         view={view}
+        activeAgent={agentInfo}
         onSelectChat={selectChat}
         onCloseChat={closeChat}
         onFavorites={() => setAgentsOpen(true)}

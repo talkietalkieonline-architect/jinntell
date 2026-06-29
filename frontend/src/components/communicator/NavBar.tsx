@@ -2,7 +2,7 @@
 import { useRef, useEffect } from "react";
 import { mediaUrl } from "@/services/api";
 
-export type OpenChat = { room: string; agentId: number; name: string; color: string };
+export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null };
 
 /** Верхняя панель + горизонтальная лента открытых чатов (вместо боковых створок). */
 export default function NavBar({
@@ -13,6 +13,7 @@ export default function NavBar({
   openChats,
   activeRoom,
   view,
+  activeAgent,
   onSelectChat,
   onCloseChat,
   onFavorites,
@@ -25,6 +26,7 @@ export default function NavBar({
   openChats: OpenChat[];
   activeRoom: string;
   view: "feed" | "chat";
+  activeAgent: { name: string; profession: string; brand: string; color: string; photo_url?: string } | null;
   onSelectChat: (room: string) => void;
   onCloseChat: (room: string) => void;
   onFavorites: () => void;
@@ -84,11 +86,51 @@ export default function NavBar({
             active={isActive(c.room)}
             name={c.name}
             color={c.color}
+            photo={c.photo}
             onClick={() => onSelectChat(c.room)}
             onClose={() => onCloseChat(c.room)}
           />
         ))}
       </div>
+
+      {/* Шапка активного чата */}
+      {view === "chat" && (() => {
+        const isAssistant = activeRoom === assistantRoom;
+        const activeOpen = openChats.find((c) => c.room === activeRoom);
+        const name = isAssistant ? assistantName : (activeAgent?.name || activeOpen?.name || "Джинн");
+        const sub = isAssistant
+          ? "ваш помощник"
+          : [activeAgent?.profession, activeAgent?.brand].filter(Boolean).join(" • ");
+        const color = isAssistant ? "var(--accent)" : (activeAgent?.color || activeOpen?.color || "var(--accent)");
+        const photo = isAssistant ? assistantPhoto : (activeAgent?.photo_url || activeOpen?.photo || null);
+        return (
+          <div
+            className="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-1.5"
+            style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
+          >
+            <div
+              className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold overflow-hidden"
+              style={{ background: photo ? "transparent" : "var(--bg-glass)", border: `1.5px solid ${color}`, color }}
+            >
+              {photo ? (
+                <img src={photo.startsWith("data:") ? photo : mediaUrl(photo)} alt="" className="w-full h-full object-cover" />
+              ) : isAssistant ? (
+                "\uD83E\uDDDE"
+              ) : (
+                name[0]
+              )}
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{name}</span>
+              {sub && <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{sub}</span>}
+            </div>
+            <div className="ml-auto flex items-center gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

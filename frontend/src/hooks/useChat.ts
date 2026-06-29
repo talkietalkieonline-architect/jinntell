@@ -93,6 +93,7 @@ export interface AgentRoomInfo {
   profession: string;
   brand: string;
   color: string;
+  photo_url?: string;
   greeting?: string;
   tts_voice_id?: string;
   tts_emotion?: string;
