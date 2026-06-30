@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -64,6 +64,7 @@ export default function Home() {
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [inviteContext, setInviteContext] = useState<{ type: "agent"; agentId: number } | { type: "room"; roomId: number } | null>(null);
+  const [agentsInitialTab, setAgentsInitialTab] = useState<"jinns" | "people">("jinns");
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
@@ -139,6 +140,7 @@ export default function Home() {
     } else {
       return;
     }
+    setAgentsInitialTab("jinns");
     setAgentsOpen(true);
   }, [room, agentInfo]);
 
@@ -158,6 +160,17 @@ export default function Home() {
       setView("chat");
     }).catch(() => {});
   }, [inviteContext, openAgentChat, setRoom]);
+
+  /** Открыть личный диалог с контактом (человек↔человек) */
+  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null }) => {
+    const uid = getUserId();
+    if (!uid) return;
+    const r = dmRoom(uid, c.id);
+    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff" }]));
+    setRoom(r);
+    setView("chat");
+    setAgentsOpen(false);
+  }, [setRoom]);
 
   // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
   useEffect(() => {
@@ -276,7 +289,7 @@ export default function Home() {
         activeAgent={agentInfo}
         onSelectChat={selectChat}
         onCloseChat={closeChat}
-        onFavorites={() => setAgentsOpen(true)}
+        onFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
         onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
@@ -322,7 +335,7 @@ export default function Home() {
       {/* Нижняя панель — ввод + кнопки */}
       <BottomBar
         onSettingsClick={() => setSettingsOpen(true)}
-        onContactsClick={() => setContactsOpen(true)}
+        onContactsClick={() => { setAgentsInitialTab("people"); setAgentsOpen(true); }}
         onAgentsClick={() => setAgentsOpen(true)}
         onSendMessage={(text) => { if (view === "feed") { setRoom(assistantRoom); setView("chat"); } sendMessage(text); }}
         onAttachMedia={attachMedia}
@@ -353,6 +366,8 @@ export default function Home() {
           setCityOpen(true);
         }}
         onStartChat={handlePickAgent}
+        onStartDM={openDM}
+        initialTab={agentsInitialTab}
       />
       )}
 

@@ -73,15 +73,17 @@ function buildWelcome(hasHistory: boolean, assistantName: string = DEFAULT_ASSIS
 }
 
 /** Конвертация сообщения API → ChatMessage */
-function apiMsgToChat(msg: MessageOut): ChatMessage {
+function apiMsgToChat(msg: MessageOut, myId?: number | null): ChatMessage {
   // Поддержка legacy sender_type: "butler", "mel" → "assistant"
-  const senderType = (msg.sender_type === "butler" || msg.sender_type === "mel") ? "assistant" : msg.sender_type;
+  let senderType: string = (msg.sender_type === "butler" || msg.sender_type === "mel") ? "assistant" : msg.sender_type;
+  const otherUser = senderType === "user" && msg.sender_user_id != null && myId != null && msg.sender_user_id !== myId;
+  if (otherUser) senderType = "agent"; // чужой человек в личном диалоге — слева
   return {
     id: String(msg.id),
     sender: senderType as "user" | "assistant" | "agent",
     name: msg.sender_name,
     text: msg.text,
-    color: msg.sender_type === "user" ? "" : "var(--accent)",
+    color: msg.sender_type === "user" ? (otherUser ? "var(--accent)" : "") : "var(--accent)",
     timestamp: new Date(msg.created_at),
     context: msg.context,
   };
@@ -116,6 +118,7 @@ interface UseChatResult {
 export function useChat(initialRoom: string = "general"): UseChatResult {
   const { user } = useAuth();
   const assistantName = user?.assistant_name || DEFAULT_ASSISTANT_NAME;
+  const myId = user?.id ?? null;
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [buildWelcome(false, assistantName)]);
   const [isTyping, setIsTyping] = useState(false);
@@ -130,6 +133,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   const connectWSRef = useRef<(() => void) | undefined>(undefined);
   const assistantNameRef = useRef(assistantName);
   useEffect(() => { assistantNameRef.current = assistantName; }, [assistantName]);
+  const myIdRef = useRef<number | null>(myId);
+  useEffect(() => { myIdRef.current = myId; }, [myId]);
 
   // Подключаемся к WebSocket при монтировании
   const connectWS = useCallback(() => {
@@ -145,13 +150,15 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
     const ws = connectChat(room, (data) => {
       if (data.type === "message") {
         // Поддержка legacy sender_type
-        const senderType = (data.sender_type === "butler" || data.sender_type === "mel") ? "assistant" : data.sender_type;
+        let _st: string = (data.sender_type === "butler" || data.sender_type === "mel") ? "assistant" : data.sender_type;
+        const _other = _st === "user" && data.sender_user_id != null && myIdRef.current != null && data.sender_user_id !== myIdRef.current;
+        if (_other) _st = "agent"; // чужой человек в личном диалоге — рисуем слева
         const chatMsg: ChatMessage = {
           id: String(data.id),
-          sender: senderType as "user" | "assistant" | "agent",
+          sender: _st as "user" | "assistant" | "agent",
           name: data.sender_name,
           text: data.text,
-          color: data.sender_type === "user" ? "" : (data.agent_color || "var(--accent)"),
+          color: data.sender_type === "user" ? (_other ? "var(--accent)" : "") : (data.agent_color || "var(--accent)"),
           timestamp: new Date(data.created_at),
         };
         setMessages((prev) => [...prev, chatMsg]);
@@ -213,7 +220,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
     const isAgentRoom = room.startsWith("agent-");
     try {
       const history = await getChatHistory(room);
-      const chatMessages = history.map(apiMsgToChat);
+      const chatMessages = history.map((mm) => apiMsgToChat(mm, myIdRef.current));
       if (isAgentRoom) {
         setMessages(chatMessages);
       } else {

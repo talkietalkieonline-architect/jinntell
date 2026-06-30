@@ -402,6 +402,28 @@ export function removeFavoriteAgent(agentId: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/agents/favorites/${agentId}`, { method: "DELETE" });
 }
 
+export interface ContactOut {
+  id: number;
+  display_name: string;
+  phone: string;
+  jinntell_link?: string | null;
+  avatar_color?: string | null;
+  is_online: boolean;
+}
+export function getContacts(): Promise<ContactOut[]> {
+  return apiFetch("/api/contacts");
+}
+export function addContact(identifier: string): Promise<ContactOut> {
+  return apiFetch("/api/contacts", { method: "POST", body: JSON.stringify({ identifier }) });
+}
+export function removeContact(userId: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/contacts/${userId}`, { method: "DELETE" });
+}
+export function dmRoom(a: number, b: number): string {
+  const [lo, hi] = a < b ? [a, b] : [b, a];
+  return `dm-${lo}-${hi}`;
+}
+
 /** Обновить настройки агента (бизнес / личный) */
 export function updateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {
   return apiFetch(`/api/agents/${id}`, {
