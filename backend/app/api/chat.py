@@ -23,6 +23,9 @@ async def get_history(
     user: User = Depends(get_current_user),
 ):
     """История сообщений. Для чата джинна (agent-{id}) агрегируем 1:1 + комнаты с этим джинном."""
+    _dm = re.match(r"^dm-(\d+)-(\d+)$", room)
+    if _dm and user.id not in (int(_dm.group(1)), int(_dm.group(2))):
+        raise HTTPException(403, "Нет доступа")
     m = re.match(r"^agent-(\d+)(?:-u\d+)?$", room)
     rooms = [room]
     agent_id = None

@@ -468,6 +468,12 @@ async def chat_websocket(websocket: WebSocket, room: str):
     if _rm:
         room_members = await _load_room_members(int(_rm.group(1)))
 
+    # Личный диалог dm-{a}-{b} — только участники
+    _dm = re.match(r"^dm-(\d+)-(\d+)$", room)
+    if _dm and user_id not in (int(_dm.group(1)), int(_dm.group(2))):
+        await websocket.close(code=4003, reason="Нет доступа")
+        return
+
     await manager.connect(websocket, room, user_id)
 
     join_data = {
