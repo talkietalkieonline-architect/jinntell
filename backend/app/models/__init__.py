@@ -6,5 +6,6 @@ from app.models.rag import AgentSource, AgentRAGChunk, AgentParseLog
 from app.models.app_setting import AppSetting
 from app.models.feed import FeedEvent
 from app.models.room import Room, RoomMember
+from app.models.agent_access import AgentAccess
 
-__all__ = ["User", "Agent", "AgentWardrobe", "Message", "Contractor", "AgentSource", "AgentRAGChunk", "AgentParseLog", "AppSetting", "FeedEvent", "Room", "RoomMember"]
+__all__ = ["User", "Agent", "AgentWardrobe", "Message", "Contractor", "AgentSource", "AgentRAGChunk", "AgentParseLog", "AppSetting", "FeedEvent", "Room", "RoomMember", "AgentAccess"]

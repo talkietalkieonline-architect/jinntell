@@ -7,6 +7,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from typing import Optional
+
+from pydantic import BaseModel
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +19,7 @@ from app.models.agent import Agent, AgentWardrobe
 from app.models.contractor import Contractor
 from app.models.message import Message
 from app.models.user import User
+from app.models.agent_access import AgentAccess
 from app.schemas.agent import AgentDetailOut, AgentUpdate
 
 router = APIRouter(prefix="/api/contractor", tags=["contractor"])
@@ -120,6 +124,7 @@ async def contractor_update_agent(
         "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
         "outfit_style", "outfit_top", "outfit_bottom", "outfit_shoes", "outfit_accessory",
         "unavailable_message",
+        "visibility",
     }
 
     for field in body.model_fields_set:
@@ -136,6 +141,78 @@ async def contractor_update_agent(
     await db.flush()
     await db.refresh(agent)
     return AgentDetailOut.model_validate(agent)
+
+
+class AccessUserOut(BaseModel):
+    id: int
+    display_name: str
+    phone: str
+    jinntell_link: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AddAccessIn(BaseModel):
+    identifier: str  # телефон или jinntell_link пользователя
+
+
+@router.get("/agents/{agent_id}/access", response_model=list[AccessUserOut])
+async def list_agent_access(
+    agent_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список пользователей, которым виден скрытый агент."""
+    await _get_owned_agent(agent_id, contractor, db)
+    res = await db.execute(
+        select(User).join(AgentAccess, AgentAccess.user_id == User.id).where(AgentAccess.agent_id == agent_id)
+    )
+    return [AccessUserOut.model_validate(u) for u in res.scalars().all()]
+
+
+@router.post("/agents/{agent_id}/access", response_model=AccessUserOut)
+async def add_agent_access(
+    agent_id: int,
+    body: AddAccessIn,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Добавить пользователя в список доступа (по телефону или jinntell-ссылке)."""
+    await _get_owned_agent(agent_id, contractor, db)
+    ident = (body.identifier or "").strip()
+    if not ident:
+        raise HTTPException(400, "Укажите телефон или ссылку пользователя")
+    res = await db.execute(select(User).where(or_(User.phone == ident, User.jinntell_link == ident)))
+    u = res.scalar_one_or_none()
+    if not u:
+        raise HTTPException(404, "Пользователь не найден по телефону/ссылке")
+    exists = await db.execute(
+        select(AgentAccess).where(AgentAccess.agent_id == agent_id, AgentAccess.user_id == u.id)
+    )
+    if not exists.scalar_one_or_none():
+        db.add(AgentAccess(agent_id=agent_id, user_id=u.id))
+        await db.commit()
+    return AccessUserOut.model_validate(u)
+
+
+@router.delete("/agents/{agent_id}/access/{user_id}")
+async def remove_agent_access(
+    agent_id: int,
+    user_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Убрать пользователя из списка доступа."""
+    await _get_owned_agent(agent_id, contractor, db)
+    res = await db.execute(
+        select(AgentAccess).where(AgentAccess.agent_id == agent_id, AgentAccess.user_id == user_id)
+    )
+    a = res.scalar_one_or_none()
+    if a:
+        await db.delete(a)
+        await db.commit()
+    return {"ok": True}
 
 
 @router.get("/agents/{agent_id}/stats")

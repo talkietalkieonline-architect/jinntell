@@ -1,13 +1,15 @@
 """API Город Агентов — каталог, поиск, фильтры, конструктор"""
 import re
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_current_user_optional
 from app.models.agent import Agent
+from app.models.agent_access import AgentAccess
 from app.models.user import User
 from app.schemas.agent import AgentDetailOut, AgentListResponse, AgentOut, AgentUpdate
 
@@ -27,6 +29,7 @@ async def list_agents(
     search: str = Query("", description="Поиск по имени, профессии, бренду"),
     profession: str = Query("", description="Фильтр по профессии"),
     agent_type: str = Query("", description="Фильтр по типу: business, citizen, system"),
+    user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
     """Каталог агентов с поиском и фильтрами"""
@@ -34,6 +37,15 @@ async def list_agents(
 
     # Скрываем core-агентов из публичного каталога
     query = query.where(Agent.visibility != "core")
+
+    # Скрытые агенты — только владельцу и пользователям из списка доступа
+    if user:
+        accessible = select(AgentAccess.agent_id).where(AgentAccess.user_id == user.id)
+        query = query.where(
+            (Agent.visibility != "hidden") | Agent.id.in_(accessible) | (Agent.owner_id == user.id)
+        )
+    else:
+        query = query.where(Agent.visibility != "hidden")
 
     if search:
         pattern = f"%{search}%"
