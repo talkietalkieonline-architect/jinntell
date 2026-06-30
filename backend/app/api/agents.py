@@ -54,6 +54,8 @@ async def list_agents(
             Agent.name.ilike(pattern)
             | Agent.profession.ilike(pattern)
             | Agent.brand.ilike(pattern)
+            | Agent.description.ilike(pattern)
+            | Agent.skills_text.ilike(pattern)
         )
 
     if profession:

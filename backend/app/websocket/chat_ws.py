@@ -58,6 +58,29 @@ async def _can_access_agent(agent: Agent, user_id: int) -> bool:
         return res.scalar_one_or_none() is not None
 
 
+_SUGGEST_STOP = {"нужен", "нужна", "нужно", "надо", "хочу", "можно", "есть", "для", "про", "как", "что", "мне", "его", "или", "помоги", "подскажи", "найди", "позови"}
+
+
+async def _find_relevant_agents(user_message: str, user_id: int, limit: int = 5) -> list:
+    """Доступные пользователю джинны по словам из запроса (для рекомендаций помощника)."""
+    words = [w for w in re.findall(r"[\w\u0430-\u044f\u0451]{4,}", (user_message or "").lower()) if w not in _SUGGEST_STOP]
+    if not words:
+        return []
+    from app.models.agent_access import AgentAccess
+    async with async_session() as db:
+        cond = None
+        for w in words[:6]:
+            p = f"%{w}%"
+            c = (Agent.name.ilike(p) | Agent.profession.ilike(p) | Agent.description.ilike(p) | Agent.skills_text.ilike(p))
+            cond = c if cond is None else (cond | c)
+        q = select(Agent).where(Agent.is_active == True, Agent.visibility != "core", cond)
+        accessible = select(AgentAccess.agent_id).where(AgentAccess.user_id == user_id)
+        q = q.where((Agent.visibility != "hidden") | Agent.id.in_(accessible) | (Agent.owner_id == user_id))
+        q = q.order_by(Agent.rating.desc()).limit(limit)
+        res = await db.execute(q)
+        return list(res.scalars().all())
+
+
 async def _load_room_members(room_id: int) -> list:
     """Агенты-участники комнаты room-{id}"""
     from app.models.room import RoomMember
@@ -250,6 +273,18 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
             user_persona += await _get_room_memory_digest(user_id)
         except Exception as e:
             print(f"[ws] room memory digest error: {e}")
+        try:
+            _agents = await _find_relevant_agents(user_message, user_id)
+            if _agents:
+                _lst = "; ".join(f"{a.name} — {a.profession}" for a in _agents)
+                user_persona += (
+                    "\n\n=== ДОСТУПНЫЕ ДЖИННЫ ПО ТЕМЕ ЗАПРОСА ===\n"
+                    f"{_lst}\n"
+                    "Если пользователь ищет специалиста — предложи ПОДХОДЯЩЕГО из этого списка "
+                    "(не выдумывай несуществующих) и подскажи открыть его через Избранное → Город джиннов."
+                )
+        except Exception as e:
+            print(f"[ws] agent suggest error: {e}")
 
     # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
     # Мозг и промпт берём из карточки core-агента «Помощник Джим» (единый источник)
