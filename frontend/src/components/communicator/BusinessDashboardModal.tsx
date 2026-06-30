@@ -4,6 +4,10 @@ import {
   contractorLogin,
   contractorGetAgents,
   contractorUpdateAgent,
+  contractorGetAgentAccess,
+  contractorAddAgentAccess,
+  contractorRemoveAgentAccess,
+  type AccessUser,
   contractorLogout,
   getContractorToken,
   setContractorToken,
@@ -60,7 +64,7 @@ const TEMPERAMENTS = [
   { id: "reserved", label: "Сдержанный" },
 ];
 
-type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "knowledge" | "voice" | "appearance" | "outfit";
+type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "knowledge" | "voice" | "appearance" | "outfit" | "access";
 
 interface Props {
   isOpen: boolean;
@@ -79,6 +83,11 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [myAgents, setMyAgents] = useState<AgentFullOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<AgentFullOut | null>(null);
+  const [editVisibility, setEditVisibility] = useState("public");
+  const [accessUsers, setAccessUsers] = useState<AccessUser[]>([]);
+  const [accessInput, setAccessInput] = useState("");
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [accessError, setAccessError] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [activeSection, setActiveSection] = useState<EditSection>("main");
 
@@ -265,6 +274,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     setEditPrompt(agent.system_prompt || "");
     setEditModel(agent.llm_model || "gpt-4o-mini");
     setEditMaxTokens(agent.llm_max_tokens || 1000);
+    setEditVisibility(((agent as { visibility?: string }).visibility) || "public");
     setPhotoUrl(agent.photo_url || null);
     contractorGetWardrobe(agent.id).then(setWardrobe).catch(() => setWardrobe([]));
     setSkillsText(agent.skills_text || "");
@@ -304,6 +314,32 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     setEditMode(true);
   };
 
+  // Список доступа — загружаем при входе в секцию
+  useEffect(() => {
+    if (activeSection === "access" && selectedAgent) {
+      contractorGetAgentAccess(selectedAgent.id).then(setAccessUsers).catch(() => setAccessUsers([]));
+    }
+  }, [activeSection, selectedAgent]);
+
+  const handleAddAccess = async () => {
+    if (!selectedAgent || !accessInput.trim()) return;
+    setAccessBusy(true); setAccessError("");
+    try {
+      const u = await contractorAddAgentAccess(selectedAgent.id, accessInput.trim());
+      setAccessUsers((prev) => (prev.some((x) => x.id === u.id) ? prev : [...prev, u]));
+      setAccessInput("");
+    } catch (e) {
+      setAccessError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setAccessBusy(false);
+    }
+  };
+  const handleRemoveAccess = async (userId: number) => {
+    if (!selectedAgent) return;
+    setAccessUsers((prev) => prev.filter((u) => u.id !== userId));
+    try { await contractorRemoveAgentAccess(selectedAgent.id, userId); } catch { /* noop */ }
+  };
+
   /** Сохранение всех секций разом */
   const handleSave = async () => {
     if (!selectedAgent) return;
@@ -315,6 +351,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
         // system_prompt: read-only for contractor
         llm_model: editModel,
         llm_max_tokens: editMaxTokens,
+        visibility: editVisibility,
         skills_text: skillsText || undefined,
         exclusions_text: exclusionsText || undefined,
         mode_walk_enabled: modesState.walk.enabled,
@@ -486,6 +523,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "voice" as const, label: "Голос" },
                   { id: "appearance" as const, label: "Внешность" },
                   { id: "outfit" as const, label: "Одежда" },
+                  { id: "access" as const, label: "Доступ" },
                 ]).map((tab) => (
                   <button
                     key={tab.id}
@@ -518,6 +556,53 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
               )}
 
               {/* ═══ Секция: Скилы ═══ */}
+              {activeSection === "access" && (
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <div className="rounded-xl px-4 py-2.5 text-[11px]" style={{ background: "rgba(108,123,255,0.1)", border: "1px solid rgba(108,123,255,0.3)", color: "var(--text-secondary)" }}>
+                    Открытый — джинн виден всем в Городе. Скрытый — только пользователям из списка (корпоративный/внутренний).
+                  </div>
+                  <div className="flex gap-2">
+                    {[{ id: "public", label: "Открытый" }, { id: "hidden", label: "Скрытый" }].map((v) => (
+                      <button key={v.id} onClick={() => setEditVisibility(v.id)}
+                        className="flex-1 py-2 rounded-xl text-sm font-medium transition-all"
+                        style={{ background: editVisibility === v.id ? "var(--accent)" : "var(--bg-glass)", color: editVisibility === v.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${editVisibility === v.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Смена видимости применяется по кнопке «Сохранить».</p>
+
+                  {editVisibility === "hidden" && (
+                    <div className="flex flex-col gap-2 mt-2">
+                      <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "var(--text-muted)" }}>Список доступа</span>
+                      <div className="flex gap-2">
+                        <input value={accessInput} onChange={(e) => setAccessInput(e.target.value)} placeholder="Телефон или jinntell-ссылка"
+                          className="flex-1 rounded-xl px-3 py-2 text-sm bg-transparent outline-none"
+                          style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                        <button onClick={handleAddAccess} disabled={accessBusy}
+                          className="px-3 py-2 rounded-xl text-sm font-medium" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                          {accessBusy ? "..." : "Добавить"}
+                        </button>
+                      </div>
+                      {accessError && <p className="text-[11px]" style={{ color: "#e06b6b" }}>{accessError}</p>}
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        {accessUsers.length === 0 ? (
+                          <p className="text-[12px]" style={{ color: "var(--text-muted)", opacity: 0.7 }}>Пока никого. Добавьте пользователей по телефону или ссылке.</p>
+                        ) : accessUsers.map((u) => (
+                          <div key={u.id} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="text-[13px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}</span>
+                              <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{u.phone}{u.jinntell_link ? ` · @${u.jinntell_link}` : ""}</span>
+                            </div>
+                            <button onClick={() => handleRemoveAccess(u.id)} className="text-[11px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-glass-hover)", color: "var(--text-muted)" }}>Убрать</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {activeSection === "skills" && (
                 <div className="flex flex-col gap-3 animate-fade-in">
                   <div className="rounded-xl px-4 py-2.5 text-[11px]" style={{ background: "rgba(147,51,234,0.1)", border: "1px solid rgba(147,51,234,0.3)", color: "rgba(196,181,253,1)" }}>

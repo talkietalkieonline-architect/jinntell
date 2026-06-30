@@ -308,6 +308,7 @@ export interface AgentPersonaUpdate {
   system_prompt?: string;
   llm_model?: string;
   llm_max_tokens?: number;
+  visibility?: string;
   // Голос
   voice_id?: string;
   voice_speed?: number;
@@ -798,6 +799,22 @@ export function contractorUpdateAgent(id: number, data: AgentPersonaUpdate): Pro
     method: "PATCH",
     body: JSON.stringify(data),
   });
+}
+
+export interface AccessUser {
+  id: number;
+  display_name: string;
+  phone: string;
+  jinntell_link?: string | null;
+}
+export function contractorGetAgentAccess(agentId: number): Promise<AccessUser[]> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/access`);
+}
+export function contractorAddAgentAccess(agentId: number, identifier: string): Promise<AccessUser> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/access`, { method: "POST", body: JSON.stringify({ identifier }) });
+}
+export function contractorRemoveAgentAccess(agentId: number, userId: number): Promise<{ ok: boolean }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/access/${userId}`, { method: "DELETE" });
 }
 
 /** Контрагент: статистика агента */
