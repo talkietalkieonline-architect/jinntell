@@ -11,6 +11,7 @@ from app.core.deps import get_current_user, get_current_user_optional
 from app.models.agent import Agent
 from app.models.agent_access import AgentAccess
 from app.services.access import can_access_agent
+from app.models.user_favorite import UserFavorite
 from app.models.user import User
 from app.schemas.agent import AgentDetailOut, AgentListResponse, AgentOut, AgentUpdate
 
@@ -109,6 +110,61 @@ async def my_agents(
     )
     agents = result.scalars().all()
     return [AgentDetailOut.model_validate(a) for a in agents]
+
+
+@router.get("/favorites", response_model=list[AgentOut])
+async def list_favorites(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Избранные джинны пользователя."""
+    res = await db.execute(
+        select(Agent).join(UserFavorite, UserFavorite.agent_id == Agent.id)
+        .where(UserFavorite.user_id == user.id, Agent.is_active == True)
+    )
+    return [AgentOut.model_validate(a) for a in res.scalars().all()]
+
+
+@router.post("/favorites/{agent_id}")
+async def add_favorite(agent_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Добавить джинна в избранное (с проверкой доступа к скрытым)."""
+    res = await db.execute(select(Agent).where(Agent.id == agent_id, Agent.is_active == True))
+    agent = res.scalar_one_or_none()
+    if not agent or not await can_access_agent(db, agent, user.id):
+        raise HTTPException(404, "Агент не найден")
+    exists = await db.execute(
+        select(UserFavorite).where(UserFavorite.user_id == user.id, UserFavorite.agent_id == agent_id)
+    )
+    if not exists.scalar_one_or_none():
+        db.add(UserFavorite(user_id=user.id, agent_id=agent_id))
+        await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/favorites/{agent_id}")
+async def remove_favorite(agent_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Убрать из избранного."""
+    res = await db.execute(
+        select(UserFavorite).where(UserFavorite.user_id == user.id, UserFavorite.agent_id == agent_id)
+    )
+    f = res.scalar_one_or_none()
+    if f:
+        await db.delete(f)
+        await db.commit()
+    return {"ok": True}
+
+
+@router.get("/recommended", response_model=list[AgentOut])
+async def recommended_agents(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db), limit: int = 8):
+    """Рекомендованные джинны: публичные, не мои и не в избранном, в случайной ротации."""
+    owned = select(Agent.id).where(Agent.owner_id == user.id)
+    favs = select(UserFavorite.agent_id).where(UserFavorite.user_id == user.id)
+    res = await db.execute(
+        select(Agent).where(
+            Agent.is_active == True,
+            Agent.visibility == "public",
+            Agent.id.notin_(owned),
+            Agent.id.notin_(favs),
+        ).order_by(func.random()).limit(limit)
+    )
+    return [AgentOut.model_validate(a) for a in res.scalars().all()]
 
 
 @router.get("/link/{slug}")
