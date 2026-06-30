@@ -11,6 +11,7 @@ from app.core.deps import get_current_user
 from app.models.agent import Agent
 from app.models.room import Room, RoomMember
 from app.models.user import User
+from app.services.access import can_access_agent
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -62,11 +63,15 @@ async def create_room(body: CreateRoomIn, user: User = Depends(get_current_user)
     ids = [i for i in dict.fromkeys(body.agent_ids)]  # уникальные, с сохранением порядка
     if not ids:
         raise HTTPException(400, "Нужен хотя бы один джинн")
-    res = await db.execute(select(Agent.id).where(Agent.id.in_(ids), Agent.is_active == True))
-    valid = set(res.scalars().all())
-    ids = [i for i in ids if i in valid]
+    res = await db.execute(select(Agent).where(Agent.id.in_(ids), Agent.is_active == True))
+    agents = {a.id: a for a in res.scalars().all()}
+    accessible = []
+    for i in ids:
+        if i in agents and await can_access_agent(db, agents[i], user.id):
+            accessible.append(i)
+    ids = accessible
     if not ids:
-        raise HTTPException(400, "Джинны не найдены")
+        raise HTTPException(400, "Джинны не найдены или нет доступа")
     room = Room(owner_user_id=user.id, title=body.title)
     db.add(room)
     await db.commit()
@@ -81,8 +86,11 @@ async def create_room(body: CreateRoomIn, user: User = Depends(get_current_user)
 async def invite(room_id: int, body: InviteIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     room = await _own_room(db, room_id, user.id)
     res = await db.execute(select(Agent).where(Agent.id == body.agent_id, Agent.is_active == True))
-    if not res.scalar_one_or_none():
+    ag = res.scalar_one_or_none()
+    if not ag:
         raise HTTPException(404, "Джинн не найден")
+    if not await can_access_agent(db, ag, user.id):
+        raise HTTPException(403, "Нет доступа к этому джинну")
     exists = await db.execute(
         select(RoomMember).where(RoomMember.room_id == room_id, RoomMember.agent_id == body.agent_id)
     )

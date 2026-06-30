@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, get_current_user_optional
 from app.models.agent import Agent
 from app.models.agent_access import AgentAccess
+from app.services.access import can_access_agent
 from app.models.user import User
 from app.schemas.agent import AgentDetailOut, AgentListResponse, AgentOut, AgentUpdate
 
@@ -109,23 +110,23 @@ async def my_agents(
 
 
 @router.get("/link/{slug}")
-async def get_agent_by_link(slug: str, db: AsyncSession = Depends(get_db)):
-    """Публичная карточка агента по jinntell_link (для JinnTell Links)"""
+async def get_agent_by_link(slug: str, user: Optional[User] = Depends(get_current_user_optional), db: AsyncSession = Depends(get_db)):
+    """Карточка агента по jinntell_link (скрытые — только для списка доступа)"""
     result = await db.execute(
         select(Agent).where(Agent.jinntell_link == slug, Agent.is_active == True)
     )
     agent = result.scalar_one_or_none()
-    if not agent:
+    if not agent or not await can_access_agent(db, agent, user.id if user else None):
         raise HTTPException(404, "Агент не найден")
     return AgentOut.model_validate(agent)
 
 
 @router.get("/{agent_id}", response_model=AgentOut)
-async def get_agent(agent_id: int, db: AsyncSession = Depends(get_db)):
-    """Карточка агента"""
+async def get_agent(agent_id: int, user: Optional[User] = Depends(get_current_user_optional), db: AsyncSession = Depends(get_db)):
+    """Карточка агента (скрытые — только для списка доступа)"""
     result = await db.execute(select(Agent).where(Agent.id == agent_id, Agent.is_active == True))
     agent = result.scalar_one_or_none()
-    if not agent:
+    if not agent or not await can_access_agent(db, agent, user.id if user else None):
         raise HTTPException(404, "Агент не найден")
     return AgentOut.model_validate(agent)
 

@@ -44,6 +44,20 @@ async def _load_agent(agent_id: int) -> Optional[Agent]:
         return result.scalar_one_or_none()
 
 
+async def _can_access_agent(agent: Agent, user_id: int) -> bool:
+    """Доступ к агенту: скрытые — только владелец и список доступа."""
+    if agent.visibility != "hidden":
+        return True
+    if user_id and agent.owner_id == user_id:
+        return True
+    from app.models.agent_access import AgentAccess
+    async with async_session() as db:
+        res = await db.execute(
+            select(AgentAccess.id).where(AgentAccess.agent_id == agent.id, AgentAccess.user_id == user_id)
+        )
+        return res.scalar_one_or_none() is not None
+
+
 async def _load_room_members(room_id: int) -> list:
     """Агенты-участники комнаты room-{id}"""
     from app.models.room import RoomMember
@@ -408,6 +422,9 @@ async def chat_websocket(websocket: WebSocket, room: str):
         agent = await _load_agent(agent_id)
         if not agent:
             await websocket.close(code=4004, reason="Agent not found")
+            return
+        if not await _can_access_agent(agent, user_id):
+            await websocket.close(code=4003, reason="Доступ запрещён")
             return
 
     # Комната с несколькими джиннами — room-{id}
