@@ -389,6 +389,18 @@ export function getAgent(id: number): Promise<AgentOut> {
 export function getMyAgents(): Promise<AgentFullOut[]> {
   return apiFetch("/api/agents/my");
 }
+export function getFavoriteAgents(): Promise<AgentOut[]> {
+  return apiFetch("/api/agents/favorites");
+}
+export function getRecommendedAgents(): Promise<AgentOut[]> {
+  return apiFetch("/api/agents/recommended");
+}
+export function addFavoriteAgent(agentId: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/agents/favorites/${agentId}`, { method: "POST" });
+}
+export function removeFavoriteAgent(agentId: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/agents/favorites/${agentId}`, { method: "DELETE" });
+}
 
 /** Обновить настройки агента (бизнес / личный) */
 export function updateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {

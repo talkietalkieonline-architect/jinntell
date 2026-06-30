@@ -1,26 +1,23 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { getMyAgents, type AgentFullOut } from "@/services/api";
+import {
+  getMyAgents,
+  getFavoriteAgents,
+  getRecommendedAgents,
+  addFavoriteAgent,
+  removeFavoriteAgent,
+  type AgentOut,
+  type AgentFullOut,
+} from "@/services/api";
 
-interface Agent {
-  id: string;
-  name: string;
-  profession: string;
-  brand: string;
-  color: string;
-  group: string;
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-4">
+      <p className="text-[10px] uppercase tracking-[0.2em] mb-2" style={{ color: "var(--text-muted)" }}>{title}</p>
+      {children}
+    </div>
+  );
 }
-
-const DEMO_AGENTS: Agent[] = [
-  { id: "d1", name: "Тим", profession: "Консультант", brand: "Adidas", color: "#4CAF50", group: "Консультанты" },
-  { id: "d2", name: "Алиса", profession: "Продавец", brand: "Zara", color: "#E91E63", group: "Консультанты" },
-  { id: "d3", name: "Макс", profession: "Юрист ПДД", brand: "JinnTell", color: "#FF9800", group: "Другие" },
-  { id: "d4", name: "Психолог", profession: "Психолог", brand: "JinnTell", color: "#9C27B0", group: "Рекомендованные" },
-  { id: "d5", name: "Новости", profession: "Информатор", brand: "JinnTell", color: "#2196F3", group: "Рекомендованные" },
-  { id: "d6", name: "Лена", profession: "Стилист", brand: "H&M", color: "#F44336", group: "Популярные" },
-];
-
-const GROUPS = ["Личные", "Консультанты", "Рекомендованные", "Популярные", "Другие"];
 
 export default function MyAgentsModal({
   isOpen,
@@ -33,51 +30,60 @@ export default function MyAgentsModal({
   onOpenCity: () => void;
   onStartChat?: (agentId: number) => void;
 }) {
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [personalAgents, setPersonalAgents] = useState<AgentFullOut[]>([]);
+  const [personal, setPersonal] = useState<AgentFullOut[]>([]);
+  const [favorites, setFavorites] = useState<AgentOut[]>([]);
+  const [recommended, setRecommended] = useState<AgentOut[]>([]);
 
-  /** Загрузка личных агентов (привязанных к пользователю) */
-  const loadPersonal = useCallback(async () => {
-    try {
-      const agents = await getMyAgents();
-      // Личные — тип citizen, привязанные к пользователю
-      setPersonalAgents(agents.filter((a) => a.agent_type === "citizen"));
-    } catch {
-      // offline
-    }
+  const load = useCallback(async () => {
+    try { const m = await getMyAgents(); setPersonal(m.filter((a) => a.agent_type === "citizen")); } catch { /* offline */ }
+    try { setFavorites(await getFavoriteAgents()); } catch { /* offline */ }
+    try { setRecommended(await getRecommendedAgents()); } catch { /* offline */ }
   }, []);
 
-  useEffect(() => {
-    if (isOpen) loadPersonal();
-  }, [isOpen, loadPersonal]);
+  useEffect(() => { if (isOpen) load(); }, [isOpen, load]);
 
   if (!isOpen) return null;
 
-  const menu = selectedAgent
-    ? DEMO_AGENTS.find((a) => a.id === selectedAgent)
-    : null;
+  const startChat = (id: number) => { onStartChat?.(id); onClose(); };
+
+  const addFav = async (a: AgentOut) => {
+    setFavorites((p) => (p.some((x) => x.id === a.id) ? p : [...p, a]));
+    setRecommended((p) => p.filter((x) => x.id !== a.id));
+    try { await addFavoriteAgent(a.id); } catch { /* noop */ }
+  };
+  const removeFav = async (a: AgentOut) => {
+    setFavorites((p) => p.filter((x) => x.id !== a.id));
+    try { await removeFavoriteAgent(a.id); } catch { /* noop */ }
+  };
+
+  const Tile = ({ a, action }: { a: AgentOut; action?: React.ReactNode }) => (
+    <div
+      className="flex flex-col items-center cursor-pointer transition-all hover:scale-105"
+      style={{ width: 64 }}
+      onClick={() => startChat(a.id)}
+    >
+      <div
+        className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-bold mb-1"
+        style={{ background: `${a.color}22`, border: `1.5px solid ${a.color}44`, color: a.color }}
+      >
+        {a.name[0]}
+      </div>
+      <span className="text-[10px] text-center leading-tight truncate max-w-[60px]" style={{ color: "var(--text-secondary)" }}>{a.name}</span>
+      <span className="text-[9px] truncate max-w-[60px]" style={{ color: "var(--text-muted)" }}>{a.profession}</span>
+      {action}
+    </div>
+  );
 
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center p-4"
-      style={{ zIndex: 100 }}
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 100 }} onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
-
       <div
         className="relative w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl p-6"
-        style={{
-          background: "var(--panel-bg)",
-          border: "1px solid var(--panel-border)",
-          backdropFilter: "blur(12px)",
-        }}
+        style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", backdropFilter: "blur(12px)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-            Мои Джинны
-          </h2>
+          <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Мои Джинны</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center"
@@ -87,146 +93,57 @@ export default function MyAgentsModal({
           </button>
         </div>
 
-        {/* Меню агента */}
-        {menu ? (
-          <div>
-            <button
-              onClick={() => setSelectedAgent(null)}
-              className="text-sm mb-4"
-              style={{ color: "var(--accent)" }}
-            >
-              ‹ Назад
-            </button>
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold"
-                style={{ background: `${menu.color}22`, border: `1.5px solid ${menu.color}55`, color: menu.color }}
-              >
-                {menu.name[0]}
-              </div>
-              <div>
-                <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{menu.name}</div>
-                <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{menu.profession} • {menu.brand}</div>
-              </div>
+        {/* Личные */}
+        <Section title="Личные">
+          {personal.length > 0 ? (
+            <div className="flex flex-wrap gap-3">
+              {personal.map((a) => (
+                <Tile key={a.id} a={a} action={<span className="text-[9px]" style={{ color: "var(--accent)" }}>Личный</span>} />
+              ))}
             </div>
-            {["Начать чат", "Смотреть презентацию", "Оценить агента", "Пожаловаться", "Убрать из Моих агентов"].map((action) => (
-              <button
-                key={action}
-                className="w-full text-left px-4 py-3 rounded-xl text-sm mb-1 transition-all"
-                style={{ color: action === "Убрать из Моих агентов" ? "var(--danger)" : action === "Начать чат" ? "var(--accent)" : "var(--text-primary)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-glass-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                onClick={() => {
-                  if (action === "Начать чат" && menu) {
-                    const numId = parseInt(menu.id, 10);
-                    if (!isNaN(numId)) onStartChat?.(numId);
-                  }
-                  setSelectedAgent(null);
-                  onClose();
-                }}
-              >
-                {action}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <>
-            {/* Группы агентов */}
-            {GROUPS.map((group) => {
-              const agents = DEMO_AGENTS.filter((a) => a.group === group);
+          ) : (
+            <div className="rounded-xl px-4 py-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <p className="text-[12px] mb-1" style={{ color: "var(--text-secondary)" }}>Создайте своего AI-джинна</p>
+              <p className="text-[11px] leading-relaxed mb-2" style={{ color: "var(--text-muted)" }}>Личный джинн с вашим характером, голосом и внешностью — по подписке.</p>
+              <button className="px-4 py-2 rounded-xl text-[12px] font-medium transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Подписаться</button>
+            </div>
+          )}
+        </Section>
 
-              {/* === Личные агенты (API + подписка) === */}
-              if (group === "Личные") {
-                return (
-                  <div key={group} className="mb-4">
-                    <p className="text-[10px] uppercase tracking-[0.2em] mb-2" style={{ color: "var(--text-muted)" }}>
-                      {group}
-                    </p>
-                    {personalAgents.length > 0 ? (
-                      <div className="flex flex-wrap gap-3">
-                        {personalAgents.map((agent) => (
-                          <div
-                            key={agent.id}
-                            className="flex flex-col items-center cursor-pointer transition-all hover:scale-105"
-                            onClick={() => setSelectedAgent(String(agent.id))}
-                            style={{ width: "60px" }}
-                          >
-                            <div
-                              className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-bold mb-1"
-                              style={{ background: `${agent.color}22`, border: `1.5px solid ${agent.color}44`, color: agent.color }}
-                            >
-                              {agent.name[0]}
-                            </div>
-                            <span className="text-[10px] text-center leading-tight" style={{ color: "var(--text-secondary)" }}>
-                              {agent.name}
-                            </span>
-                            <span className="text-[9px]" style={{ color: "var(--accent)" }}>
-                              Личный
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl px-4 py-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                        <p className="text-[12px] mb-1" style={{ color: "var(--text-secondary)" }}>
-                          Создайте своего AI-агента
-                        </p>
-                        <p className="text-[11px] leading-relaxed mb-2" style={{ color: "var(--text-muted)" }}>
-                          Личный агент с вашим характером, голосом и внешностью — доступно по подписке.
-                        </p>
-                        <button className="px-4 py-2 rounded-xl text-[12px] font-medium transition-all hover:scale-[1.02]"
-                          style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
-                          Подписаться
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              if (agents.length === 0) return null;
-              return (
-                <div key={group} className="mb-4">
-                  <p className="text-[10px] uppercase tracking-[0.2em] mb-2" style={{ color: "var(--text-muted)" }}>
-                    {group}
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    {agents.map((agent) => (
-                      <div
-                        key={agent.id}
-                        className="flex flex-col items-center cursor-pointer transition-all hover:scale-105"
-                        onClick={() => setSelectedAgent(agent.id)}
-                        style={{ width: "60px" }}
-                      >
-                        <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-bold mb-1"
-                          style={{ background: `${agent.color}22`, border: `1.5px solid ${agent.color}44`, color: agent.color }}
-                        >
-                          {agent.name[0]}
-                        </div>
-                        <span className="text-[10px] text-center leading-tight" style={{ color: "var(--text-secondary)" }}>
-                          {agent.name}
-                        </span>
-                        <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>
-                          {agent.brand}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Кнопка Город Джиннов */}
-            <button
-              onClick={() => { onClose(); onOpenCity(); }}
-              className="w-full py-3 rounded-xl text-sm font-semibold mt-2 transition-all hover:scale-[1.02]"
-              style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
-            >
-              Город Джиннов
-            </button>
-          </>
+        {/* Избранное */}
+        {favorites.length > 0 && (
+          <Section title="Избранное">
+            <div className="flex flex-wrap gap-3">
+              {favorites.map((a) => (
+                <Tile key={a.id} a={a} action={
+                  <button onClick={(e) => { e.stopPropagation(); removeFav(a); }} className="text-[9px]" style={{ color: "var(--text-muted)" }}>убрать</button>
+                } />
+              ))}
+            </div>
+          </Section>
         )}
+
+        {/* Рекомендованные */}
+        {recommended.length > 0 && (
+          <Section title="Рекомендованные">
+            <div className="flex flex-wrap gap-3">
+              {recommended.map((a) => (
+                <Tile key={a.id} a={a} action={
+                  <button onClick={(e) => { e.stopPropagation(); addFav(a); }} className="text-[9px]" style={{ color: "var(--accent)" }}>+ в избранное</button>
+                } />
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {/* Город Джиннов */}
+        <button
+          onClick={() => { onClose(); onOpenCity(); }}
+          className="w-full py-3 rounded-xl text-sm font-semibold mt-2 transition-all hover:scale-[1.02]"
+          style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
+        >
+          Город Джиннов
+        </button>
       </div>
     </div>
   );
