@@ -62,7 +62,7 @@ async def _qdrant_request(method: str, path: str, json_data: dict = None) -> dic
 async def ensure_collection(agent_id: int) -> bool:
     """Создать коллекцию если не существует. Возвращает True если успешно."""
     name = _collection_name(agent_id)
-    dims = get_embedding_dimensions()
+    dims = await get_embedding_dimensions()
 
     # Проверяем существование
     result = await _qdrant_request("GET", f"/collections/{name}")
@@ -221,12 +221,12 @@ async def get_stats(agent_id: int) -> RAGStats:
         return RAGStats(
             total_chunks=0,
             collection_exists=False,
-            vector_dimensions=get_embedding_dimensions(),
+            vector_dimensions=await get_embedding_dimensions(),
         )
 
     info = result.get("result", {})
     return RAGStats(
         total_chunks=info.get("points_count", 0),
         collection_exists=True,
-        vector_dimensions=info.get("config", {}).get("params", {}).get("vectors", {}).get("size", get_embedding_dimensions()),
+        vector_dimensions=info.get("config", {}).get("params", {}).get("vectors", {}).get("size", await get_embedding_dimensions()),
     )

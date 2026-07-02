@@ -973,6 +973,14 @@ INTEGRATION_KEYS = [
     {"key": "YANDEX_SPEECHKIT_API_KEY", "label": "Yandex SpeechKit — API-ключ"},
     {"key": "YANDEX_SPEECHKIT_FOLDER_ID", "label": "Yandex SpeechKit — Folder ID"},
     {"key": "YANDEX_EMBEDDING_API_KEY", "label": "Yandex Embeddings — API-ключ (роль ai.languageModels.user; folder тот же, что у SpeechKit)"},
+    {"key": "GEMINI_API_KEY", "label": "Gemini — API-ключ (нужен прокси из РФ)"},
+    {"key": "OPENAI_API_KEY", "label": "OpenAI — API-ключ"},
+    {"key": "JINA_API_KEY", "label": "Jina — API-ключ"},
+]
+
+EMBEDDING_CONFIG = [
+    {"key": "EMBEDDING_PROVIDER", "label": "Провайдер эмбеддингов", "options": ["yandex", "gemini", "openai", "jina"]},
+    {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (для Gemini/OpenAI/Jina из РФ)", "options": None},
 ]
 
 
@@ -1001,6 +1009,29 @@ async def admin_set_integration(
 ):
     """Установить значение ключа интеграции."""
     if key not in {k["key"] for k in INTEGRATION_KEYS}:
+        raise HTTPException(404, "Неизвестный ключ")
+    from app.services.settings_store import set_setting
+    await set_setting(key, value.strip())
+    return {"ok": True}
+
+
+@router.get("/embedding-config")
+async def admin_get_embedding_config(admin: User = Depends(get_admin_user)):
+    """Провайдер эмбеддингов + прокси (значения открыты)."""
+    from app.services.settings_store import get_setting
+    out = []
+    for it in EMBEDDING_CONFIG:
+        out.append({"key": it["key"], "label": it["label"], "options": it["options"], "value": await get_setting(it["key"]) or ""})
+    return out
+
+
+@router.patch("/embedding-config/{key}")
+async def admin_set_embedding_config(
+    key: str,
+    value: str = Body(..., embed=True),
+    admin: User = Depends(get_admin_user),
+):
+    if key not in {k["key"] for k in EMBEDDING_CONFIG}:
         raise HTTPException(404, "Неизвестный ключ")
     from app.services.settings_store import set_setting
     await set_setting(key, value.strip())

@@ -10,6 +10,26 @@ import httpx
 from app.core.config import settings
 
 
+async def _emb_cfg(name: str, default: str = "") -> str:
+    """Настройка из БД (settings_store) с фолбэком на env/config."""
+    try:
+        from app.services.settings_store import get_setting
+        v = await get_setting(name)
+        if v:
+            return v
+    except Exception:
+        pass
+    return default
+
+
+async def _emb_client() -> "httpx.AsyncClient":
+    """HTTP-клиент; если задан OUTBOUND_PROXY — ходим через него (зарубежные провайдеры из РФ)."""
+    proxy = await _emb_cfg("OUTBOUND_PROXY")
+    if proxy:
+        return httpx.AsyncClient(timeout=60.0, proxy=proxy)
+    return httpx.AsyncClient(timeout=60.0)
+
+
 async def get_embeddings(texts: List[str]) -> List[List[float]]:
     """
     Получить эмбеддинги для списка текстов.
@@ -18,26 +38,15 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
     if not texts:
         return []
 
-    provider = settings.EMBEDDING_PROVIDER
+    provider = (await _emb_cfg("EMBEDDING_PROVIDER", settings.EMBEDDING_PROVIDER)) or "yandex"
 
-    if provider == "yandex":
-        return await _embed_yandex(texts)
-
-    if provider == "gemini" and settings.GEMINI_API_KEY:
+    if provider == "gemini":
         return await _embed_gemini(texts)
-    elif provider == "jina" and settings.JINA_API_KEY:
+    if provider == "jina":
         return await _embed_jina(texts)
-    elif provider == "openai" and settings.OPENAI_API_KEY:
+    if provider == "openai":
         return await _embed_openai(texts)
-    else:
-        # Fallback chain: gemini → jina → openai → error
-        if settings.GEMINI_API_KEY:
-            return await _embed_gemini(texts)
-        if settings.JINA_API_KEY:
-            return await _embed_jina(texts)
-        if settings.OPENAI_API_KEY:
-            return await _embed_openai(texts)
-        raise RuntimeError("No embedding provider configured. Set GEMINI_API_KEY, JINA_API_KEY or OPENAI_API_KEY.")
+    return await _embed_yandex(texts)
 
 
 async def get_embedding(text: str) -> List[float]:
@@ -78,10 +87,13 @@ async def _embed_gemini(texts: List[str]) -> List[List[float]]:
     Работает из РФ через generativelanguage.googleapis.com.
     Batch: до 100 текстов за запрос.
     """
+    key = await _emb_cfg("GEMINI_API_KEY", settings.GEMINI_API_KEY)
+    if not key:
+        raise RuntimeError("Gemini не настроен: нет GEMINI_API_KEY")
     model = "text-embedding-004"
     all_embeddings = []
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with await _emb_client() as client:
         # Gemini batchEmbedContents — до 100 текстов за раз
         batch_size = 100
         for i in range(0, len(texts), batch_size):
@@ -96,7 +108,7 @@ async def _embed_gemini(texts: List[str]) -> List[List[float]]:
             ]
 
             r = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents?key={settings.GEMINI_API_KEY}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents?key={key}",
                 headers={"Content-Type": "application/json"},
                 json={"requests": requests_list},
             )
@@ -115,11 +127,12 @@ async def _embed_gemini(texts: List[str]) -> List[List[float]]:
 
 async def _embed_jina(texts: List[str]) -> List[List[float]]:
     """Jina Embeddings v3 — 1024 dims, multilingual. Может быть заблокирован из РФ."""
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    key = await _emb_cfg("JINA_API_KEY", settings.JINA_API_KEY)
+    async with await _emb_client() as client:
         r = await client.post(
             "https://api.jina.ai/v1/embeddings",
             headers={
-                "Authorization": f"Bearer {settings.JINA_API_KEY}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -145,11 +158,12 @@ async def _embed_jina(texts: List[str]) -> List[List[float]]:
 async def _embed_openai(texts: List[str]) -> List[List[float]]:
     """OpenAI text-embedding-3-small — 1536 dims."""
     model = "text-embedding-3-small"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    key = await _emb_cfg("OPENAI_API_KEY", settings.OPENAI_API_KEY)
+    async with await _emb_client() as client:
         r = await client.post(
             "https://api.openai.com/v1/embeddings",
             headers={
-                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -166,9 +180,9 @@ async def _embed_openai(texts: List[str]) -> List[List[float]]:
         return [item["embedding"] for item in embeddings_data]
 
 
-def get_embedding_dimensions() -> int:
+async def get_embedding_dimensions() -> int:
     """Размерность вектора в зависимости от провайдера."""
-    provider = settings.EMBEDDING_PROVIDER
+    provider = (await _emb_cfg("EMBEDDING_PROVIDER", settings.EMBEDDING_PROVIDER)) or "yandex"
     
     if provider == "yandex":
         return 256  # Yandex text-search embeddings
