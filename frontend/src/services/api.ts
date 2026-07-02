@@ -420,6 +420,9 @@ export function addContact(identifier: string): Promise<ContactOut> {
 export function removeContact(userId: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/contacts/${userId}`, { method: "DELETE" });
 }
+export function searchUsers(q: string): Promise<ContactOut[]> {
+  return apiFetch(`/api/contacts/search?q=${encodeURIComponent(q)}`);
+}
 export function dmRoom(a: number, b: number): string {
   const [lo, hi] = a < b ? [a, b] : [b, a];
   return `dm-${lo}-${hi}`;

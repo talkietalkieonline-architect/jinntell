@@ -61,6 +61,7 @@ export default function SettingsModal({
   const [aboutField, setAboutField] = useState("");
   const [gender, setGender] = useState("");
   const [personaGender, setPersonaGender] = useState("");
+  const [username, setUsername] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -93,6 +94,7 @@ export default function SettingsModal({
       setFirstName(user.first_name || "");
       setLastName(user.last_name || "");
       setDisplayName(user.display_name || "");
+      setUsername(user.jinntell_link || "");
       setEmailField(user.email || "");
       setPhone(user.phone || "");
       setBirthDate(user.birth_date || "");
@@ -141,6 +143,7 @@ const _av = user.assistant_voice || "ermil";
     try {
       await updateMe({
         display_name: displayName || undefined,
+        jinntell_link: username || undefined,
         first_name: firstName || undefined,
         last_name: lastName || undefined,
         email: emailField || undefined,
@@ -298,6 +301,11 @@ const _av = user.assistant_voice || "ermil";
               <div>
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ник · отображаемое имя</label>
                 <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Кем хотите быть (хоть Дарт Вейдер)" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>@username · чтобы вас находили</label>
+                <input type="text" value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase())} placeholder="username" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
               </div>
 
               <div>

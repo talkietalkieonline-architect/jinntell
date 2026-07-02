@@ -9,6 +9,7 @@ import {
   getContacts,
   addContact,
   removeContact,
+  searchUsers,
   mediaUrl,
   type AgentOut,
   type AgentFullOut,
@@ -47,6 +48,7 @@ export default function MyAgentsModal({
   const [contactInput, setContactInput] = useState("");
   const [contactBusy, setContactBusy] = useState(false);
   const [contactError, setContactError] = useState("");
+  const [searchResults, setSearchResults] = useState<ContactOut[]>([]);
 
   const load = useCallback(async () => {
     try { const m = await getMyAgents(); setPersonal(m.filter((a) => a.agent_type === "citizen")); } catch { /* offline */ }
@@ -56,6 +58,13 @@ export default function MyAgentsModal({
   }, []);
 
   useEffect(() => { if (isOpen) { setTab(initialTab); load(); } }, [isOpen, initialTab, load]);
+
+  useEffect(() => {
+    const q = contactInput.trim();
+    if (q.length < 2) { setSearchResults([]); return; }
+    const t = setTimeout(() => { searchUsers(q).then(setSearchResults).catch(() => setSearchResults([])); }, 300);
+    return () => clearTimeout(t);
+  }, [contactInput]);
 
   if (!isOpen) return null;
 
@@ -84,6 +93,11 @@ export default function MyAgentsModal({
     } finally {
       setContactBusy(false);
     }
+  };
+  const addFromResult = async (u: ContactOut) => {
+    setContacts((p) => (p.some((x) => x.id === u.id) ? p : [u, ...p]));
+    setContactInput(""); setSearchResults([]);
+    try { await addContact(u.jinntell_link || u.phone); } catch { /* noop */ }
   };
   const handleRemoveContact = async (id: number) => {
     setContacts((p) => p.filter((x) => x.id !== id));
@@ -161,13 +175,30 @@ export default function MyAgentsModal({
         ) : (
           <>
             <div className="flex gap-2 mb-3">
-              <input value={contactInput} onChange={(e) => setContactInput(e.target.value)} placeholder="Телефон или jinntell-ссылка"
+              <input value={contactInput} onChange={(e) => setContactInput(e.target.value)} placeholder="Имя, @username или телефон"
                 className="flex-1 rounded-xl px-3 py-2 text-sm bg-transparent outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
               <button onClick={handleAddContact} disabled={contactBusy} className="px-3 py-2 rounded-xl text-sm font-medium" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
                 {contactBusy ? "..." : "Добавить"}
               </button>
             </div>
             {contactError && <p className="text-[11px] mb-2" style={{ color: "#e06b6b" }}>{contactError}</p>}
+
+            {searchResults.length > 0 && (
+              <div className="flex flex-col gap-1 mb-2">
+                {searchResults.map((u) => (
+                  <button key={u.id} onClick={() => addFromResult(u)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass-hover)" }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 relative overflow-hidden" style={{ background: `${u.avatar_color || "#6c7bff"}22`, border: `1.5px solid ${u.avatar_color || "#6c7bff"}55`, color: u.avatar_color || "#6c7bff" }}>
+                      {u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="absolute inset-0 w-full h-full object-cover rounded-full" /> : u.display_name[0]}
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-[13px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}</span>
+                      <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{u.jinntell_link ? `@${u.jinntell_link}` : u.phone}</span>
+                    </div>
+                    <span className="text-[11px] shrink-0" style={{ color: "var(--accent)" }}>+ добавить</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {contacts.length === 0 ? (
               <p className="text-[12px] text-center py-6" style={{ color: "var(--text-muted)", opacity: 0.7 }}>Пока нет контактов. Добавьте человека по телефону или ссылке.</p>
