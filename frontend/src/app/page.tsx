@@ -113,7 +113,7 @@ export default function Home() {
         const map = new Map(prev.map((c) => [c.room, c] as const));
         for (const ch of chats) {
           if (!map.has(ch.room) && !archivedRooms.has(ch.room)) {
-            map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, count: ch.count || undefined });
+            map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, count: ch.count || undefined });
           }
         }
         return Array.from(map.values());
@@ -186,11 +186,11 @@ export default function Home() {
   }, [inviteContext, openAgentChat, setRoom]);
 
   /** Открыть личный диалог с контактом (человек↔человек) */
-  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null }) => {
+  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null }) => {
     const uid = getUserId();
     if (!uid) return;
     const r = dmRoom(uid, c.id);
-    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff" }]));
+    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null }]));
     setRoom(r);
     setView("chat");
     setAgentsOpen(false);
@@ -348,6 +348,7 @@ export default function Home() {
           bottomPad={bottomBarH}
           autoSpeak={micActive || drive}
           assistantPhoto={assistantPhoto}
+          agentPhoto={agentInfo?.photo_url || null}
           agentInfo={agentInfo}
           topAlign={room === assistantRoom}
           headerSlot={room === assistantRoom ? (

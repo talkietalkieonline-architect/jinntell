@@ -9,6 +9,7 @@ import {
   getContacts,
   addContact,
   removeContact,
+  mediaUrl,
   type AgentOut,
   type AgentFullOut,
   type ContactOut,
@@ -177,8 +178,8 @@ export default function MyAgentsModal({
                     style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }} onClick={() => startDM(c)}>
                     <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 relative"
                       style={{ background: `${c.avatar_color || "#6c7bff"}22`, border: `1.5px solid ${c.avatar_color || "#6c7bff"}55`, color: c.avatar_color || "#6c7bff" }}>
-                      {c.display_name[0]}
-                      {c.is_online && <span className="absolute -bottom-0 -right-0 w-2.5 h-2.5 rounded-full bg-green-500" style={{ border: "1.5px solid var(--panel-bg)" }} />}
+                      {c.avatar_url ? <img src={c.avatar_url.startsWith("data:") ? c.avatar_url : mediaUrl(c.avatar_url)} alt="" className="absolute inset-0 w-full h-full object-cover rounded-full" /> : c.display_name[0]}
+                      {c.is_online && <span className="absolute -bottom-0 -right-0 w-2.5 h-2.5 rounded-full bg-green-500" style={{ border: "1.5px solid var(--panel-bg)", zIndex: 1 }} />}
                     </div>
                     <div className="flex flex-col min-w-0 flex-1">
                       <span className="text-[13px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{c.display_name}</span>

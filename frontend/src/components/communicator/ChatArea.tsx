@@ -386,6 +386,7 @@ export default function ChatArea({
   bottomPad = 130,
   autoSpeak = false,
   assistantPhoto = null,
+  agentPhoto = null,
   agentInfo,
   headerSlot = null,
   topAlign = false,
@@ -398,6 +399,7 @@ export default function ChatArea({
   /** Автоозвучка ответов агентов (голосовой режим) */
   autoSpeak?: boolean;
   assistantPhoto?: string | null;
+  agentPhoto?: string | null;
   agentInfo?: { id: number; name: string; color: string; greeting?: string; tts_voice_id?: string; tts_emotion?: string } | null;
   headerSlot?: ReactNode;
   topAlign?: boolean;
@@ -528,6 +530,8 @@ export default function ChatArea({
                     >
                       {msg.sender !== "agent" && assistantPhoto ? (
                         <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" />
+                      ) : msg.sender === "agent" && agentPhoto ? (
+                        <img src={agentPhoto.startsWith("data:") ? agentPhoto : mediaUrl(agentPhoto)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         msg.name[0]
                       )}

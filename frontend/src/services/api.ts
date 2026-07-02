@@ -408,6 +408,7 @@ export interface ContactOut {
   phone: string;
   jinntell_link?: string | null;
   avatar_color?: string | null;
+  avatar_url?: string | null;
   is_online: boolean;
 }
 export function getContacts(): Promise<ContactOut[]> {
@@ -429,6 +430,7 @@ export interface MyChat {
   kind: string;
   name: string;
   color: string;
+  photo?: string | null;
   count: number;
 }
 export function getMyChats(): Promise<MyChat[]> {
