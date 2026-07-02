@@ -1,4 +1,5 @@
 """API контактов (адресная книга людей) и личных диалогов человек↔человек."""
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,6 +31,18 @@ class AddContactIn(BaseModel):
     identifier: str  # телефон или jinntell-ссылка
 
 
+def _norm_phone(s: str) -> str:
+    """Приводим телефон к формату +7XXXXXXXXXX (8..., 7..., 10 цифр)."""
+    d = re.sub(r"\D", "", s or "")
+    if len(d) == 11 and d[0] == "8":
+        d = "7" + d[1:]
+    if len(d) == 11 and d[0] == "7":
+        return "+" + d
+    if len(d) == 10:
+        return "+7" + d
+    return s
+
+
 def dm_room(a: int, b: int) -> str:
     lo, hi = sorted((a, b))
     return f"dm-{lo}-{hi}"
@@ -48,7 +61,10 @@ async def add_contact(body: AddContactIn, user: User = Depends(get_current_user)
     ident = (body.identifier or "").strip()
     if not ident:
         raise HTTPException(400, "Укажите телефон или ссылку")
-    res = await db.execute(select(User).where(or_(User.phone == ident, User.jinntell_link == ident)))
+    norm = _norm_phone(ident)
+    res = await db.execute(
+        select(User).where(or_(User.phone == norm, User.phone == ident, User.jinntell_link == ident))
+    )
     other = res.scalar_one_or_none()
     if not other:
         raise HTTPException(404, "Пользователь не найден по телефону/ссылке")
