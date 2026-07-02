@@ -1083,6 +1083,8 @@ export interface MessageOut {
   sender_agent_id?: number;
   sender_name: string;
   text: string;
+  media_url?: string | null;
+  media_type?: string | null;
   created_at: string;
   context?: boolean;
 }
@@ -1167,6 +1169,17 @@ export async function uploadUserAvatar(file: File): Promise<{ avatar_url: string
 }
 export function deleteUserAvatar(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/avatar", { method: "DELETE" });
+}
+export async function uploadChatMedia(file: File): Promise<{ url: string; type: string }> {
+  const token = getToken();
+  const f = new FormData();
+  f.append("file", file);
+  const res = await fetch(`${API_BASE}/api/chat/media`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: f });
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, b.detail || "Ошибка загрузки");
+  }
+  return res.json();
 }
 export function deleteAssistantPhoto(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/assistant-photo", { method: "DELETE" });

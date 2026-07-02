@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   getToken,
   getChatHistory,
+  uploadChatMedia,
   connectChat,
   type MessageOut,
 } from "@/services/api";
@@ -86,6 +87,8 @@ function apiMsgToChat(msg: MessageOut, myId?: number | null): ChatMessage {
     color: msg.sender_type === "user" ? (otherUser ? "var(--accent)" : "") : "var(--accent)",
     timestamp: new Date(msg.created_at),
     context: msg.context,
+    mediaUrl: msg.media_url || undefined,
+    mediaType: (msg.media_type as ChatMessage["mediaType"]) || undefined,
   };
 }
 
@@ -160,6 +163,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
           text: data.text,
           color: data.sender_type === "user" ? (_other ? "var(--accent)" : "") : (data.agent_color || "var(--accent)"),
           timestamp: new Date(data.created_at),
+          mediaUrl: data.media_url || undefined,
+          mediaType: data.media_type || undefined,
         };
         setMessages((prev) => [...prev, chatMsg]);
         setIsTyping(false);
@@ -332,30 +337,17 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
 
   // Прикрепить медиа
   const attachMedia = useCallback(
-    (file: File) => {
-      const url = URL.createObjectURL(file);
-      const isVideo = file.type.startsWith("video/");
-      const mediaMsg: ChatMessage = {
-        id: String(msgCounter.current++),
-        sender: "user",
-        name: "",
-        text: "",
-        color: "",
-        timestamp: new Date(),
-        mediaUrl: url,
-        mediaType: isVideo ? "video" : "image",
-      };
-      setMessages((prev) => [...prev, mediaMsg]);
-
-      if (!isConnected) {
-        if (room.startsWith("agent-")) {
-          offlineAgentReply();
-        } else {
-          offlineAssistantReply();
-        }
-      }
+    (file: File, asNote = false) => {
+      uploadChatMedia(file)
+        .then(({ url, type }) => {
+          const mt = asNote ? "note" : type;
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ text: "", media_url: url, media_type: mt }));
+          }
+        })
+        .catch(() => {});
     },
-    [isConnected, offlineAssistantReply, offlineAgentReply, room]
+    []
   );
 
   return {

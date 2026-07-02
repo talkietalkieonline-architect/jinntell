@@ -13,7 +13,7 @@ export interface ChatMessage {
   isVoice?: boolean;
   /** URL медиа (картинка/видео) */
   mediaUrl?: string;
-  mediaType?: "image" | "video";
+  mediaType?: "image" | "video" | "note";
   /** Реплика из другой комнаты (контекст) — показываем приглушённо */
   context?: boolean;
 }
@@ -296,23 +296,15 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
         {msg.context && (
           <div className="text-[9px] mb-1 italic" style={{ color: "var(--text-muted)" }}>💬 из комнаты</div>
         )}
-        {/* Медиа (картинка / видео) */}
-        {msg.mediaUrl && msg.mediaType === "image" && (
-          <img
-            src={msg.mediaUrl}
-            alt=""
-            className="rounded-lg mb-2 max-w-full"
-            style={{ maxHeight: "240px", objectFit: "cover" }}
-          />
-        )}
-        {msg.mediaUrl && msg.mediaType === "video" && (
-          <video
-            src={msg.mediaUrl}
-            controls
-            className="rounded-lg mb-2 max-w-full"
-            style={{ maxHeight: "240px" }}
-          />
-        )}
+        {/* Медиа (картинка / видео / видео-заметка) */}
+        {msg.mediaUrl && (() => {
+          const raw = msg.mediaUrl as string;
+          const src = raw.startsWith("blob:") || raw.startsWith("data:") ? raw : mediaUrl(raw);
+          if (msg.mediaType === "image") return <img src={src} alt="" className="rounded-lg mb-2 max-w-full" style={{ maxHeight: "240px", objectFit: "cover" }} />;
+          if (msg.mediaType === "note") return <video src={src} controls autoPlay muted loop playsInline className="mb-2" style={{ width: 220, height: 220, objectFit: "cover", borderRadius: 24 }} />;
+          if (msg.mediaType === "video") return <video src={src} controls playsInline className="rounded-lg mb-2 max-w-full" style={{ maxHeight: "240px" }} />;
+          return null;
+        })()}
 
         {/* Режим голосового сообщения (Telegram) */}
         {showAsVoice && msg.text ? (
