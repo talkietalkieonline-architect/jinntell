@@ -21,6 +21,7 @@ class ContactOut(BaseModel):
     phone: str
     jinntell_link: Optional[str] = None
     avatar_color: Optional[str] = None
+    avatar_url: Optional[str] = None
     is_online: bool = False
 
     class Config:

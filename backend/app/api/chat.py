@@ -7,6 +7,8 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 import re
 
+from typing import Optional
+
 from pydantic import BaseModel
 
 from app.models.agent import Agent
@@ -62,6 +64,7 @@ class MyChatOut(BaseModel):
     kind: str  # dm | room
     name: str
     color: str = "#6c7bff"
+    photo: Optional[str] = None
     count: int = 0
 
 
@@ -85,7 +88,7 @@ async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = De
         ures = await db.execute(select(User).where(User.id == other_id))
         ou = ures.scalar_one_or_none()
         if ou:
-            out.append(MyChatOut(room=room, kind="dm", name=ou.display_name, color=ou.avatar_color or "#6c7bff"))
+            out.append(MyChatOut(room=room, kind="dm", name=ou.display_name, color=ou.avatar_color or "#6c7bff", photo=ou.avatar_url))
 
     # Мои комнаты (владелец)
     rres = await db.execute(select(Room).where(Room.owner_user_id == user.id))
