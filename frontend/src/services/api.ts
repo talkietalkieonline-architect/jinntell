@@ -598,6 +598,13 @@ export function adminGetIntegrations(): Promise<IntegrationItem[]> {
 export function adminSetIntegration(key: string, value: string): Promise<{ ok: boolean }> {
   return apiFetch(`/api/admin/integrations/${key}`, { method: "PATCH", body: JSON.stringify({ value }) });
 }
+export interface EmbeddingConfigItem { key: string; label: string; options: string[] | null; value: string; }
+export function adminGetEmbeddingConfig(): Promise<EmbeddingConfigItem[]> {
+  return apiFetch("/api/admin/embedding-config");
+}
+export function adminSetEmbeddingConfig(key: string, value: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/admin/embedding-config/${key}`, { method: "PATCH", body: JSON.stringify({ value }) });
+}
 
 // ═══════════════════════════════════════════════
 //  ADMIN: SYSTEM INFO

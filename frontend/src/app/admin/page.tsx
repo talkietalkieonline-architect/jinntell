@@ -15,7 +15,10 @@ import {
   adminGetCoreAgents,
   adminGetIntegrations,
   adminSetIntegration,
+  adminGetEmbeddingConfig,
+  adminSetEmbeddingConfig,
   type IntegrationItem,
+  type EmbeddingConfigItem,
   adminGetSystemInfo,
   adminGetContractors,
   adminCreateContractor,
@@ -99,6 +102,8 @@ export default function AdminPage() {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [intDraft, setIntDraft] = useState<Record<string, string>>({});
+  const [embConfig, setEmbConfig] = useState<EmbeddingConfigItem[]>([]);
+  const [embDraft, setEmbDraft] = useState<Record<string, string>>({});
 
 
   // Contractors state
@@ -196,6 +201,7 @@ export default function AdminPage() {
 
   const loadIntegrations = useCallback(async () => {
     try { setIntegrations(await adminGetIntegrations()); } catch {}
+    try { setEmbConfig(await adminGetEmbeddingConfig()); } catch {}
   }, []);
 
   useEffect(() => {
@@ -1034,6 +1040,26 @@ export default function AdminPage() {
           {tab === "integrations" && (
             <div className="space-y-4">
               <p className="text-sm text-gray-400">Ключи интеграций. Сохраняются в БД и применяются сразу — без правки .env.</p>
+
+              <div className="bg-gray-900 border border-amber-800/40 rounded-lg p-4 space-y-3">
+                <p className="text-sm text-amber-400 font-medium">Эмбеддинги (семантика / RAG)</p>
+                {embConfig.map((c) => (
+                  <div key={c.key} className="flex items-center gap-2">
+                    <span className="text-sm text-gray-300 w-2/5">{c.label}</span>
+                    {c.options ? (
+                      <select value={embDraft[c.key] ?? c.value} onChange={async (e) => { setEmbDraft({ ...embDraft, [c.key]: e.target.value }); await adminSetEmbeddingConfig(c.key, e.target.value); loadIntegrations(); }} className="flex-1 px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500">
+                        <option value="">— выбрать —</option>
+                        {c.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <>
+                        <input value={embDraft[c.key] ?? c.value} onChange={(e) => setEmbDraft({ ...embDraft, [c.key]: e.target.value })} placeholder="http://user:pass@host:port (пусто = без прокси)" className="flex-1 px-3 py-2 bg-gray-950 border border-gray-700 rounded-lg text-sm text-white outline-none focus:border-amber-500" />
+                        <button onClick={async () => { await adminSetEmbeddingConfig(c.key, embDraft[c.key] ?? c.value); loadIntegrations(); }} className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-500 text-black">OK</button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
               {integrations.map((it) => (
                 <div key={it.key} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
