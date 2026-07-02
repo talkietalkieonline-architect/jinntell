@@ -49,7 +49,8 @@ class User(Base):
     # Настройки
     theme: Mapped[str] = mapped_column(String(50), default="light")
     avatar_color: Mapped[str] = mapped_column(String(20), default="#d4a843")
-    gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # реальный (приватно)
+    persona_gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # образ (публично)
     interests: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     background: Mapped[str] = mapped_column(String(50), default="soft")

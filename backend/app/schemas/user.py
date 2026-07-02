@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     about: Optional[str] = None
     bio: Optional[str] = None
     gender: Optional[str] = None
+    persona_gender: Optional[str] = None
     interests: Optional[str] = None
     avatar_url: Optional[str] = None
     # Персонализация помощника
@@ -60,6 +61,7 @@ class UserOut(BaseModel):
             about=user.about,
             bio=user.bio,
             gender=user.gender,
+            persona_gender=user.persona_gender,
             interests=user.interests,
             avatar_url=user.avatar_url,
             assistant_name=user.assistant_name or "Джим",
@@ -87,6 +89,7 @@ class UserUpdate(BaseModel):
     city: Optional[str] = None
     about: Optional[str] = None
     gender: Optional[str] = None
+    persona_gender: Optional[str] = None
     interests: Optional[str] = None
     avatar_url: Optional[str] = None
     # Персонализация помощника

@@ -53,6 +53,8 @@ async def update_me(
         user.city = body.city
     if body.gender is not None:
         user.gender = body.gender
+    if body.persona_gender is not None:
+        user.persona_gender = body.persona_gender
     if body.interests is not None:
         user.interests = body.interests
     if body.avatar_url is not None:
