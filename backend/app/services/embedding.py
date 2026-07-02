@@ -20,6 +20,9 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
 
     provider = settings.EMBEDDING_PROVIDER
 
+    if provider == "yandex":
+        return await _embed_yandex(texts)
+
     if provider == "gemini" and settings.GEMINI_API_KEY:
         return await _embed_gemini(texts)
     elif provider == "jina" and settings.JINA_API_KEY:
@@ -41,6 +44,32 @@ async def get_embedding(text: str) -> List[float]:
     """Получить эмбеддинг для одного текста."""
     results = await get_embeddings([text])
     return results[0] if results else []
+
+
+async def _embed_yandex(texts: List[str]) -> List[List[float]]:
+    """Yandex Foundation Models — text-search-doc, 256 dims. Работает из РФ.
+    Ключ и folder — из настроек (settings_store); фолбэк ключа на SpeechKit."""
+    from app.services.settings_store import get_setting
+    key = await get_setting("YANDEX_EMBEDDING_API_KEY") or await get_setting("YANDEX_SPEECHKIT_API_KEY")
+    folder = await get_setting("YANDEX_SPEECHKIT_FOLDER_ID")
+    if not key or not folder:
+        raise RuntimeError("Yandex embeddings не настроены: нужен API-ключ (роль ai.languageModels.user) и folder_id")
+    model_uri = f"emb://{folder}/text-search-doc/latest"
+    out: List[List[float]] = []
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for t in texts:
+            r = await client.post(
+                "https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding",
+                headers={"Authorization": f"Api-Key {key}", "x-folder-id": folder, "Content-Type": "application/json"},
+                json={"modelUri": model_uri, "text": (t or "")[:2000]},
+            )
+            if r.status_code != 200:
+                print(f"[embedding] Yandex error: {r.status_code} {r.text[:300]}")
+                raise RuntimeError(f"Yandex embedding error: {r.status_code}")
+            data = r.json()
+            out.append([float(x) for x in data["embedding"]])
+    print(f"[embedding] Yandex OK: {len(texts)} texts, {len(out[0]) if out else 0}d")
+    return out
 
 
 async def _embed_gemini(texts: List[str]) -> List[List[float]]:
@@ -141,6 +170,9 @@ def get_embedding_dimensions() -> int:
     """Размерность вектора в зависимости от провайдера."""
     provider = settings.EMBEDDING_PROVIDER
     
+    if provider == "yandex":
+        return 256  # Yandex text-search embeddings
+
     if provider == "gemini" or (not provider and settings.GEMINI_API_KEY):
         return 768  # text-embedding-004
     elif provider == "jina" or (not provider and settings.JINA_API_KEY):

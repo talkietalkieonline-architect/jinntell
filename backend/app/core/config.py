@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION_PREFIX: str = "jinntell"
 
-    EMBEDDING_PROVIDER: str = "jina"
+    EMBEDDING_PROVIDER: str = "yandex"
     JINA_API_KEY: str = ""
     EMBEDDING_MODEL: str = "jina-embeddings-v3"
 

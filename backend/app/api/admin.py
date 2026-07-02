@@ -972,6 +972,7 @@ async def admin_test_agent(
 INTEGRATION_KEYS = [
     {"key": "YANDEX_SPEECHKIT_API_KEY", "label": "Yandex SpeechKit — API-ключ"},
     {"key": "YANDEX_SPEECHKIT_FOLDER_ID", "label": "Yandex SpeechKit — Folder ID"},
+    {"key": "YANDEX_EMBEDDING_API_KEY", "label": "Yandex Embeddings — API-ключ (роль ai.languageModels.user; folder тот же, что у SpeechKit)"},
 ]
 
 
