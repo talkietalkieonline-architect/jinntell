@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -96,6 +96,30 @@ export default function Home() {
       setArchivedChats([]);
     }
     loadedRef.current = true;
+  }, [user?.id]);
+
+  // Подмешиваем серверные чаты (входящие DM, мои комнаты), чтобы они появлялись в ленте у собеседника
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    getMyChats().then((chats) => {
+      if (!alive) return;
+      let archivedRooms = new Set<string>();
+      try {
+        const ar = localStorage.getItem(archivedKey());
+        if (ar) archivedRooms = new Set((JSON.parse(ar) as OpenChat[]).map((c) => c.room));
+      } catch { /* noop */ }
+      setOpenChats((prev) => {
+        const map = new Map(prev.map((c) => [c.room, c] as const));
+        for (const ch of chats) {
+          if (!map.has(ch.room) && !archivedRooms.has(ch.room)) {
+            map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, count: ch.count || undefined });
+          }
+        }
+        return Array.from(map.values());
+      });
+    }).catch(() => {});
+    return () => { alive = false; };
   }, [user?.id]);
 
   // Сохранение открытых чатов

@@ -1,12 +1,15 @@
 """API чата — история сообщений"""
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 import re
 
+from pydantic import BaseModel
+
+from app.models.agent import Agent
 from app.models.message import Message
 from app.models.room import Room, RoomMember
 from app.models.user import User
@@ -51,6 +54,50 @@ async def get_history(
                 and msg.sender_agent_id is not None and msg.sender_agent_id != agent_id:
             mo.context = True
         out.append(mo)
+    return out
+
+
+class MyChatOut(BaseModel):
+    room: str
+    kind: str  # dm | room
+    name: str
+    color: str = "#6c7bff"
+    count: int = 0
+
+
+@router.get("/my-chats", response_model=list[MyChatOut])
+async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Серверный список чатов пользователя (DM + мои комнаты) — чтобы входящие появлялись в ленте."""
+    out: list[MyChatOut] = []
+
+    # DM-комнаты, где я участник
+    res = await db.execute(
+        select(Message.room).where(
+            or_(Message.room.like(f"dm-{user.id}-%"), Message.room.like(f"dm-%-{user.id}"))
+        ).distinct()
+    )
+    for room in res.scalars().all():
+        m = re.match(r"^dm-(\d+)-(\d+)$", room)
+        if not m:
+            continue
+        a, b = int(m.group(1)), int(m.group(2))
+        other_id = b if a == user.id else a
+        ures = await db.execute(select(User).where(User.id == other_id))
+        ou = ures.scalar_one_or_none()
+        if ou:
+            out.append(MyChatOut(room=room, kind="dm", name=ou.display_name, color=ou.avatar_color or "#6c7bff"))
+
+    # Мои комнаты (владелец)
+    rres = await db.execute(select(Room).where(Room.owner_user_id == user.id))
+    for r in rres.scalars().all():
+        mres = await db.execute(
+            select(Agent.name, Agent.color).join(RoomMember, RoomMember.agent_id == Agent.id).where(RoomMember.room_id == r.id)
+        )
+        members = mres.all()
+        name = " + ".join(mm[0] for mm in members) if members else (r.title or "Комната")
+        color = members[0][1] if members else "#6c7bff"
+        out.append(MyChatOut(room=f"room-{r.id}", kind="room", name=name, color=color, count=len(members)))
+
     return out
 
 

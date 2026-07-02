@@ -424,6 +424,17 @@ export function dmRoom(a: number, b: number): string {
   return `dm-${lo}-${hi}`;
 }
 
+export interface MyChat {
+  room: string;
+  kind: string;
+  name: string;
+  color: string;
+  count: number;
+}
+export function getMyChats(): Promise<MyChat[]> {
+  return apiFetch("/api/chat/my-chats");
+}
+
 /** Обновить настройки агента (бизнес / личный) */
 export function updateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {
   return apiFetch(`/api/agents/${id}`, {
