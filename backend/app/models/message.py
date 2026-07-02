@@ -21,6 +21,8 @@ class Message(Base):
     sender_name: Mapped[str] = mapped_column(String(100))
 
     text: Mapped[str] = mapped_column(Text)
+    media_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    media_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True

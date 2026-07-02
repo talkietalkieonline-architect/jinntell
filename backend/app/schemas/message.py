@@ -1,5 +1,6 @@
 """Схемы сообщений"""
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -10,6 +11,8 @@ class MessageOut(BaseModel):
     sender_type: str
     sender_name: str
     text: str
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
     created_at: datetime
     context: bool = False
 

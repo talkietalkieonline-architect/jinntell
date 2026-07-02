@@ -1,5 +1,8 @@
 """API чата — история сообщений"""
-from fastapi import APIRouter, Depends, Query
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +15,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.models.agent import Agent
+from app.api.users import _STORAGE_ROOT
 from app.models.message import Message
 from app.models.room import Room, RoomMember
 from app.models.user import User
@@ -102,6 +106,28 @@ async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = De
         out.append(MyChatOut(room=f"room-{r.id}", kind="room", name=name, color=color, count=len(members)))
 
     return out
+
+
+_CHAT_MEDIA = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+               "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
+
+
+@router.post("/media")
+async def upload_chat_media(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    """Загрузка медиа для чата (фото/видео/кружок) — возвращает URL для отправки в сообщении."""
+    ext = _CHAT_MEDIA.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(400, "Только изображения и видео")
+    data = await file.read()
+    if len(data) > 50 * 1024 * 1024:
+        raise HTTPException(400, "Файл больше 50 МБ")
+    d = os.path.join(_STORAGE_ROOT, "chat", str(user.id))
+    os.makedirs(d, exist_ok=True)
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    with open(os.path.join(d, fname), "wb") as f:
+        f.write(data)
+    mtype = "video" if (file.content_type or "").startswith("video/") else "image"
+    return {"url": f"/api/storage/chat/{user.id}/{fname}", "type": mtype}
 
 
 @router.post("/send", response_model=MessageOut)

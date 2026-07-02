@@ -506,8 +506,10 @@ async def chat_websocket(websocket: WebSocket, room: str):
             data = await websocket.receive_text()
             payload = json.loads(data)
             text = payload.get("text", "").strip()
+            media_url = payload.get("media_url")
+            media_type = payload.get("media_type")
 
-            if not text:
+            if not text and not media_url:
                 continue
 
             async with async_session() as db:
@@ -517,6 +519,8 @@ async def chat_websocket(websocket: WebSocket, room: str):
                     sender_user_id=user_id,
                     sender_name=user_name,
                     text=text,
+                    media_url=media_url,
+                    media_type=media_type,
                 )
                 db.add(msg)
                 await db.commit()
@@ -530,17 +534,19 @@ async def chat_websocket(websocket: WebSocket, room: str):
                     "sender_user_id": user_id,
                     "sender_name": user_name,
                     "text": text,
+                    "media_url": media_url,
+                    "media_type": media_type,
                     "created_at": msg.created_at.isoformat(),
                 }
 
             await manager.broadcast(room, msg_data)
 
-            if agent:
+            if text and agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
-            elif room_members:
+            elif text and room_members:
                 target = _pick_addressed_agent(room, text, room_members)
                 asyncio.create_task(_agent_reply(room, target, text))
-            elif room == "general" or room.startswith("jim-"):
+            elif text and (room == "general" or room.startswith("jim-")):
                 asyncio.create_task(_assistant_reply(room, text, assistant_name, user_id))
 
     except WebSocketDisconnect:
