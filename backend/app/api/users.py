@@ -51,6 +51,12 @@ async def update_me(
         user.birth_date = date.fromisoformat(body.birth_date) if body.birth_date else None
     if body.city is not None:
         user.city = body.city
+    if body.gender is not None:
+        user.gender = body.gender
+    if body.interests is not None:
+        user.interests = body.interests
+    if body.avatar_url is not None:
+        user.avatar_url = body.avatar_url
     if body.about is not None:
         user.about = body.about
     # Персонализация помощника
@@ -145,5 +151,50 @@ async def delete_assistant_photo(
         except OSError:
             pass
     user.assistant_photo = None
+    await db.flush()
+    return {"ok": True}
+
+
+@router.post("/me/avatar")
+async def upload_user_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить аватар пользователя."""
+    ext = _ALLOWED_IMG.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(400, "Только изображения: jpg, png, webp, gif")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(400, "Файл больше 20 МБ")
+    d = os.path.join(_STORAGE_ROOT, "users", str(user.id))
+    os.makedirs(d, exist_ok=True)
+    for fn in os.listdir(d):
+        if fn.startswith("avatar."):
+            try:
+                os.remove(os.path.join(d, fn))
+            except OSError:
+                pass
+    fname = f"avatar.{ext}"
+    with open(os.path.join(d, fname), "wb") as f:
+        f.write(data)
+    user.avatar_url = f"/api/storage/users/{user.id}/{fname}"
+    await db.flush()
+    return {"avatar_url": user.avatar_url}
+
+
+@router.delete("/me/avatar")
+async def delete_user_avatar(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.avatar_url and user.avatar_url.startswith("/api/storage/"):
+        rel = user.avatar_url.replace("/api/storage/", "", 1)
+        try:
+            os.remove(os.path.join(_STORAGE_ROOT, rel))
+        except OSError:
+            pass
+    user.avatar_url = None
     await db.flush()
     return {"ok": True}

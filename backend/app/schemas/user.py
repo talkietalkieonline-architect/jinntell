@@ -23,6 +23,9 @@ class UserOut(BaseModel):
     city: Optional[str] = None
     about: Optional[str] = None
     bio: Optional[str] = None
+    gender: Optional[str] = None
+    interests: Optional[str] = None
+    avatar_url: Optional[str] = None
     # Персонализация помощника
     assistant_name: str = "Джим"
     assistant_gender: str = "male"
@@ -56,6 +59,9 @@ class UserOut(BaseModel):
             city=user.city,
             about=user.about,
             bio=user.bio,
+            gender=user.gender,
+            interests=user.interests,
+            avatar_url=user.avatar_url,
             assistant_name=user.assistant_name or "Джим",
             assistant_gender=user.assistant_gender or "male",
             assistant_voice=user.assistant_voice or "male_low",
@@ -80,6 +86,9 @@ class UserUpdate(BaseModel):
     birth_date: Optional[str] = None
     city: Optional[str] = None
     about: Optional[str] = None
+    gender: Optional[str] = None
+    interests: Optional[str] = None
+    avatar_url: Optional[str] = None
     # Персонализация помощника
     assistant_name: Optional[str] = None
     assistant_gender: Optional[str] = None
