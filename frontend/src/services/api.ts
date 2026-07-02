@@ -1119,6 +1119,9 @@ export interface UserProfile {
   assistant_name?: string;
   assistant_gender?: string;
   assistant_voice?: string;
+  gender?: string;
+  interests?: string;
+  avatar_url?: string;
   assistant_photo?: string;
   user_age?: number;
 }
@@ -1137,6 +1140,20 @@ export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: str
     throw new ApiError(res.status, b.detail || "Ошибка загрузки");
   }
   return res.json();
+}
+export async function uploadUserAvatar(file: File): Promise<{ avatar_url: string }> {
+  const token = getToken();
+  const f = new FormData();
+  f.append("file", file);
+  const res = await fetch(`${API_BASE}/api/users/me/avatar`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: f });
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, b.detail || "Ошибка загрузки");
+  }
+  return res.json();
+}
+export function deleteUserAvatar(): Promise<{ ok: boolean }> {
+  return apiFetch("/api/users/me/avatar", { method: "DELETE" });
 }
 export function deleteAssistantPhoto(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/assistant-photo", { method: "DELETE" });

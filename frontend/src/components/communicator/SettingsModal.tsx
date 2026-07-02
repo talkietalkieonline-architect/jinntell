@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, mediaUrl, type UserProfile } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, type UserProfile } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -27,13 +27,13 @@ const VOICES = [
 ];
 
 const SECTIONS = [
-  "Персональные данные",
+  "Настройки пользователя",
   "Настройки Помощника",
   "Настройка интерфейса",
-  "Настройка персонажа",
-  "Интересы и Контент",
   "Система",
 ];
+
+const INTEREST_TOPICS = ["Космос", "Технологии", "Спорт", "Кино", "Музыка", "Игры", "Бизнес", "Здоровье", "Путешествия", "Мода", "Наука", "Авто", "Кулинария", "Искусство", "Финансы", "Психология"];
 
 export default function SettingsModal({
   isOpen,
@@ -59,6 +59,10 @@ export default function SettingsModal({
   const [birthDate, setBirthDate] = useState("");
   const [city, setCity] = useState("");
   const [aboutField, setAboutField] = useState("");
+  const [gender, setGender] = useState("");
+  const [interests, setInterests] = useState<string[]>([]);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   // Настройки помощника
   const [assistantName, setAssistantName] = useState("Джим");
@@ -93,6 +97,9 @@ export default function SettingsModal({
       setBirthDate(user.birth_date || "");
       setCity(user.city || "");
       setAboutField(user.about || "");
+      setGender(user.gender || "");
+      setInterests((user.interests || "").split(",").map((x) => x.trim()).filter(Boolean));
+      setAvatarUrl(user.avatar_url || null);
       setAssistantName(user.assistant_name || "Джим");
       setAssistantGender(user.assistant_gender || "male");
       setAssistantPhoto(user.assistant_photo || null);
@@ -117,6 +124,16 @@ const _av = user.assistant_voice || "ermil";
     updateMe({ theme: themeId, background: bg } as Partial<UserProfile>).catch(() => {});
   };
 
+  const handleAvatarUpload = async (file: File) => {
+    setAvatarUploading(true); setError("");
+    try { const r = await uploadUserAvatar(file); setAvatarUrl(r.avatar_url); }
+    catch (e: unknown) { setError(e instanceof Error ? e.message : "Ошибка загрузки"); }
+    finally { setAvatarUploading(false); }
+  };
+  const handleAvatarDelete = async () => {
+    try { await deleteUserAvatar(); setAvatarUrl(null); } catch { /* noop */ }
+  };
+
   const handleSavePersonal = async () => {
     setSaving(true); setError(""); setSaved(false);
     try {
@@ -128,6 +145,8 @@ const _av = user.assistant_voice || "ermil";
         birth_date: birthDate || undefined,
         city: city || undefined,
         about: aboutField || undefined,
+        gender: gender || undefined,
+        interests: interests.join(",") || undefined,
       } as Partial<UserProfile>);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -243,13 +262,25 @@ const _av = user.assistant_voice || "ermil";
         )}
 
         {/* === ПЕРСОНАЛЬНЫЕ ДАННЫЕ === */}
-        {activeSection === "Персональные данные" && (
+        {activeSection === "Настройки пользователя" && (
           <div>
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
               ‹ Назад
             </button>
 
             <div className="flex flex-col gap-3">
+              <div className="flex flex-col items-center gap-2 mb-1">
+                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  {avatarUrl ? <img src={avatarUrl.startsWith("data:") ? avatarUrl : mediaUrl(avatarUrl)} alt="Аватар" className="w-full h-full object-cover" /> : <span className="text-3xl" style={{ color: "var(--text-muted)" }}>{(displayName || firstName || "?")[0]}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                    {avatarUploading ? "Загрузка..." : "Загрузить аватар"}
+                    <input type="file" accept="image/*" className="hidden" disabled={avatarUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
+                  </label>
+                  {avatarUrl && <button onClick={handleAvatarDelete} className="px-3 py-1.5 rounded-lg text-[11px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>Удалить</button>}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Имя</label>
@@ -290,8 +321,26 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Пол</label>
+                <div className="flex gap-2">
+                  {[{ id: "male", label: "Мужской" }, { id: "female", label: "Женский" }, { id: "other", label: "Другой" }].map((g) => (
+                    <button key={g.id} onClick={() => setGender(g.id)} className="flex-1 py-2 rounded-xl text-sm font-medium transition-all" style={{ background: gender === g.id ? "var(--accent)" : "var(--bg-glass)", color: gender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${gender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>О себе</label>
                 <textarea value={aboutField} onChange={(e) => setAboutField(e.target.value)} placeholder="Расскажите немного о себе..." rows={3} className="w-full px-3 py-2.5 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Интересы и темы контента</label>
+                <div className="flex flex-wrap gap-2">
+                  {INTEREST_TOPICS.map((t) => { const on = interests.includes(t); return (
+                    <button key={t} onClick={() => setInterests((p) => (on ? p.filter((x) => x !== t) : [...p, t]))} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: on ? "var(--accent)" : "var(--bg-glass)", color: on ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${on ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{t}</button>
+                  ); })}
+                </div>
               </div>
 
               <div>
@@ -543,7 +592,7 @@ const _av = user.assistant_voice || "ermil";
         )}
 
         {/* === ОСТАЛЬНЫЕ РАЗДЕЛЫ (заглушки) === */}
-        {activeSection !== null && activeSection !== "Персональные данные" && activeSection !== "Настройки Помощника" && activeSection !== "Настройка интерфейса" && (
+        {activeSection !== null && activeSection !== "Настройки пользователя" && activeSection !== "Настройки Помощника" && activeSection !== "Настройка интерфейса" && (
           <div>
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
               ‹ Назад
