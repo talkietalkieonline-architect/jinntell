@@ -118,7 +118,7 @@ export default function MyAgentsModal({
 
         <div className="flex gap-2 mb-5">
           <TabBtn id="jinns" label="Джинны" />
-          <TabBtn id="people" label="Люди" />
+          <TabBtn id="people" label="Контакты" />
         </div>
 
         {tab === "jinns" ? (

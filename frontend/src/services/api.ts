@@ -1120,6 +1120,7 @@ export interface UserProfile {
   assistant_gender?: string;
   assistant_voice?: string;
   gender?: string;
+  persona_gender?: string;
   interests?: string;
   avatar_url?: string;
   assistant_photo?: string;

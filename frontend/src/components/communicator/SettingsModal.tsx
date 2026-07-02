@@ -60,6 +60,7 @@ export default function SettingsModal({
   const [city, setCity] = useState("");
   const [aboutField, setAboutField] = useState("");
   const [gender, setGender] = useState("");
+  const [personaGender, setPersonaGender] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -98,6 +99,7 @@ export default function SettingsModal({
       setCity(user.city || "");
       setAboutField(user.about || "");
       setGender(user.gender || "");
+      setPersonaGender(user.persona_gender || "");
       setInterests((user.interests || "").split(",").map((x) => x.trim()).filter(Boolean));
       setAvatarUrl(user.avatar_url || null);
       setAssistantName(user.assistant_name || "Джим");
@@ -146,6 +148,7 @@ const _av = user.assistant_voice || "ermil";
         city: city || undefined,
         about: aboutField || undefined,
         gender: gender || undefined,
+        persona_gender: personaGender || undefined,
         interests: interests.join(",") || undefined,
       } as Partial<UserProfile>);
       setSaved(true);
@@ -293,8 +296,18 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Отображаемое имя</label>
-                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Как вас видят другие" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ник · отображаемое имя</label>
+                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Кем хотите быть (хоть Дарт Вейдер)" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Образ · как к вам обращаться</label>
+                <div className="flex gap-2">
+                  {[{ id: "", label: "Не указывать" }, { id: "male", label: "Муж." }, { id: "female", label: "Жен." }, { id: "neutral", label: "Нейтр." }].map((g) => (
+                    <button key={g.id || "none"} onClick={() => setPersonaGender(g.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: personaGender === g.id ? "var(--accent)" : "var(--bg-glass)", color: personaGender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${personaGender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
+                  ))}
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Публичный образ — может отличаться от реального пола.</p>
               </div>
 
               <div>
@@ -321,7 +334,7 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Пол</label>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Пол (реальный · виден только сервису)</label>
                 <div className="flex gap-2">
                   {[{ id: "male", label: "Мужской" }, { id: "female", label: "Женский" }, { id: "other", label: "Другой" }].map((g) => (
                     <button key={g.id} onClick={() => setGender(g.id)} className="flex-1 py-2 rounded-xl text-sm font-medium transition-all" style={{ background: gender === g.id ? "var(--accent)" : "var(--bg-glass)", color: gender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${gender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>

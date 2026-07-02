@@ -65,7 +65,7 @@ export default function NavBar({
           JinnTell
         </span>
         <div className="flex items-center gap-1.5">
-          <PanelBtn title="Избранное" onClick={onFavorites}>
+          <PanelBtn title="Собеседники" onClick={onFavorites}>
             ☆
           </PanelBtn>
           <PanelBtn active={view === "feed"} title="Лента" onClick={onFeed}>
