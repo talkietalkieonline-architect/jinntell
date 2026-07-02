@@ -552,19 +552,6 @@ export default function BottomBar({
           )}
         </button>
 
-        {/* Мои Джинны */}
-        <button
-          onClick={onAgentsClick}
-          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="12" cy="8" r="5" />
-            <path d="M3 21v-2a7 7 0 0 1 7-7h4a7 7 0 0 1 7 7v2" />
-            <circle cx="12" cy="8" r="2" fill="currentColor" opacity="0.3" />
-          </svg>
-          <span className="text-[9px] uppercase tracking-wider">Собеседники</span>
-        </button>
       </div>
 
       {/* Подсказка состояния микрофона (только MUTE) */}
