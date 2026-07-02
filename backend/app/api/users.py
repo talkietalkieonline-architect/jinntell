@@ -1,5 +1,6 @@
 """API пользователя — профиль, настройки"""
 from datetime import date
+import re
 
 import os
 
@@ -30,6 +31,15 @@ async def update_me(
 ):
     if body.display_name is not None:
         user.display_name = body.display_name
+    if body.jinntell_link is not None:
+        handle = re.sub(r"[^a-z0-9_-]", "", (body.jinntell_link or "").strip().lstrip("@").lower())[:30]
+        if handle and handle != user.jinntell_link:
+            if len(handle) < 3:
+                raise HTTPException(400, "@username минимум 3 символа (a-z, 0-9, _, -)")
+            taken = await db.execute(select(User).where(User.jinntell_link == handle, User.id != user.id))
+            if taken.scalar_one_or_none():
+                raise HTTPException(400, "Этот @username уже занят")
+            user.jinntell_link = handle
     if body.theme is not None:
         user.theme = body.theme
     if body.avatar_color is not None:

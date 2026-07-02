@@ -76,6 +76,7 @@ class UserOut(BaseModel):
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = None
+    jinntell_link: Optional[str] = None
     theme: Optional[str] = None
     avatar_color: Optional[str] = None
     background: Optional[str] = None

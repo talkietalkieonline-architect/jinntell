@@ -49,6 +49,24 @@ def dm_room(a: int, b: int) -> str:
     return f"dm-{lo}-{hi}"
 
 
+@router.get("/search", response_model=list[ContactOut])
+async def search_users(q: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Поиск людей по имени, @username или телефону."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    p = f"%{q}%"
+    handle = q.lstrip("@").lower()
+    ph = _norm_phone(q)
+    res = await db.execute(
+        select(User).where(
+            User.id != user.id,
+            or_(User.display_name.ilike(p), User.jinntell_link.ilike(f"%{handle}%"), User.phone == ph, User.phone == q),
+        ).limit(15)
+    )
+    return [ContactOut.model_validate(u) for u in res.scalars().all()]
+
+
 @router.get("", response_model=list[ContactOut])
 async def list_contacts(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     res = await db.execute(
