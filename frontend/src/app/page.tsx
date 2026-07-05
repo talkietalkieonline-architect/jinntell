@@ -78,6 +78,7 @@ export default function Home() {
   const [bottomBarH, setBottomBarH] = useState(130);
   const [micActive, setMicActive] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
+  const [recorderAuto, setRecorderAuto] = useState(false);
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
   const userWsRef = useRef<WebSocket | null>(null);
   const [chatHidden, setChatHidden] = useState(false);
@@ -487,7 +488,7 @@ export default function Home() {
         onAttachMedia={attachMedia}
         onHeightChange={setBottomBarH}
         onMicStateChange={(active) => setMicActive(active)}
-        onRecordNote={() => setRecorderOpen(true)}
+        onRecordNote={(auto?: boolean) => { setRecorderAuto(!!auto); setRecorderOpen(true); }}
         assistantName={assistantName}
       />
       </div>
@@ -500,7 +501,8 @@ export default function Home() {
 
       {recorderOpen && (
         <VideoNoteRecorder
-          onClose={() => setRecorderOpen(false)}
+          autoStart={recorderAuto}
+          onClose={() => { setRecorderOpen(false); setRecorderAuto(false); }}
           onDone={(f) => attachMedia(f, true)}
         />
       )}

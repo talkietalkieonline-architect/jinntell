@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from "react";
 
 const MAX = 15;
 
-export default function VideoNoteRecorder({ onClose, onDone }: { onClose: () => void; onDone: (file: File) => void }) {
+export default function VideoNoteRecorder({ onClose, onDone, autoStart }: { onClose: () => void; onDone: (file: File) => void; autoStart?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const startRef = useRef<() => void>(() => {});
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -21,6 +22,7 @@ export default function VideoNoteRecorder({ onClose, onDone }: { onClose: () => 
         if (!alive) { s.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = s;
         if (videoRef.current) videoRef.current.srcObject = s;
+        if (autoStart) setTimeout(() => startRef.current(), 250);
       })
       .catch(() => setError("Нет доступа к камере/микрофону"));
     return () => { alive = false; cleanup(); };
@@ -66,6 +68,7 @@ export default function VideoNoteRecorder({ onClose, onDone }: { onClose: () => 
       });
     }, 1000);
   };
+  startRef.current = start;
 
   return (
     <div

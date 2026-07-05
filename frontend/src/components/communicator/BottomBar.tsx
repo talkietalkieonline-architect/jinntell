@@ -23,7 +23,7 @@ export default function BottomBar({
   onSettingsClick: () => void;
   onContactsClick: () => void;
   onAgentsClick: () => void;
-  onRecordNote?: () => void;
+  onRecordNote?: (auto?: boolean) => void;
   onSendMessage: (text: string) => void;
   onAttachMedia: (file: File) => void;
   onHeightChange?: (h: number) => void;
@@ -397,7 +397,9 @@ export default function BottomBar({
         <RecSlider
           micActive={micState === "on" || micState === "always"}
           onVoice={handleMicToggle}
-          onVideo={() => onRecordNote?.()}
+          onVideo={() => onRecordNote?.(false)}
+          onVoiceHold={() => { if (micStateRef.current === "off") { setMicState("on"); startRecognition(); } }}
+          onVideoHold={() => onRecordNote?.(true)}
           onText={() => setShowTextInput((v) => !v)}
         />
 

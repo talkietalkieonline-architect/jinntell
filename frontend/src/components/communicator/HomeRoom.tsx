@@ -46,8 +46,8 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, onOpenAssis
   };
 
   return (
-    <div className="absolute inset-0 overflow-y-auto" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
-      <div className="w-full max-w-[620px] mx-auto px-4 flex flex-col gap-3">
+    <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
+      <div className="w-full max-w-[620px] px-4 flex flex-col gap-3">
         {/* Заголовок Ленты */}
         <div className="flex items-center gap-2 px-1 pt-1">
           <span className="text-base">🔔</span>
