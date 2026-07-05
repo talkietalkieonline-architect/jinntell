@@ -280,28 +280,10 @@ export default function BottomBar({
     return () => stopWake();
   }, [wakeEnabled, micState, startWake, stopWake]);
 
-  // === Микрофон: короткое / длинное нажатие ===
-  const handleMicDown = useCallback(() => {
-    isLongPress.current = false;
-    longPressTimer.current = setTimeout(() => {
-      isLongPress.current = true;
-      // Удержание = запись видео-заметки
-      if (micStateRef.current !== "off") { setMicState("off"); stopRecognition(); }
-      onRecordNote?.();
-    }, LONG_PRESS_MS);
-  }, [stopRecognition, onRecordNote]);
-
-  const handleMicUp = useCallback(() => {
-    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
-    if (isLongPress.current) return;
-    // Короткое нажатие: тоггл on/off
-    if (micStateRef.current === "off") {
-      setMicState("on");
-      startRecognition();
-    } else {
-      setMicState("off");
-      stopRecognition();
-    }
+  // === Микрофон: тап = вкл/выкл распознавание голоса (надёжно на мобиле — один onClick, без гонки mouse/touch) ===
+  const handleMicToggle = useCallback(() => {
+    if (micStateRef.current === "off") { setMicState("on"); startRecognition(); }
+    else { setMicState("off"); stopRecognition(); }
   }, [startRecognition, stopRecognition]);
 
   // Визуал микрофона
@@ -449,13 +431,22 @@ export default function BottomBar({
           </span>
         </button>
 
-        {/* Rec — короткий тап = голос, удержание = видео-заметка */}
+        {/* Видео-заметка */}
         <button
-          onMouseDown={handleMicDown}
-          onMouseUp={handleMicUp}
-          onMouseLeave={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; } }}
-          onTouchStart={handleMicDown}
-          onTouchEnd={handleMicUp}
+          onClick={onRecordNote}
+          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="2" y="6" width="14" height="12" rx="4" />
+            <path d="M16 10.5l6-3.5v10l-6-3.5z" />
+          </svg>
+          <span className="text-[9px] uppercase tracking-wider">Видео</span>
+        </button>
+
+        {/* Rec — тап = включить/выключить распознавание голоса */}
+        <button
+          onClick={handleMicToggle}
           className="rounded-full w-14 h-14 flex items-center justify-center transition-all hover:scale-110 mx-1 select-none"
           style={{
             background: micVisual.bg,
