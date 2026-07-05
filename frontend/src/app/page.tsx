@@ -354,6 +354,8 @@ export default function Home() {
     if (t) document.documentElement.setAttribute("data-theme", t);
     const a = localStorage.getItem("jinntell_accent");
     if (a) document.documentElement.style.setProperty("--custom-accent", a);
+    const ts = localStorage.getItem("jinntell_text_scale");
+    if (ts) document.documentElement.style.setProperty("--chat-text-scale", ts);
   }, []);
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);

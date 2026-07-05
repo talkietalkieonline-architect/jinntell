@@ -277,11 +277,12 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
   return (
     <>
       <div
-        className="rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed select-text"
+        className="rounded-2xl px-3.5 py-2 leading-relaxed select-text"
         style={{
           background: userSide ? "var(--bubble-user)" : "var(--bubble-agent)",
           border: "1px solid var(--bubble-border)",
           color: "var(--text-primary)",
+          fontSize: "calc(13px * var(--chat-text-scale, 1))",
           opacity: msg.context ? 0.7 : 1,
           borderBottomLeftRadius: userSide ? "6px" : undefined,
           borderBottomRightRadius: !userSide ? "6px" : undefined,
