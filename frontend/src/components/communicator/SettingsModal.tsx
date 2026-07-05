@@ -30,7 +30,6 @@ const SECTIONS = [
   "Настройки пользователя",
   "Настройки Помощника",
   "Настройка интерфейса",
-  "Система",
 ];
 
 const INTEREST_TOPICS = ["Космос", "Технологии", "Спорт", "Кино", "Музыка", "Игры", "Бизнес", "Здоровье", "Путешествия", "Мода", "Наука", "Авто", "Кулинария", "Искусство", "Финансы", "Психология"];
@@ -145,7 +144,7 @@ const _av = user.assistant_voice || "ermil";
     setSaving(true); setError(""); setSaved(false);
     try {
       await updateMe({
-        display_name: displayName || undefined,
+        display_name: displayName || firstName || undefined,
         jinntell_link: username || undefined,
         first_name: firstName || undefined,
         last_name: lastName || undefined,
@@ -302,7 +301,7 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ник · отображаемое имя</label>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ник · так вас видят собеседники</label>
                 <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Кем хотите быть (хоть Дарт Вейдер)" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
               </div>
 
@@ -621,6 +620,8 @@ const _av = user.assistant_voice || "ermil";
                 />
               </label>
             </div>
+            <button onClick={() => { setSaved(true); setTimeout(() => onClose(), 600); }} className="w-full mt-6 py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Готово</button>
+            {saved && <p className="text-xs text-center mt-2" style={{ color: "#2ecc71" }}>Сохранено!</p>}
           </div>
         )}
 

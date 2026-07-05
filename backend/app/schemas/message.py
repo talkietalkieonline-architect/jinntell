@@ -9,6 +9,7 @@ class MessageOut(BaseModel):
     id: int
     room: str
     sender_type: str
+    sender_user_id: Optional[int] = None
     sender_name: str
     text: str
     media_url: Optional[str] = None

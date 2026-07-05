@@ -317,8 +317,8 @@ export default function BottomBar({
       ref={barRef}
       className="fixed bottom-0 left-0 right-0 flex flex-col"
       style={{
-        background: "var(--bar-bg)",
-        borderTop: "1px solid var(--bar-border)",
+        background: "transparent",
+        borderTop: "none",
         zIndex: 40,
       }}
     >
