@@ -410,12 +410,19 @@ def _build_agent_prompt(
     """Собираем промпт агента. Порядок: ПРАВИЛА -> СКИЛЫ -> ОБУЧЕНИЕ -> ОТМЕНА -> РЕЖИМ -> МАНЕРЫ"""
     parts = []
 
+    # Личность/роль — ВСЕГДА и авторитетно (настройки владельца важнее истории переписки)
+    ident = f"Тебя зовут {agent_name}. Ты — {agent_profession}."
+    if agent_description and agent_description.strip():
+        ident += f" {agent_description.strip()}"
+    parts.append(
+        "=== ТВОЯ ЛИЧНОСТЬ (задана владельцем — ВЫСШИЙ ПРИОРИТЕТ, важнее истории переписки) ===\n"
+        + ident
+        + f"\nВсегда действуй как {agent_name} ({agent_profession}) — строго по правилам, знаниям и запретам ниже. "
+        + "На вопрос «кто ты / как тебя зовут / чем занимаешься / что умеешь» отвечай согласно этой роли и настройкам владельца. "
+        + "Если в истории переписки ты называл себя иначе — это устарело, полностью игнорируй.\n=== КОНЕЦ ==="
+    )
     if system_prompt and system_prompt.strip():
-        parts.append(f"=== ПРАВИЛА ===\n{system_prompt.strip()}\n=== КОНЕЦ ПРАВИЛ ===")
-    else:
-        parts.append(f"Ты — {agent_name}, {agent_profession}.")
-        if agent_description:
-            parts.append(agent_description)
+        parts.append(f"\n=== ПРАВИЛА ВЛАДЕЛЬЦА ===\n{system_prompt.strip()}\n=== КОНЕЦ ПРАВИЛ ===")
 
     if skills_text and skills_text.strip():
         sk = skills_text.strip()[:10000]
