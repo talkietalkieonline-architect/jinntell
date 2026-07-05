@@ -16,6 +16,7 @@ export default function NavBar({
   activeAgent,
   roomMembers,
   onInviteJinn,
+  onCall,
   onSelectChat,
   onCloseChat,
   onFavorites,
@@ -31,6 +32,7 @@ export default function NavBar({
   activeAgent: { name: string; profession: string; brand: string; color: string; photo_url?: string } | null;
   roomMembers: { id: number; name: string; color: string; photo_url?: string }[];
   onInviteJinn: () => void;
+  onCall?: () => void;
   onSelectChat: (room: string) => void;
   onCloseChat: (room: string) => void;
   onFavorites: () => void;
@@ -175,6 +177,10 @@ export default function NavBar({
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                 <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span>
               </div>
+            ) : activeRoom.startsWith("dm-") ? (
+              <button onClick={onCall} title="Видеозвонок" className="ml-auto shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-110" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "#2ecc71" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
+              </button>
             ) : (
               inviteBtn
             )}

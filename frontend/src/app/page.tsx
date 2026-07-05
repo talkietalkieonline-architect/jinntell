@@ -20,6 +20,7 @@ const AgentCityModal = dynamic(() => import("@/components/communicator/AgentCity
 const ContactsModal = dynamic(() => import("@/components/communicator/ContactsModal"));
 const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
 const VideoNoteRecorder = dynamic(() => import("@/components/communicator/VideoNoteRecorder"), { ssr: false });
+const VideoCall = dynamic(() => import("@/components/communicator/VideoCall"), { ssr: false });
 
 /** Персональная комната чата с помощником (по userId из сессии) — НЕ общая на всех */
 function getUserId(): number | null {
@@ -77,6 +78,9 @@ export default function Home() {
   const [bottomBarH, setBottomBarH] = useState(130);
   const [micActive, setMicActive] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
+  const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
+  const userWsRef = useRef<WebSocket | null>(null);
+  const callSignalRef = useRef<((type: string, data: { sdp?: string; candidate?: RTCIceCandidateInit }) => void) | null>(null);
   const loadedRef = useRef(false);
   const syncRef = useRef<() => void>(() => {});
 
@@ -139,15 +143,24 @@ export default function Home() {
     let ws: WebSocket | null = null;
     let closed = false;
     const connect = () => {
-      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean }) => {
-        if (data?.type === "presence" && data.user_id != null) {
+      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean; from?: number; from_name?: string; sdp?: string; candidate?: RTCIceCandidateInit }) => {
+        const type = data?.type || "";
+        if (type === "presence" && data.user_id != null) {
           const uid = data.user_id;
           setOpenChats((prev) => prev.map((c) => (dmOtherId(c.room) === uid ? { ...c, online: !!data.online } : c)));
+        } else if (type === "call_offer") {
+          setCall((cur) => (cur ? cur : { status: "incoming", role: "callee", peerId: data.from!, peerName: data.from_name || "Абонент", offer: data.sdp }));
+        } else if (type === "call_answer" || type === "call_ice") {
+          callSignalRef.current?.(type, data);
+        } else if (type === "call_end" || type === "call_reject") {
+          callSignalRef.current?.(type, data);
+          setCall(null);
         } else {
           syncRef.current?.();
         }
       });
-      if (ws) ws.onclose = () => { if (!closed) setTimeout(connect, 3000); };
+      userWsRef.current = ws;
+      if (ws) ws.onclose = () => { userWsRef.current = null; if (!closed) setTimeout(connect, 3000); };
     };
     connect();
     return () => { closed = true; if (ws) { ws.onclose = null; ws.close(); } };
@@ -265,6 +278,16 @@ export default function Home() {
     if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
     sendMessage(text);
   }, [view, room, assistantRoom, findContact, openDM, sendMessage, setRoom]);
+
+  const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
+    userWsRef.current?.send(JSON.stringify({ signal, to, ...(extra || {}) }));
+  }, []);
+  const startCall = useCallback(() => {
+    const other = dmOtherId(room);
+    if (!other) return;
+    const oc = openChats.find((c) => c.room === room);
+    setCall({ status: "calling", role: "caller", peerId: other, peerName: oc?.name || "Абонент" });
+  }, [room, openChats]);
 
   // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
   useEffect(() => {
@@ -392,6 +415,7 @@ export default function Home() {
         onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
+        onCall={startCall}
       />
 
       {commandHint && (
@@ -455,6 +479,30 @@ export default function Home() {
         <VideoNoteRecorder
           onClose={() => setRecorderOpen(false)}
           onDone={(f) => attachMedia(f, true)}
+        />
+      )}
+
+      {call?.status === "incoming" && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 130, background: "rgba(0,0,0,0.85)" }}>
+          <div className="flex flex-col items-center gap-5 text-white">
+            <div className="text-xl font-semibold">{call.peerName}</div>
+            <div className="text-sm opacity-80">Входящий видеозвонок…</div>
+            <div className="flex gap-8">
+              <button onClick={() => { sendSignal(call.peerId, "reject"); setCall(null); }} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#e74c3c", color: "#fff" }}>✕</button>
+              <button onClick={() => setCall((c) => (c ? { ...c, status: "active" } : c))} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#2ecc71" }}>📞</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {call && (call.status === "calling" || call.status === "active") && (
+        <VideoCall
+          role={call.role}
+          peerId={call.peerId}
+          peerName={call.peerName}
+          offer={call.offer}
+          sendSignal={sendSignal}
+          signalRef={callSignalRef}
+          onEnd={() => setCall(null)}
         />
       )}
 

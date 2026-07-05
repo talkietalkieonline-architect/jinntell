@@ -542,6 +542,21 @@ async def chat_websocket(websocket: WebSocket, room: str):
         while True:
             data = await websocket.receive_text()
             payload = json.loads(data)
+
+            # WebRTC-сигналинг: релей offer/answer/ice/end/reject целевому пользователю
+            signal = payload.get("signal")
+            if signal:
+                to = payload.get("to")
+                if to:
+                    await manager.broadcast(f"user-{to}", {
+                        "type": f"call_{signal}",
+                        "from": user_id,
+                        "from_name": user_name,
+                        "sdp": payload.get("sdp"),
+                        "candidate": payload.get("candidate"),
+                    })
+                continue
+
             text = payload.get("text", "").strip()
             media_url = payload.get("media_url")
             media_type = payload.get("media_type")
