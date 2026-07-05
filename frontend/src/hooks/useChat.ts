@@ -111,7 +111,7 @@ interface UseChatResult {
   typingName: string;
   isConnected: boolean;
   sendMessage: (text: string) => void;
-  attachMedia: (file: File) => void;
+  attachMedia: (file: File, asNote?: boolean) => void;
   room: string;
   setRoom: (room: string) => void;
   agentInfo: AgentRoomInfo | null;

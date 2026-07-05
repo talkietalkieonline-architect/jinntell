@@ -12,6 +12,7 @@ export default function BottomBar({
   onSettingsClick,
   onContactsClick,
   onAgentsClick,
+  onRecordNote,
   onSendMessage,
   onAttachMedia,
   onHeightChange,
@@ -21,6 +22,7 @@ export default function BottomBar({
   onSettingsClick: () => void;
   onContactsClick: () => void;
   onAgentsClick: () => void;
+  onRecordNote?: () => void;
   onSendMessage: (text: string) => void;
   onAttachMedia: (file: File) => void;
   onHeightChange?: (h: number) => void;
@@ -446,6 +448,19 @@ export default function BottomBar({
           <span className="text-[9px] uppercase tracking-wider">
             {showTextInput ? "Текст" : "Текст"}
           </span>
+        </button>
+
+        {/* Видео-заметка */}
+        <button
+          onClick={onRecordNote}
+          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
+          style={{ color: "var(--text-secondary)" }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="2" y="6" width="14" height="12" rx="4" />
+            <path d="M16 10.5l6-3.5v10l-6-3.5z" />
+          </svg>
+          <span className="text-[9px] uppercase tracking-wider">Заметка</span>
         </button>
 
         {/* Кнопка "+" медиа (слева от микрофона) */}

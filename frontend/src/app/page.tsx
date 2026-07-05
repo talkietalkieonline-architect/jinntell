@@ -19,6 +19,7 @@ const MyAgentsModal = dynamic(() => import("@/components/communicator/MyAgentsMo
 const AgentCityModal = dynamic(() => import("@/components/communicator/AgentCityModal"));
 const ContactsModal = dynamic(() => import("@/components/communicator/ContactsModal"));
 const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
+const VideoNoteRecorder = dynamic(() => import("@/components/communicator/VideoNoteRecorder"), { ssr: false });
 
 /** Персональная комната чата с помощником (по userId из сессии) — НЕ общая на всех */
 function getUserId(): number | null {
@@ -73,6 +74,7 @@ export default function Home() {
   const [topBarH, setTopBarH] = useState(120);
   const [bottomBarH, setBottomBarH] = useState(130);
   const [micActive, setMicActive] = useState(false);
+  const [recorderOpen, setRecorderOpen] = useState(false);
   const loadedRef = useRef(false);
 
   // Чат — через хук (WebSocket + offline fallback)
@@ -366,8 +368,16 @@ export default function Home() {
         onAttachMedia={attachMedia}
         onHeightChange={setBottomBarH}
         onMicStateChange={(active) => setMicActive(active)}
+        onRecordNote={() => setRecorderOpen(true)}
         assistantName={assistantName}
       />
+
+      {recorderOpen && (
+        <VideoNoteRecorder
+          onClose={() => setRecorderOpen(false)}
+          onDone={(f) => attachMedia(f, true)}
+        />
+      )}
 
       {/* Центр Управления */}
       {settingsOpen && (
