@@ -1,6 +1,7 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAgents } from "@/hooks/useAgents";
+import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, type AgentOut } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
    Город Джиннов — каталог из API с fallback на хардкод
@@ -49,10 +50,20 @@ export default function AgentCityModal({
   const [selectedProfession, setSelectedProfession] = useState("Все");
   const [selectedType, setSelectedType] = useState("all");
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
-  const [favorites, setFavorites] = useState<Set<number>>(new Set([1, 2, 6, 7]));
+  const [favorites, setFavorites] = useState<Set<number>>(new Set());
+  const [recommended, setRecommended] = useState<AgentOut[]>([]);
 
   // Данные из API (useAgents хук с fallback на хардкод)
   const { agents, total, businessCount, citizenCount } = useAgents();
+
+  // Реальное избранное + рекомендации при открытии
+  useEffect(() => {
+    if (!isOpen) return;
+    let alive = true;
+    getFavoriteAgents().then((f) => { if (alive) setFavorites(new Set(f.map((a) => a.id))); }).catch(() => {});
+    getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [isOpen]);
 
   // Локальная фильтрация (поиск + профессия + тип)
   const filtered = useMemo(() => {
@@ -75,16 +86,17 @@ export default function AgentCityModal({
   if (!isOpen) return null;
 
   const agentDetails = selectedAgent
-    ? agents.find((a) => a.id === selectedAgent)
+    ? (agents.find((a) => a.id === selectedAgent) || recommended.find((a) => a.id === selectedAgent) || null)
     : null;
 
   const isFav = (id: number) => favorites.has(id);
 
   const toggleAdd = (id: number) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+    const willAdd = !favorites.has(id);
+    setFavorites((prev) => { const n = new Set(prev); if (willAdd) n.add(id); else n.delete(id); return n; });
+    const call = willAdd ? addFavoriteAgent(id) : removeFavoriteAgent(id);
+    call.catch(() => {
+      setFavorites((prev) => { const n = new Set(prev); if (willAdd) n.delete(id); else n.add(id); return n; });
     });
   };
 
@@ -352,6 +364,26 @@ export default function AgentCityModal({
             </div>
           ) : (
             <>
+              {/* Рекомендуем — горизонтальная лента, только без активного поиска/фильтра */}
+              {recommended.length > 0 && !searchQuery && selectedType === "all" && selectedProfession === "Все" && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-1.5 mb-2 px-1">
+                    <span className="text-sm">✨</span>
+                    <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "var(--text-muted)" }}>Рекомендуем</span>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                    {recommended.map((a) => (
+                      <button key={a.id} onClick={() => setSelectedAgent(a.id)}
+                        className="shrink-0 w-28 rounded-xl p-2.5 flex flex-col items-center gap-1.5 text-center transition-all hover:scale-[1.03]"
+                        style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                        <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: `${a.color}22`, border: `1.5px solid ${a.color}44`, color: a.color }}>{a.name[0]}</div>
+                        <span className="text-[12px] font-medium truncate w-full" style={{ color: "var(--text-primary)" }}>{a.name}</span>
+                        <span className="text-[10px] truncate w-full" style={{ color: "var(--text-muted)" }}>{a.profession}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Список агентов */}
               {filtered.length === 0 ? (
                 <div className="text-center py-12">
