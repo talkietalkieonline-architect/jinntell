@@ -10,18 +10,29 @@ class ConnectionManager:
     def __init__(self):
         # {room: {user_id: websocket}}
         self.rooms: Dict[str, Dict[int, WebSocket]] = {}
+        # {user_id: число активных соединений}
+        self.user_conns: Dict[int, int] = {}
 
     async def connect(self, websocket: WebSocket, room: str, user_id: int):
         await websocket.accept()
         if room not in self.rooms:
             self.rooms[room] = {}
         self.rooms[room][user_id] = websocket
+        self.user_conns[user_id] = self.user_conns.get(user_id, 0) + 1
 
     def disconnect(self, room: str, user_id: int):
         if room in self.rooms:
             self.rooms[room].pop(user_id, None)
             if not self.rooms[room]:
                 del self.rooms[room]
+        n = self.user_conns.get(user_id, 0) - 1
+        if n <= 0:
+            self.user_conns.pop(user_id, None)
+        else:
+            self.user_conns[user_id] = n
+
+    def is_user_online(self, user_id: int) -> bool:
+        return self.user_conns.get(user_id, 0) > 0
 
     async def broadcast(self, room: str, message: dict, exclude_user: Optional[int] = None):
         """Отправить сообщение всем в комнате"""

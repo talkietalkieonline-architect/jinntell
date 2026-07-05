@@ -120,7 +120,7 @@ export default function Home() {
           const map = new Map(prev.map((c) => [c.room, c] as const));
           for (const ch of chats) {
             if (!map.has(ch.room) && !archivedRooms.has(ch.room)) {
-              map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, count: ch.count || undefined });
+              map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, count: ch.count || undefined, online: ch.online });
             }
           }
           return Array.from(map.values());
@@ -139,7 +139,14 @@ export default function Home() {
     let ws: WebSocket | null = null;
     let closed = false;
     const connect = () => {
-      ws = connectChat(`user-${user.id}`, () => { syncRef.current?.(); });
+      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean }) => {
+        if (data?.type === "presence" && data.user_id != null) {
+          const uid = data.user_id;
+          setOpenChats((prev) => prev.map((c) => (dmOtherId(c.room) === uid ? { ...c, online: !!data.online } : c)));
+        } else {
+          syncRef.current?.();
+        }
+      });
       if (ws) ws.onclose = () => { if (!closed) setTimeout(connect, 3000); };
     };
     connect();
@@ -210,11 +217,19 @@ export default function Home() {
   }, [inviteContext, openAgentChat, setRoom]);
 
   /** Открыть личный диалог с контактом (человек↔человек) */
-  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null }) => {
+  const dmOtherId = (r: string): number | null => {
+    const m = r.match(/^dm-(\d+)-(\d+)$/);
+    if (!m) return null;
+    const me = getUserId();
+    const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+    return me === a ? b : me === b ? a : null;
+  };
+
+  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean }) => {
     const uid = getUserId();
     if (!uid) return;
     const r = dmRoom(uid, c.id);
-    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null }]));
+    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null, online: c.is_online }]));
     setRoom(r);
     setView("chat");
     setAgentsOpen(false);

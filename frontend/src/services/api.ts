@@ -434,6 +434,7 @@ export interface MyChat {
   name: string;
   color: string;
   photo?: string | null;
+  online?: boolean;
   count: number;
 }
 export function getMyChats(): Promise<MyChat[]> {

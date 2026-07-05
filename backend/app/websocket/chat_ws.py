@@ -128,6 +128,19 @@ async def _notify_participants(room: str) -> None:
             await manager.broadcast(f"user-{owner}", {"type": "chat_ping", "room": room})
 
 
+async def _broadcast_presence(user_id: int, online: bool) -> None:
+    """Реалтайм presence: уведомить контакты (кто добавил пользователя) о смене онлайн-статуса."""
+    from app.models.contact import Contact
+    try:
+        async with async_session() as db:
+            res = await db.execute(select(Contact.owner_user_id).where(Contact.contact_user_id == user_id))
+            watchers = set(res.scalars().all())
+    except Exception:
+        return
+    for w in watchers:
+        await manager.broadcast(f"user-{w}", {"type": "presence", "user_id": user_id, "online": online})
+
+
 async def _get_room_memory_digest(user_id: int) -> str:
     """«Память» помощника: дайджест последних сообщений из всех комнат пользователя.
     Помощник «слышал» эти разговоры и может пересказать без повторного вызова джиннов."""
@@ -497,6 +510,8 @@ async def chat_websocket(websocket: WebSocket, room: str):
         return
 
     await manager.connect(websocket, room, user_id)
+    if manager.user_conns.get(user_id, 0) == 1:
+        await _broadcast_presence(user_id, True)
 
     join_data = {
         "type": "user_joined",
@@ -574,7 +589,9 @@ async def chat_websocket(websocket: WebSocket, room: str):
 
     except WebSocketDisconnect:
         manager.disconnect(room, user_id)
-        await _set_user_offline(user_id)
+        if not manager.is_user_online(user_id):
+            await _set_user_offline(user_id)
+            await _broadcast_presence(user_id, False)
         await manager.broadcast(room, {
             "type": "user_left",
             "user_id": user_id,
@@ -584,4 +601,6 @@ async def chat_websocket(websocket: WebSocket, room: str):
     except Exception as e:
         print(f"[ws] Error: {e}")
         manager.disconnect(room, user_id)
-        await _set_user_offline(user_id)
+        if not manager.is_user_online(user_id):
+            await _set_user_offline(user_id)
+            await _broadcast_presence(user_id, False)
