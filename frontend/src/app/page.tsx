@@ -104,24 +104,28 @@ export default function Home() {
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
-    getMyChats().then((chats) => {
-      if (!alive) return;
-      let archivedRooms = new Set<string>();
-      try {
-        const ar = localStorage.getItem(archivedKey());
-        if (ar) archivedRooms = new Set((JSON.parse(ar) as OpenChat[]).map((c) => c.room));
-      } catch { /* noop */ }
-      setOpenChats((prev) => {
-        const map = new Map(prev.map((c) => [c.room, c] as const));
-        for (const ch of chats) {
-          if (!map.has(ch.room) && !archivedRooms.has(ch.room)) {
-            map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, count: ch.count || undefined });
+    const sync = () => {
+      getMyChats().then((chats) => {
+        if (!alive) return;
+        let archivedRooms = new Set<string>();
+        try {
+          const ar = localStorage.getItem(archivedKey());
+          if (ar) archivedRooms = new Set((JSON.parse(ar) as OpenChat[]).map((c) => c.room));
+        } catch { /* noop */ }
+        setOpenChats((prev) => {
+          const map = new Map(prev.map((c) => [c.room, c] as const));
+          for (const ch of chats) {
+            if (!map.has(ch.room) && !archivedRooms.has(ch.room)) {
+              map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, count: ch.count || undefined });
+            }
           }
-        }
-        return Array.from(map.values());
-      });
-    }).catch(() => {});
-    return () => { alive = false; };
+          return Array.from(map.values());
+        });
+      }).catch(() => {});
+    };
+    sync();
+    const iv = setInterval(sync, 15000);
+    return () => { alive = false; clearInterval(iv); };
   }, [user?.id]);
 
   // Сохранение открытых чатов

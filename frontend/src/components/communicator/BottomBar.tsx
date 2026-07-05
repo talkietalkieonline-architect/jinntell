@@ -99,14 +99,17 @@ export default function BottomBar({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       if (ttsSpeakingRef.current || window.speechSynthesis?.speaking) return;
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+      let interim = "";
+      let final = "";
+      // Только НОВЫЕ результаты (resultIndex) — иначе continuous пере-отправляет всю накопленную фразу
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const r = event.results[i];
+        if (r.isFinal) final += r[0].transcript;
+        else interim += r[0].transcript;
       }
-      setVoiceText(transcript);
-      const lastResult = event.results[event.results.length - 1];
-      if (lastResult.isFinal && transcript.trim()) {
-        onSendRef.current(transcript.trim());
+      setVoiceText(interim);
+      if (final.trim()) {
+        onSendRef.current(final.trim());
         setVoiceText("");
       }
     };
@@ -282,15 +285,11 @@ export default function BottomBar({
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
-      if (micStateRef.current === "off") {
-        setMicState("always");
-        startRecognition();
-      } else if (micStateRef.current === "on" || micStateRef.current === "always") {
-        setMicState("mute");
-        stopRecognition();
-      }
+      // Удержание = запись видео-заметки
+      if (micStateRef.current !== "off") { setMicState("off"); stopRecognition(); }
+      onRecordNote?.();
     }, LONG_PRESS_MS);
-  }, [startRecognition, stopRecognition]);
+  }, [stopRecognition, onRecordNote]);
 
   const handleMicUp = useCallback(() => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
@@ -307,7 +306,7 @@ export default function BottomBar({
 
   // Визуал микрофона
   const micVisual = {
-    off:    { bg: "var(--bg-glass)", border: "var(--bg-glass-border)", color: "var(--accent)", shadow: "none", label: "Микрофон" },
+    off:    { bg: "var(--bg-glass)", border: "var(--bg-glass-border)", color: "var(--accent)", shadow: "none", label: "Rec" },
     on:     { bg: "var(--accent)", border: "var(--accent-bright)", color: "var(--bg-deep)", shadow: "0 0 25px var(--accent-glow-strong)", label: "Говорите" },
     always: { bg: "var(--accent)", border: "var(--accent-bright)", color: "var(--bg-deep)", shadow: "0 0 30px var(--accent-glow-strong)", label: "Всегда вкл" },
     mute:   { bg: "var(--danger)", border: "var(--danger)", color: "#fff", shadow: "0 0 20px rgba(231,76,60,0.5)", label: "MUTE" },
@@ -450,89 +449,7 @@ export default function BottomBar({
           </span>
         </button>
 
-        {/* Видео-заметка */}
-        <button
-          onClick={onRecordNote}
-          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="2" y="6" width="14" height="12" rx="4" />
-            <path d="M16 10.5l6-3.5v10l-6-3.5z" />
-          </svg>
-          <span className="text-[9px] uppercase tracking-wider">Заметка</span>
-        </button>
-
-        {/* Кнопка "+" медиа (слева от микрофона) */}
-        <div className="relative mx-1">
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowMediaMenu(!showMediaMenu); }}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-            style={{
-              background: "var(--bg-glass)",
-              border: "1.5px solid var(--bg-glass-border)",
-              color: "var(--text-secondary)",
-            }}
-            title="Прикрепить медиа"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
-
-          {/* Выпадающее меню медиа */}
-          {showMediaMenu && (
-            <div
-              className="absolute bottom-14 left-1/2 -translate-x-1/2 rounded-xl py-2 px-1 flex flex-col gap-0.5 animate-fade-in"
-              style={{
-                background: "var(--panel-bg)",
-                border: "1px solid var(--panel-border)",
-                minWidth: "140px",
-              }}
-            >
-              {[
-                { icon: "📷", label: "Фото", accept: "image/*" },
-                { icon: "🎥", label: "Видео", accept: "video/*" },
-                { icon: "📎", label: "Файл", accept: "*/*" },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  onClick={() => {
-                    setShowMediaMenu(false);
-                    const inp = document.createElement("input");
-                    inp.type = "file";
-                    inp.accept = item.accept;
-                    inp.onchange = () => {
-                      const f = inp.files?.[0];
-                      if (f) onAttachMedia(f);
-                    };
-                    inp.click();
-                  }}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all hover:bg-[var(--bg-glass-hover)] text-left"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  <span>{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
-              <button
-                onClick={() => {
-                  setShowMediaMenu(false);
-                  const url = prompt("Вставьте ссылку:");
-                  if (url?.trim()) onSendMessage(url.trim());
-                }}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all hover:bg-[var(--bg-glass-hover)] text-left"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                <span>🔗</span>
-                <span>Ссылка</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Микрофон — центральная кнопка (короткое/длинное нажатие) */}
+        {/* Rec — короткий тап = голос, удержание = видео-заметка */}
         <button
           onMouseDown={handleMicDown}
           onMouseUp={handleMicUp}
