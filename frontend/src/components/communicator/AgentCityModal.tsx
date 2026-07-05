@@ -132,7 +132,7 @@ export default function AgentCityModal({
               {isAdmin && onOpenAdmin && (
                 <button
                   onClick={() => { onClose(); onOpenAdmin(); }}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:scale-105"
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-90"
                   style={{
                     background: "rgba(245,158,11,0.15)",
                     color: "#F59E0B",
@@ -145,7 +145,7 @@ export default function AgentCityModal({
               {onOpenBusiness && (
                 <button
                   onClick={() => { onClose(); onOpenBusiness(); }}
-                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:scale-105"
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-90"
                   style={{
                     background: "var(--accent)",
                     color: "var(--bg-deep)",
@@ -374,7 +374,7 @@ export default function AgentCityModal({
                   <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                     {recommended.map((a) => (
                       <button key={a.id} onClick={() => setSelectedAgent(a.id)}
-                        className="shrink-0 w-28 rounded-xl p-2.5 flex flex-col items-center gap-1.5 text-center transition-all hover:scale-[1.03]"
+                        className="shrink-0 w-28 rounded-xl p-2.5 flex flex-col items-center gap-1.5 text-center transition-all hover:opacity-90"
                         style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
                         <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: `${a.color}22`, border: `1.5px solid ${a.color}44`, color: a.color }}>{a.name[0]}</div>
                         <span className="text-[12px] font-medium truncate w-full" style={{ color: "var(--text-primary)" }}>{a.name}</span>

@@ -222,7 +222,7 @@ const _av = user.assistant_voice || "ermil";
           </h2>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:scale-110"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:opacity-70"
             style={{
               background: "var(--bg-glass)",
               border: "1px solid var(--bg-glass-border)",

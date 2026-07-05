@@ -105,7 +105,7 @@ export default function MyAgentsModal({
   };
 
   const Tile = ({ a, action }: { a: AgentOut; action?: React.ReactNode }) => (
-    <div className="flex flex-col items-center cursor-pointer transition-all hover:scale-105" style={{ width: 64 }} onClick={() => startChat(a.id)}>
+    <div className="flex flex-col items-center cursor-pointer transition-all hover:opacity-90" style={{ width: 64 }} onClick={() => startChat(a.id)}>
       <div className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-bold mb-1" style={{ background: `${a.color}22`, border: `1.5px solid ${a.color}44`, color: a.color }}>
         {a.name[0]}
       </div>
@@ -147,7 +147,7 @@ export default function MyAgentsModal({
                 <div className="rounded-xl px-4 py-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
                   <p className="text-[12px] mb-1" style={{ color: "var(--text-secondary)" }}>Создайте своего AI-джинна</p>
                   <p className="text-[11px] leading-relaxed mb-2" style={{ color: "var(--text-muted)" }}>Личный джинн с вашим характером, голосом и внешностью — по подписке.</p>
-                  <button className="px-4 py-2 rounded-xl text-[12px] font-medium transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Подписаться</button>
+                  <button className="px-4 py-2 rounded-xl text-[12px] font-medium transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Подписаться</button>
                 </div>
               )}
             </Section>
@@ -168,7 +168,7 @@ export default function MyAgentsModal({
               </Section>
             )}
 
-            <button onClick={() => { onClose(); onOpenCity(); }} className="w-full py-3 rounded-xl text-sm font-semibold mt-2 transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+            <button onClick={() => { onClose(); onOpenCity(); }} className="w-full py-3 rounded-xl text-sm font-semibold mt-2 transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
               Город Джиннов
             </button>
           </>
@@ -186,7 +186,7 @@ export default function MyAgentsModal({
             {searchResults.length > 0 && (
               <div className="flex flex-col gap-1 mb-2">
                 {searchResults.map((u) => (
-                  <button key={u.id} onClick={() => addFromResult(u)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass-hover)" }}>
+                  <button key={u.id} onClick={() => addFromResult(u)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:opacity-90" style={{ background: "var(--bg-glass-hover)" }}>
                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 relative overflow-hidden" style={{ background: `${u.avatar_color || "#6c7bff"}22`, border: `1.5px solid ${u.avatar_color || "#6c7bff"}55`, color: u.avatar_color || "#6c7bff" }}>
                       {u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="absolute inset-0 w-full h-full object-cover rounded-full" /> : u.display_name[0]}
                     </div>
@@ -205,7 +205,7 @@ export default function MyAgentsModal({
             ) : (
               <div className="flex flex-col gap-1.5">
                 {contacts.map((c) => (
-                  <div key={c.id} className="flex items-center gap-3 rounded-xl px-3 py-2 cursor-pointer transition-all hover:scale-[1.01]"
+                  <div key={c.id} className="flex items-center gap-3 rounded-xl px-3 py-2 cursor-pointer transition-all hover:opacity-90"
                     style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }} onClick={() => startDM(c)}>
                     <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 relative"
                       style={{ background: `${c.avatar_color || "#6c7bff"}22`, border: `1.5px solid ${c.avatar_color || "#6c7bff"}55`, color: c.avatar_color || "#6c7bff" }}>
