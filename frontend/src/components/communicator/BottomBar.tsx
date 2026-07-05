@@ -323,17 +323,29 @@ export default function BottomBar({
               border: "1px solid var(--bg-glass-border)",
             }}
           >
-            {/* Скрепка */}
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="w-8 h-8 flex items-center justify-center shrink-0 transition-all hover:scale-110 active:scale-95 rounded-full"
-              style={{ color: "var(--text-muted)" }}
-              title="Прикрепить"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
+            {/* Скрепка + меню вложений */}
+            <div className="relative shrink-0">
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowMediaMenu(!showMediaMenu); }}
+                className="w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95 rounded-full"
+                style={{ color: "var(--text-muted)" }}
+                title="Вложить"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+              {showMediaMenu && (
+                <div className="absolute bottom-11 left-0 rounded-xl py-2 px-1 flex flex-col gap-0.5 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 170, zIndex: 20 }}>
+                  <button onClick={() => { setShowMediaMenu(false); onRecordNote?.(); }} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>
+                    <span>🎥</span><span>Записать видео</span>
+                  </button>
+                  <button onClick={() => { setShowMediaMenu(false); fileRef.current?.click(); }} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>
+                    <span>📎</span><span>Фото / видео / файл</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <input
               ref={inputRef}
@@ -429,19 +441,6 @@ export default function BottomBar({
           <span className="text-[9px] uppercase tracking-wider">
             {showTextInput ? "Текст" : "Текст"}
           </span>
-        </button>
-
-        {/* Видео-заметка */}
-        <button
-          onClick={onRecordNote}
-          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="2" y="6" width="14" height="12" rx="4" />
-            <path d="M16 10.5l6-3.5v10l-6-3.5z" />
-          </svg>
-          <span className="text-[9px] uppercase tracking-wider">Видео</span>
         </button>
 
         {/* Rec — тап = включить/выключить распознавание голоса */}
