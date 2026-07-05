@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -66,6 +66,8 @@ export default function Home() {
   const [businessOpen, setBusinessOpen] = useState(false);
   const [inviteContext, setInviteContext] = useState<{ type: "agent"; agentId: number } | { type: "room"; roomId: number } | null>(null);
   const [agentsInitialTab, setAgentsInitialTab] = useState<"jinns" | "people">("jinns");
+  const [contacts, setContacts] = useState<ContactOut[]>([]);
+  const [commandHint, setCommandHint] = useState("");
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
@@ -106,6 +108,7 @@ export default function Home() {
     if (!user?.id) return;
     let alive = true;
     const sync = () => {
+      getContacts().then((cs) => { if (alive) setContacts(cs); }).catch(() => {});
       getMyChats().then((chats) => {
         if (!alive) return;
         let archivedRooms = new Set<string>();
@@ -217,6 +220,37 @@ export default function Home() {
     setAgentsOpen(false);
   }, [setRoom]);
 
+  /** Поиск контакта по имени/хендлу */
+  const findContact = useCallback((name: string): ContactOut | undefined => {
+    const n = name.trim().toLowerCase().replace(/^@/, "");
+    return contacts.find((c) => c.display_name.toLowerCase() === n)
+      || contacts.find((c) => c.display_name.toLowerCase().includes(n))
+      || contacts.find((c) => (c.jinntell_link || "").toLowerCase() === n);
+  }, [contacts]);
+
+  /** Ввод к помощнику: перехват голосовых/текстовых команд */
+  const handleSend = useCallback((text: string) => {
+    const inAssistant = view === "feed" || room === assistantRoom;
+    if (inAssistant) {
+      const t = text.trim();
+      let m: RegExpMatchArray | null;
+      if ((m = t.match(/^(?:джим[,\s]+)?(?:отправ\w*\s+сообщени\w*|напиши(?:те)?|сообщени\w*)\s+(?:для\s+|к\s+)?(.+)$/i))) {
+        const c = findContact(m[1]);
+        if (c) { openDM(c); setCommandHint(`Диктуйте сообщение для ${c.display_name}`); }
+        else setCommandHint(`Не нашёл контакт «${m[1].trim()}»`);
+        return;
+      }
+      if ((m = t.match(/^(?:джим[,\s]+)?(?:открой(?:те)?(?:\s+чат)?(?:\s+с)?|позови(?:те)?)\s+(?:контакт\s+)?(.+)$/i))) {
+        const c = findContact(m[1]);
+        if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); }
+        else setCommandHint(`Не нашёл «${m[1].trim()}»`);
+        return;
+      }
+    }
+    if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
+    sendMessage(text);
+  }, [view, room, assistantRoom, findContact, openDM, sendMessage, setRoom]);
+
   // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
   useEffect(() => {
     if (agentInfo && room.startsWith("agent-")) {
@@ -274,6 +308,11 @@ export default function Home() {
   }, []);
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
+  useEffect(() => {
+    if (!commandHint) return;
+    const t = setTimeout(() => setCommandHint(""), 3500);
+    return () => clearTimeout(t);
+  }, [commandHint]);
   useEffect(() => {
     const onPhoto = (e: Event) => setAssistantPhoto((e as CustomEvent).detail ?? null);
     window.addEventListener("jinntell_assistant_photo", onPhoto);
@@ -340,6 +379,12 @@ export default function Home() {
         onInviteJinn={onInviteJinn}
       />
 
+      {commandHint && (
+        <div className="fixed left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm animate-fade-in" style={{ top: topBarH + 8, zIndex: 70, background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
+          {commandHint}
+        </div>
+      )}
+
       {/* Индикатор подключения к серверу */}
       {isConnected && (
         <div
@@ -383,7 +428,7 @@ export default function Home() {
         onSettingsClick={() => setSettingsOpen(true)}
         onContactsClick={() => { setAgentsInitialTab("people"); setAgentsOpen(true); }}
         onAgentsClick={() => setAgentsOpen(true)}
-        onSendMessage={(text) => { if (view === "feed") { setRoom(assistantRoom); setView("chat"); } sendMessage(text); }}
+        onSendMessage={handleSend}
         onAttachMedia={attachMedia}
         onHeightChange={setBottomBarH}
         onMicStateChange={(active) => setMicActive(active)}
