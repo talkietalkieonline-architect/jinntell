@@ -111,6 +111,23 @@ def _pick_addressed_agent(room: str, text: str, members: list) -> Agent:
     return members[0]
 
 
+async def _notify_participants(room: str) -> None:
+    """Пинг персональных каналов user-{id} участников — реалтайм-обновление чат-листа."""
+    m = re.match(r"^dm-(\d+)-(\d+)$", room)
+    if m:
+        for uid in (int(m.group(1)), int(m.group(2))):
+            await manager.broadcast(f"user-{uid}", {"type": "chat_ping", "room": room})
+        return
+    rm = re.match(r"^room-(\d+)$", room)
+    if rm:
+        from app.models.room import Room
+        async with async_session() as db:
+            res = await db.execute(select(Room.owner_user_id).where(Room.id == int(rm.group(1))))
+            owner = res.scalar_one_or_none()
+        if owner:
+            await manager.broadcast(f"user-{owner}", {"type": "chat_ping", "room": room})
+
+
 async def _get_room_memory_digest(user_id: int) -> str:
     """«Память» помощника: дайджест последних сообщений из всех комнат пользователя.
     Помощник «слышал» эти разговоры и может пересказать без повторного вызова джиннов."""
@@ -474,6 +491,11 @@ async def chat_websocket(websocket: WebSocket, room: str):
         await websocket.close(code=4003, reason="Нет доступа")
         return
 
+    _um = re.match(r"^user-(\d+)$", room)
+    if _um and user_id != int(_um.group(1)):
+        await websocket.close(code=4003, reason="Нет доступа")
+        return
+
     await manager.connect(websocket, room, user_id)
 
     join_data = {
@@ -540,6 +562,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
                 }
 
             await manager.broadcast(room, msg_data)
+            await _notify_participants(room)
 
             if text and agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
