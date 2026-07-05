@@ -1,4 +1,5 @@
 "use client";
+import RecSlider from "./RecSlider";
 import { useState, useRef, useEffect, useCallback } from "react";
 
 /** Состояния микрофона */
@@ -392,87 +393,13 @@ export default function BottomBar({
       {/* 5 кнопок управления */}
       <div className="flex items-center justify-center gap-2 px-3 py-2">
 
-        {/* Настройки */}
-        <button
-          onClick={onSettingsClick}
-          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          <span className="text-[9px] uppercase tracking-wider">Настройки</span>
-        </button>
-
-        {/* Переключатель ввода ⌨️ (вместо Mute) */}
-        <button
-          onClick={() => setShowTextInput(!showTextInput)}
-          className="flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl transition-all hover:scale-105"
-          style={{ color: showTextInput ? "var(--accent)" : "var(--text-secondary)" }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            {showTextInput ? (
-              <>
-                {/* Клавиатура активна */}
-                <rect x="2" y="4" width="20" height="16" rx="3" />
-                <line x1="6" y1="8" x2="6" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="10" y1="8" x2="10" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="14" y1="8" x2="14" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="18" y1="8" x2="18" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="6" y1="12" x2="6" y2="12.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="10" y1="12" x2="10" y2="12.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="14" y1="12" x2="14" y2="12.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="18" y1="12" x2="18" y2="12.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="8" y1="16" x2="16" y2="16" strokeWidth="2" strokeLinecap="round" />
-              </>
-            ) : (
-              <>
-                {/* Клавиатура неактивна */}
-                <rect x="2" y="4" width="20" height="16" rx="3" />
-                <line x1="6" y1="8" x2="6" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="10" y1="8" x2="10" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="14" y1="8" x2="14" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="18" y1="8" x2="18" y2="8.01" strokeWidth="2" strokeLinecap="round" />
-                <line x1="8" y1="16" x2="16" y2="16" strokeWidth="2" strokeLinecap="round" />
-              </>
-            )}
-          </svg>
-          <span className="text-[9px] uppercase tracking-wider">
-            {showTextInput ? "Текст" : "Текст"}
-          </span>
-        </button>
-
-        {/* Rec — тап = включить/выключить распознавание голоса */}
-        <button
-          onClick={handleMicToggle}
-          className="rounded-full w-14 h-14 flex items-center justify-center transition-all hover:scale-110 mx-1 select-none"
-          style={{
-            background: micVisual.bg,
-            border: `2px solid ${micVisual.border}`,
-            boxShadow: micVisual.shadow,
-            color: micVisual.color,
-            animation: micState === "always" ? "pulse 2s ease-in-out infinite" : undefined,
-          }}
-        >
-          {micState === "mute" ? (
-            // MUTE — перечёркнутый микрофон
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-              <line x1="4" y1="2" x2="20" y2="22" strokeWidth="2.5" />
-            </svg>
-          ) : (
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          )}
-        </button>
+        {/* Rec-ползунок: тап=голос, сдвиг→видео, тройной тап→строка ввода */}
+        <RecSlider
+          micActive={micState === "on" || micState === "always"}
+          onVoice={handleMicToggle}
+          onVideo={() => onRecordNote?.()}
+          onText={() => setShowTextInput((v) => !v)}
+        />
 
       </div>
 

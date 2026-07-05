@@ -21,6 +21,7 @@ export default function NavBar({
   onCloseChat,
   onFavorites,
   onFeed,
+  onSettings,
 }: {
   onHeightChange?: (h: number) => void;
   assistantName: string;
@@ -37,6 +38,7 @@ export default function NavBar({
   onCloseChat: (room: string) => void;
   onFavorites: () => void;
   onFeed: () => void;
+  onSettings?: () => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -73,11 +75,14 @@ export default function NavBar({
           <PanelBtn active={view === "feed"} title="Лента" onClick={onFeed}>
             🔔
           </PanelBtn>
+          <PanelBtn title="Настройки" onClick={() => onSettings?.()}>
+            ⚙️
+          </PanelBtn>
         </div>
       </div>
 
       {/* Лента открытых чатов */}
-      <div className="flex items-end gap-2 overflow-x-auto no-scrollbar pb-0.5">
+      <div className="flex items-end justify-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
         {/* Помощник — закреплён первым */}
         <ChatAvatar
           active={isActive(assistantRoom)}

@@ -80,6 +80,8 @@ export default function Home() {
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
   const userWsRef = useRef<WebSocket | null>(null);
+  const [chatHidden, setChatHidden] = useState(false);
+  const screenTaps = useRef<number[]>([]);
   const callSignalRef = useRef<((type: string, data: { sdp?: string; candidate?: RTCIceCandidateInit }) => void) | null>(null);
   const loadedRef = useRef(false);
   const syncRef = useRef<() => void>(() => {});
@@ -289,6 +291,15 @@ export default function Home() {
     setCall({ status: "calling", role: "caller", peerId: other, peerName: oc?.name || "Абонент" });
   }, [room, openChats]);
 
+  const handleScreenTap = useCallback((e: React.PointerEvent) => {
+    const el = e.target as HTMLElement;
+    if (el.closest("button, input, textarea, a, video, select, [data-no-peek]")) return;
+    const now = Date.now();
+    screenTaps.current = screenTaps.current.filter((t) => now - t < 550);
+    screenTaps.current.push(now);
+    if (screenTaps.current.length >= 3) { screenTaps.current = []; setChatHidden((v) => !v); }
+  }, []);
+
   // Как только пришла инфа об агенте — обновляем имя/цвет в ленте открытых
   useEffect(() => {
     if (agentInfo && room.startsWith("agent-")) {
@@ -395,9 +406,11 @@ export default function Home() {
 
   // Коммуникатор
   return (
-    <div className="relative w-full h-screen overflow-hidden">
+    <div className="relative w-full h-screen overflow-hidden" onPointerUp={handleScreenTap}>
       {/* Фон */}
       <AppBackground />
+
+      <div style={{ visibility: chatHidden ? "hidden" : "visible", pointerEvents: chatHidden ? "none" : "auto" }}>
 
       {/* Верхняя панель + лента открытых чатов */}
       <NavBar
@@ -413,6 +426,7 @@ export default function Home() {
         onCloseChat={closeChat}
         onFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
         onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
+        onSettings={() => setSettingsOpen(true)}
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
         onCall={startCall}
@@ -474,6 +488,13 @@ export default function Home() {
         onRecordNote={() => setRecorderOpen(true)}
         assistantName={assistantName}
       />
+      </div>
+
+      {chatHidden && (
+        <div className="fixed bottom-6 left-0 right-0 text-center text-[11px] animate-fade-in" style={{ zIndex: 40, color: "var(--text-muted)" }}>
+          Три касания по экрану — вернуть чат
+        </div>
+      )}
 
       {recorderOpen && (
         <VideoNoteRecorder
