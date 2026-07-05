@@ -159,7 +159,9 @@ export default function BottomBar({
   // === Wake-word: активация по имени ("Джим, ...") ===
   const wakeRecognitionRef = useRef<SpeechRecognition | null>(null);
   const [wakeEnabled, setWakeEnabled] = useState(false);
+  const [wakeAwaiting, setWakeAwaiting] = useState(false);
   const awaitingCommandRef = useRef(false);
+  const wakeCmdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assistantNameRef = useRef(assistantName);
   const startWakeRef = useRef<(() => void) | undefined>(undefined);
   const wakeRestartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -210,6 +212,8 @@ export default function BottomBar({
       if (!text) return;
       if (awaitingCommandRef.current) {
         awaitingCommandRef.current = false;
+        setWakeAwaiting(false);
+        if (wakeCmdTimeout.current) { clearTimeout(wakeCmdTimeout.current); wakeCmdTimeout.current = null; }
         onSendRef.current(text);
         return;
       }
@@ -219,9 +223,12 @@ export default function BottomBar({
         if (rest) {
           onSendRef.current(rest);
         } else {
-          // Обращение без команды — Джим откликается и ждёт продолжения
-          onSendRef.current(assistantNameRef.current || "Джим");
+          // Обращение без команды — откликаемся «Да?» и ждём команду (без мусора в чате)
           awaitingCommandRef.current = true;
+          setWakeAwaiting(true);
+          try { const u = new SpeechSynthesisUtterance("Да?"); u.lang = "ru-RU"; u.rate = 1.1; window.speechSynthesis?.speak(u); } catch { /* noop */ }
+          if (wakeCmdTimeout.current) clearTimeout(wakeCmdTimeout.current);
+          wakeCmdTimeout.current = setTimeout(() => { awaitingCommandRef.current = false; setWakeAwaiting(false); }, 8000);
         }
       }
     };
@@ -260,6 +267,8 @@ export default function BottomBar({
 
   const stopWake = useCallback(() => {
     awaitingCommandRef.current = false;
+    setWakeAwaiting(false);
+    if (wakeCmdTimeout.current) { clearTimeout(wakeCmdTimeout.current); wakeCmdTimeout.current = null; }
     if (wakeRestartTimer.current) { clearTimeout(wakeRestartTimer.current); wakeRestartTimer.current = null; }
     if (wakeSessionTimer.current) { clearTimeout(wakeSessionTimer.current); wakeSessionTimer.current = null; }
     const r = wakeRecognitionRef.current;
@@ -389,6 +398,20 @@ export default function BottomBar({
           if (file) { onAttachMedia(file); e.target.value = ""; }
         }}
       />
+
+      {/* Индикатор wake-word: жду обращения / слушаю команду */}
+      {wakeEnabled && micState === "off" && (
+        <div className="flex justify-center pt-1.5 -mb-1">
+          <span
+            className="text-[10px] px-2.5 py-0.5 rounded-full animate-fade-in flex items-center gap-1"
+            style={wakeAwaiting
+              ? { color: "var(--bg-deep)", background: "var(--accent)", boxShadow: "0 0 14px var(--accent-glow-strong)" }
+              : { color: "var(--text-muted)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
+          >
+            {wakeAwaiting ? "🎙 Слушаю…" : `👂 жду «${assistantName}»`}
+          </span>
+        </div>
+      )}
 
       {/* 5 кнопок управления */}
       <div className="flex items-center justify-center gap-2 px-3 py-2">
