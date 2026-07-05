@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -76,6 +76,7 @@ export default function Home() {
   const [micActive, setMicActive] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const loadedRef = useRef(false);
+  const syncRef = useRef<() => void>(() => {});
 
   // Чат — через хук (WebSocket + offline fallback)
   const {
@@ -123,9 +124,23 @@ export default function Home() {
         });
       }).catch(() => {});
     };
+    syncRef.current = sync;
     sync();
     const iv = setInterval(sync, 15000);
     return () => { alive = false; clearInterval(iv); };
+  }, [user?.id]);
+
+  // Персональный канал уведомлений — реалтайм обновление чат-листа при входящем DM/комнате
+  useEffect(() => {
+    if (!user?.id) return;
+    let ws: WebSocket | null = null;
+    let closed = false;
+    const connect = () => {
+      ws = connectChat(`user-${user.id}`, () => { syncRef.current?.(); });
+      if (ws) ws.onclose = () => { if (!closed) setTimeout(connect, 3000); };
+    };
+    connect();
+    return () => { closed = true; if (ws) { ws.onclose = null; ws.close(); } };
   }, [user?.id]);
 
   // Сохранение открытых чатов
