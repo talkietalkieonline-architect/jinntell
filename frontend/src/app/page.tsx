@@ -473,6 +473,7 @@ export default function Home() {
           agentPhoto={agentInfo?.photo_url || null}
           agentInfo={agentInfo}
           topAlign={room === assistantRoom}
+          privateChat={room === assistantRoom || /^agent-/.test(room)}
           headerSlot={room === assistantRoom ? (
             <ChatJournal openChats={openChats} archivedChats={archivedChats} onSelect={selectChat} onReopen={reopenChat} />
           ) : null}

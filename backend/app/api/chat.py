@@ -20,6 +20,7 @@ from app.models.message import Message
 from app.models.room import Room, RoomMember
 from app.models.user import User
 from app.schemas.message import MessageOut, SendMessageRequest
+from app.websocket.manager import manager
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -155,3 +156,24 @@ async def send_message(
     await db.flush()
     await db.refresh(msg)
     return MessageOut.model_validate(msg)
+
+
+@router.delete("/message/{message_id}")
+async def delete_message(
+    message_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Удалить сообщение: только своё или в своём приватном чате. Realtime-удаление у всех участников."""
+    msg = await db.get(Message, message_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    room = msg.room
+    own_private = room == f"jim-{user.id}" or re.match(rf"^agent-\d+-u{user.id}$", room) is not None
+    is_mine = msg.sender_user_id == user.id
+    if not (is_mine or own_private):
+        raise HTTPException(status_code=403, detail="Можно удалять только свои сообщения")
+    await db.delete(msg)
+    await db.commit()
+    await manager.broadcast(room, {"type": "delete", "id": message_id, "room": room})
+    return {"ok": True}

@@ -173,6 +173,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         setIsTyping(true);
       } else if (data.type === "typing_stop") {
         setIsTyping(false);
+      } else if (data.type === "delete") {
+        setMessages((prev) => prev.filter((m) => m.id !== String(data.id)));
       } else if (data.type === "user_joined") {
         if (data.room_members) setRoomMembers(data.room_members as AgentRoomInfo[]);
         if (data.agent_info) {

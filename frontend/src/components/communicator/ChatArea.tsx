@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useEffect, useState, type ReactNode } from "react";
-import { ttsBlobUrl, mediaUrl } from "@/services/api";
+import { ttsBlobUrl, mediaUrl, deleteMessage } from "@/services/api";
 
 export interface ChatMessage {
   id: string;
@@ -178,9 +178,9 @@ function VoiceBubble({ text, accent }: { text: string; accent?: boolean }) {
 
 /** Контекстное меню пузыря (long press на мобиле, правый клик на десктопе) */
 function BubbleContextMenu({
-  x, y, msg, onClose,
+  x, y, msg, canDelete, onClose,
 }: {
-  x: number; y: number; msg: ChatMessage; onClose: () => void;
+  x: number; y: number; msg: ChatMessage; canDelete?: boolean; onClose: () => void;
 }) {
   useEffect(() => {
     const handler = () => onClose();
@@ -189,7 +189,7 @@ function BubbleContextMenu({
     return () => { document.removeEventListener("click", handler); document.removeEventListener("touchstart", handler); };
   }, [onClose]);
 
-  const items: { icon: string; label: string; action: () => void }[] = [];
+  const items: { icon: string; label: string; action: () => void; danger?: boolean }[] = [];
 
   if (msg.text) {
     items.push({
@@ -208,6 +208,18 @@ function BubbleContextMenu({
         a.href = msg.mediaUrl!;
         a.download = msg.mediaType === "video" ? "video.mp4" : "photo.jpg";
         a.click();
+        onClose();
+      },
+    });
+  }
+
+  if (canDelete) {
+    items.push({
+      icon: "🗑",
+      label: "Удалить",
+      danger: true,
+      action: () => {
+        if (/^\d+$/.test(msg.id)) deleteMessage(Number(msg.id)).catch(() => {});
         onClose();
       },
     });
@@ -236,7 +248,7 @@ function BubbleContextMenu({
           key={item.label}
           onClick={item.action}
           className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full text-left transition-all"
-          style={{ color: "var(--text-secondary)" }}
+          style={{ color: item.danger ? "var(--danger)" : "var(--text-secondary)" }}
         >
           <span>{item.icon}</span>
           <span>{item.label}</span>
@@ -247,7 +259,7 @@ function BubbleContextMenu({
 }
 
 /** Пузырь сообщения */
-function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean }) {
+function MessageBubble({ msg, userSide, privateChat }: { msg: ChatMessage; userSide: boolean; privateChat?: boolean }) {
   const [showAsVoice, setShowAsVoice] = useState(!!msg.isVoice);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; type: string } | null>(null);
@@ -364,6 +376,7 @@ function MessageBubble({ msg, userSide }: { msg: ChatMessage; userSide: boolean 
           x={ctxMenu.x}
           y={ctxMenu.y}
           msg={msg}
+          canDelete={msg.sender === "user" || !!privateChat}
           onClose={() => setCtxMenu(null)}
         />
       )}
@@ -394,6 +407,7 @@ export default function ChatArea({
   agentInfo,
   headerSlot = null,
   topAlign = false,
+  privateChat = false,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -407,6 +421,7 @@ export default function ChatArea({
   agentInfo?: { id: number; name: string; color: string; greeting?: string; tts_voice_id?: string; tts_emotion?: string } | null;
   headerSlot?: ReactNode;
   topAlign?: boolean;
+  privateChat?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -519,7 +534,7 @@ export default function ChatArea({
                     )}
 
                     {/* Пузырь */}
-                    <MessageBubble msg={msg} userSide={userSide} />
+                    <MessageBubble msg={msg} userSide={userSide} privateChat={privateChat} />
                   </div>
 
                   {/* Аватар агента/помощника (справа) */}

@@ -401,6 +401,9 @@ export function addFavoriteAgent(agentId: number): Promise<{ ok: boolean }> {
 export function removeFavoriteAgent(agentId: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/agents/favorites/${agentId}`, { method: "DELETE" });
 }
+export function deleteMessage(id: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/chat/message/${id}`, { method: "DELETE" });
+}
 
 export interface ContactOut {
   id: number;
