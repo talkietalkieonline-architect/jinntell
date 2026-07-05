@@ -390,7 +390,7 @@ const _av = user.assistant_voice || "ermil";
               {error && <p className="text-xs text-center" style={{ color: "var(--danger)" }}>{error}</p>}
               {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
 
-              <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
+              <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
                 {saving ? "Сохранение..." : "Сохранить"}
               </button>
             </div>
@@ -529,7 +529,7 @@ const _av = user.assistant_voice || "ermil";
               {error && <p className="text-xs text-center" style={{ color: "var(--danger)" }}>{error}</p>}
               {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
 
-              <button onClick={handleSaveAssistant} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
+              <button onClick={handleSaveAssistant} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
                 {saving ? "Сохранение..." : "Сохранить"}
               </button>
             </div>
