@@ -116,9 +116,15 @@ _CHAT_MEDIA = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "i
 @router.post("/media")
 async def upload_chat_media(file: UploadFile = File(...), user: User = Depends(get_current_user)):
     """Загрузка медиа для чата (фото/видео/кружок) — возвращает URL для отправки в сообщении."""
-    ext = _CHAT_MEDIA.get(file.content_type or "")
+    ct = (file.content_type or "").split(";")[0].strip().lower()
+    ext = _CHAT_MEDIA.get(ct)
     if not ext:
-        raise HTTPException(400, "Только изображения и видео")
+        if ct.startswith("video/"):
+            ext = "webm"
+        elif ct.startswith("image/"):
+            ext = "jpg"
+        else:
+            raise HTTPException(400, "Только изображения и видео")
     data = await file.read()
     if len(data) > 50 * 1024 * 1024:
         raise HTTPException(400, "Файл больше 50 МБ")
@@ -127,7 +133,7 @@ async def upload_chat_media(file: UploadFile = File(...), user: User = Depends(g
     fname = f"{uuid.uuid4().hex}.{ext}"
     with open(os.path.join(d, fname), "wb") as f:
         f.write(data)
-    mtype = "video" if (file.content_type or "").startswith("video/") else "image"
+    mtype = "video" if ct.startswith("video/") else "image"
     return {"url": f"/api/storage/chat/{user.id}/{fname}", "type": mtype}
 
 
