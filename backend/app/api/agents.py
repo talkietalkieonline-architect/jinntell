@@ -167,6 +167,45 @@ async def recommended_agents(user: User = Depends(get_current_user), db: AsyncSe
     return [AgentOut.model_validate(a) for a in res.scalars().all()]
 
 
+@router.get("/discover", response_model=list[AgentOut])
+async def discover_agents(
+    q: str = Query("", description="Запрос на естественном языке: кто нужен"),
+    limit: int = Query(20, ge=1, le=50),
+    user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    """Семантический поиск джиннов по смыслу (Qdrant + эмбеддинги)."""
+    from app.services import discovery
+    ranked = await discovery.discover(q, limit=limit * 2)
+    if not ranked:
+        return []
+    ids = [aid for aid, _ in ranked]
+    res = await db.execute(
+        select(Agent).where(Agent.id.in_(ids), Agent.is_active == True, Agent.visibility != "core")
+    )
+    by_id = {a.id: a for a in res.scalars().all()}
+    uid = user.id if user else None
+    out = []
+    for aid, _score in ranked:
+        a = by_id.get(aid)
+        if a is None:
+            continue
+        if not await can_access_agent(db, a, uid):
+            continue
+        out.append(AgentOut.model_validate(a))
+        if len(out) >= limit:
+            break
+    return out
+
+
+@router.post("/reindex")
+async def reindex_agents(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Переиндексировать Город для семантического поиска."""
+    from app.services import discovery
+    n = await discovery.reindex_all(db)
+    return {"ok": True, "indexed": n}
+
+
 @router.get("/link/{slug}")
 async def get_agent_by_link(slug: str, user: Optional[User] = Depends(get_current_user_optional), db: AsyncSession = Depends(get_db)):
     """Карточка агента по jinntell_link (скрытые — только для списка доступа)"""

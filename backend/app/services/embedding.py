@@ -3,6 +3,7 @@ Embedding Service — получение векторных представле
 Провайдеры: Jina / OpenAI / Gemini.
 Автовыбор: gemini (если ключ есть) → jina → openai.
 """
+import asyncio
 from typing import List
 
 import httpx
@@ -66,15 +67,23 @@ async def _embed_yandex(texts: List[str]) -> List[List[float]]:
     model_uri = f"emb://{folder}/text-search-doc/latest"
     out: List[List[float]] = []
     async with httpx.AsyncClient(timeout=60.0) as client:
-        for t in texts:
-            r = await client.post(
-                "https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding",
-                headers={"Authorization": f"Api-Key {key}", "x-folder-id": folder, "Content-Type": "application/json"},
-                json={"modelUri": model_uri, "text": (t or "")[:2000]},
-            )
-            if r.status_code != 200:
-                print(f"[embedding] Yandex error: {r.status_code} {r.text[:300]}")
-                raise RuntimeError(f"Yandex embedding error: {r.status_code}")
+        for i, t in enumerate(texts):
+            if i:
+                await asyncio.sleep(0.12)  # лимит Yandex — 10 req/s
+            r = None
+            for attempt in range(4):
+                r = await client.post(
+                    "https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding",
+                    headers={"Authorization": f"Api-Key {key}", "x-folder-id": folder, "Content-Type": "application/json"},
+                    json={"modelUri": model_uri, "text": (t or "")[:2000]},
+                )
+                if r.status_code == 429:
+                    await asyncio.sleep(1.0 + attempt)
+                    continue
+                break
+            if r is None or r.status_code != 200:
+                print(f"[embedding] Yandex error: {r.status_code if r else 'none'} {r.text[:300] if r else ''}")
+                raise RuntimeError(f"Yandex embedding error: {r.status_code if r else 'none'}")
             data = r.json()
             out.append([float(x) for x in data["embedding"]])
     print(f"[embedding] Yandex OK: {len(texts)} texts, {len(out[0]) if out else 0}d")

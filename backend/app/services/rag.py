@@ -47,7 +47,7 @@ async def _qdrant_request(method: str, path: str, json_data: dict = None) -> dic
         elif method == "POST":
             r = await client.post(url, json=json_data)
         elif method == "DELETE":
-            r = await client.delete(url, json=json_data)
+            r = await client.request("DELETE", url, json=json_data)
         else:
             raise ValueError(f"Unknown method: {method}")
 
