@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useEffect, useState, type ReactNode } from "react";
+import { useRef, useEffect, useState, useMemo, type ReactNode } from "react";
 import { ttsBlobUrl, mediaUrl, deleteMessage } from "@/services/api";
 
 export interface ChatMessage {
@@ -259,7 +259,7 @@ function BubbleContextMenu({
 }
 
 /** Пузырь сообщения */
-function MessageBubble({ msg, userSide, privateChat }: { msg: ChatMessage; userSide: boolean; privateChat?: boolean }) {
+function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight }: { msg: ChatMessage; userSide: boolean; privateChat?: boolean; highlight?: boolean; activeHighlight?: boolean }) {
   const [showAsVoice, setShowAsVoice] = useState(!!msg.isVoice);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; type: string } | null>(null);
@@ -299,6 +299,7 @@ function MessageBubble({ msg, userSide, privateChat }: { msg: ChatMessage; userS
           opacity: msg.context ? 0.7 : 1,
           borderBottomLeftRadius: userSide ? "6px" : undefined,
           borderBottomRightRadius: !userSide ? "6px" : undefined,
+          boxShadow: activeHighlight ? "0 0 0 2px var(--accent)" : highlight ? "0 0 0 1px var(--accent-bright)" : undefined,
           WebkitUserSelect: "text",
           userSelect: "text",
         }}
@@ -408,6 +409,8 @@ export default function ChatArea({
   headerSlot = null,
   topAlign = false,
   privateChat = false,
+  searchOpen = false,
+  onCloseSearch,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -422,6 +425,8 @@ export default function ChatArea({
   headerSlot?: ReactNode;
   topAlign?: boolean;
   privateChat?: boolean;
+  searchOpen?: boolean;
+  onCloseSearch?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -488,7 +493,41 @@ export default function ChatArea({
 
   const isUser = (s: string) => s === "user";
 
+  // Поиск по чату
+  const [q, setQ] = useState("");
+  const [mi, setMi] = useState(0);
+  const matches = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return [] as string[];
+    return messages.filter((m) => (m.text || "").toLowerCase().includes(t)).map((m) => m.id);
+  }, [q, messages]);
+  const matchSet = useMemo(() => new Set(matches), [matches]);
+  useEffect(() => { setMi(matches.length ? matches.length - 1 : 0); }, [q]);
+  useEffect(() => { if (!searchOpen) setQ(""); }, [searchOpen]);
+  useEffect(() => {
+    if (!searchOpen || !matches.length) return;
+    const id = matches[Math.min(mi, matches.length - 1)];
+    const el = scrollRef.current?.querySelector(`[data-mid="${(window.CSS && CSS.escape) ? CSS.escape(id) : id}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [mi, matches, searchOpen]);
+  const activeId = matches.length ? matches[Math.min(mi, matches.length - 1)] : null;
+  const go = (d: number) => setMi((i) => { const n = matches.length; return n ? (i + d + n) % n : 0; });
+
   return (
+    <>
+    {searchOpen && (
+      <div className="absolute left-0 right-0 flex justify-center px-4" style={{ top: topPad + 6, zIndex: 30 }}>
+        <div className="flex items-center gap-2 rounded-xl px-3 py-2 w-full max-w-[620px]" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--text-muted)", flexShrink: 0 }}><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по чату" className="flex-1 bg-transparent outline-none text-sm" style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }}
+            onKeyDown={(e) => { if (e.key === "Enter") go(e.shiftKey ? 1 : -1); if (e.key === "Escape") onCloseSearch?.(); }} />
+          <span className="text-[11px] shrink-0" style={{ color: "var(--text-muted)" }}>{matches.length ? `${Math.min(mi, matches.length - 1) + 1}/${matches.length}` : (q.trim() ? "0" : "")}</span>
+          <button onClick={() => go(-1)} disabled={!matches.length} className="text-[13px] px-1 disabled:opacity-30" style={{ color: "var(--text-secondary)" }}>↑</button>
+          <button onClick={() => go(1)} disabled={!matches.length} className="text-[13px] px-1 disabled:opacity-30" style={{ color: "var(--text-secondary)" }}>↓</button>
+          <button onClick={() => onCloseSearch?.()} className="text-xs px-1" style={{ color: "var(--text-muted)" }}>✕</button>
+        </div>
+      </div>
+    )}
     <div
       className="absolute inset-0 flex flex-col"
       style={{ zIndex: 10, paddingTop: topPad + "px", paddingBottom: (bottomPad + 16) + "px" }}
@@ -509,6 +548,7 @@ export default function ChatArea({
               return (
                 <div
                   key={msg.id}
+                  data-mid={msg.id}
                   className={`flex ${userSide ? "justify-start" : "justify-end"} animate-fade-in`}
                 >
                   {/* Аватар пользователя (слева) */}
@@ -534,7 +574,7 @@ export default function ChatArea({
                     )}
 
                     {/* Пузырь */}
-                    <MessageBubble msg={msg} userSide={userSide} privateChat={privateChat} />
+                    <MessageBubble msg={msg} userSide={userSide} privateChat={privateChat} highlight={matchSet.has(msg.id)} activeHighlight={msg.id === activeId} />
                   </div>
 
                   {/* Аватар агента/помощника (справа) */}
@@ -597,5 +637,6 @@ export default function ChatArea({
         </div>
       </div>
     </div>
+    </>
   );
 }

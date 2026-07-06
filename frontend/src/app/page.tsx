@@ -79,6 +79,7 @@ export default function Home() {
   const [micActive, setMicActive] = useState(false);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [recorderAuto, setRecorderAuto] = useState(false);
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
   const userWsRef = useRef<WebSocket | null>(null);
   const [chatHidden, setChatHidden] = useState(false);
@@ -97,6 +98,7 @@ export default function Home() {
   const viewRef = useRef(view);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { viewRef.current = view; }, [view]);
+  useEffect(() => { setChatSearchOpen(false); }, [room]);
 
   const assistantName = user?.assistant_name || "Джим";
   const assistantRoom = getJimRoom();
@@ -385,7 +387,7 @@ export default function Home() {
       case "share": navigator.clipboard?.writeText(`${location.origin}/?agent=${agentId}`).catch(() => {}); setCommandHint("Ссылка скопирована 🔗"); break;
       case "fav": if (agentId) addFavoriteAgent(agentId).catch(() => {}); setCommandHint("Добавлено в избранное ⭐"); break;
       case "report": setCommandHint("Жалоба отправлена, спасибо"); break;
-      case "search": setCommandHint("Поиск по чату — скоро"); break;
+      case "search": setChatSearchOpen(true); break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room, closeChat, onInviteJinn, startCall]);
@@ -522,6 +524,8 @@ export default function Home() {
           agentInfo={agentInfo}
           topAlign={room === assistantRoom}
           privateChat={room === assistantRoom || /^agent-/.test(room)}
+          searchOpen={chatSearchOpen}
+          onCloseSearch={() => setChatSearchOpen(false)}
           headerSlot={room === assistantRoom ? (
             <ChatJournal openChats={openChats} archivedChats={archivedChats} onSelect={selectChat} onReopen={reopenChat} />
           ) : null}
