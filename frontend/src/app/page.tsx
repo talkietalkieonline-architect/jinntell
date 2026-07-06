@@ -93,6 +93,11 @@ export default function Home() {
     sendMessage, attachMedia, room, setRoom, agentInfo, roomMembers,
   } = useChat(getJimRoom());
 
+  const roomRef = useRef(room);
+  const viewRef = useRef(view);
+  useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { viewRef.current = view; }, [view]);
+
   const assistantName = user?.assistant_name || "Джим";
   const assistantRoom = getJimRoom();
 
@@ -124,13 +129,15 @@ export default function Home() {
           if (ar) archivedRooms = new Set((JSON.parse(ar) as OpenChat[]).map((c) => c.room));
         } catch { /* noop */ }
         setOpenChats((prev) => {
-          const map = new Map(prev.map((c) => [c.room, c] as const));
-          for (const ch of chats) {
-            if (!map.has(ch.room) && !archivedRooms.has(ch.room)) {
-              map.set(ch.room, { room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, count: ch.count || undefined, online: ch.online });
-            }
-          }
-          return Array.from(map.values());
+          const have = new Set(prev.map((c) => c.room));
+          const additions = chats
+            .filter((ch) => !have.has(ch.room) && !archivedRooms.has(ch.room))
+            .map((ch) => ({ room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, online: ch.online }));
+          const updated = prev.map((c) => {
+            const srv = chats.find((x) => x.room === c.room);
+            return srv ? { ...c, online: srv.online, name: srv.name, photo: srv.photo || c.photo } : c;
+          });
+          return additions.length ? [...additions, ...updated] : updated;
         });
       }).catch(() => {});
     };
@@ -146,7 +153,7 @@ export default function Home() {
     let ws: WebSocket | null = null;
     let closed = false;
     const connect = () => {
-      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean; from?: number; from_name?: string; sdp?: string; candidate?: RTCIceCandidateInit }) => {
+      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean; from?: number; from_name?: string; sdp?: string; candidate?: RTCIceCandidateInit; room?: string }) => {
         const type = data?.type || "";
         if (type === "presence" && data.user_id != null) {
           const uid = data.user_id;
@@ -158,6 +165,15 @@ export default function Home() {
         } else if (type === "call_end" || type === "call_reject") {
           callSignalRef.current?.(type, data);
           setCall(null);
+        } else if (type === "chat_ping" && data.room) {
+          const pinged = data.room;
+          setOpenChats((prev) => {
+            const idx = prev.findIndex((c) => c.room === pinged);
+            if (idx < 0) { syncRef.current?.(); return prev; }
+            const isViewing = pinged === roomRef.current && viewRef.current === "chat";
+            const c = { ...prev[idx], count: isViewing ? 0 : (prev[idx].count || 0) + 1 };
+            return [c, ...prev.filter((x) => x.room !== pinged)];
+          });
         } else {
           syncRef.current?.();
         }
@@ -317,6 +333,7 @@ export default function Home() {
   const selectChat = useCallback((r: string) => {
     setRoom(r);
     setView("chat");
+    setOpenChats((prev) => prev.map((c) => (c.room === r ? { ...c, count: 0 } : c)));
   }, [setRoom]);
 
   /** Закрыть чат — в архив (история сохраняется), а не удалить */

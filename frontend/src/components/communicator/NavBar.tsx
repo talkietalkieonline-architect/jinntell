@@ -82,7 +82,7 @@ export default function NavBar({
       </div>
 
       {/* Лента открытых чатов */}
-      <div className="flex items-end justify-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+      <div className="flex items-end justify-start gap-2 overflow-x-auto no-scrollbar pb-0.5 px-1">
         {/* Помощник — закреплён первым */}
         <ChatAvatar
           active={isActive(assistantRoom)}
@@ -282,7 +282,7 @@ function ChatAvatar({
           ✕
         </button>
       )}
-      {count && count > 1 ? (
+      {count && count > 0 ? (
         <span
           className="absolute top-0 left-1 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[8px] font-bold"
           style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
