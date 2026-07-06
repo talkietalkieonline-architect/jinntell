@@ -158,6 +158,26 @@ async def send_message(
     return MessageOut.model_validate(msg)
 
 
+@router.delete("/history")
+async def clear_history(
+    room: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Очистить историю: в приватном чате (помощник/джинн) — все сообщения; в DM/комнате — только свои."""
+    own_private = room == f"jim-{user.id}" or re.match(rf"^agent-\d+-u{user.id}$", room) is not None
+    q = select(Message).where(Message.room == room)
+    if not own_private:
+        q = q.where(Message.sender_user_id == user.id)
+    res = await db.execute(q)
+    msgs = list(res.scalars().all())
+    for m in msgs:
+        await db.delete(m)
+    await db.commit()
+    await manager.broadcast(room, {"type": "clear", "room": room})
+    return {"ok": True, "cleared": len(msgs)}
+
+
 @router.delete("/message/{message_id}")
 async def delete_message(
     message_id: int,

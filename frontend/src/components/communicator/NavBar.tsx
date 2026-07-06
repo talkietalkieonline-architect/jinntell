@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { mediaUrl } from "@/services/api";
 
 export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean };
@@ -22,6 +22,7 @@ export default function NavBar({
   onFavorites,
   onFeed,
   onSettings,
+  onChatAction,
 }: {
   onHeightChange?: (h: number) => void;
   assistantName: string;
@@ -39,6 +40,7 @@ export default function NavBar({
   onFavorites: () => void;
   onFeed: () => void;
   onSettings?: () => void;
+  onChatAction?: (action: string) => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +55,34 @@ export default function NavBar({
   }, [onHeightChange]);
 
   const isActive = (room: string) => view === "chat" && activeRoom === room;
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const h = () => setMenuOpen(false);
+    const t = setTimeout(() => document.addEventListener("click", h), 0);
+    return () => { clearTimeout(t); document.removeEventListener("click", h); };
+  }, [menuOpen]);
+  const CHAT_MENU: Record<string, { a: string; label: string; danger?: boolean }[]> = {
+    assistant: [ { a: "settings", label: "⚙️ Настройки помощника" }, { a: "clear", label: "🧹 Очистить историю" } ],
+    dm: [ { a: "wallpaper", label: "🖼 Сменить обои" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "mute", label: "🔕 Приглушить" }, { a: "clear", label: "🧹 Очистить историю" }, { a: "close", label: "🗑 Удалить чат", danger: true } ],
+    jinn: [ { a: "share", label: "🔗 Поделиться ссылкой" }, { a: "fav", label: "⭐ В избранное" }, { a: "mute", label: "🔕 Приглушить" }, { a: "report", label: "⚠️ Пожаловаться", danger: true }, { a: "close", label: "❌ Закрыть чат" } ],
+    room: [ { a: "invite", label: "➕ Добавить джинна" }, { a: "clear", label: "🧹 Очистить историю" }, { a: "close", label: "🚪 Закрыть комнату" } ],
+  };
+  const renderMenu = (type: string) => (
+    <div className="relative shrink-0">
+      <button onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }} title="Меню чата" className="w-9 h-9 rounded-full flex items-center justify-center transition-opacity hover:opacity-80" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></svg>
+      </button>
+      {menuOpen && (
+        <div className="absolute right-0 top-11 rounded-xl py-1.5 px-1 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 200, zIndex: 80 }} onClick={(e) => e.stopPropagation()}>
+          {(CHAT_MENU[type] || []).map((it) => (
+            <button key={it.a} onClick={() => { setMenuOpen(false); onChatAction?.(it.a); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: it.danger ? "var(--danger)" : "var(--text-secondary)" }}>{it.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -154,6 +184,7 @@ export default function NavBar({
                 <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>комната • {roomMembers.length} джиннов</span>
               </div>
               {inviteBtn}
+              {renderMenu("room")}
             </div>
           );
         }
@@ -184,18 +215,16 @@ export default function NavBar({
               <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{name}</span>
               {sub && <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{sub}</span>}
             </div>
-            {isAssistant ? (
-              <div className="ml-auto flex items-center gap-1 shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span>
-              </div>
-            ) : activeRoom.startsWith("dm-") ? (
-              <button onClick={onCall} title="Видеозвонок" className="ml-auto shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-110" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "#2ecc71" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
-              </button>
-            ) : (
-              inviteBtn
-            )}
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              {isAssistant ? (
+                <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /><span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span></div>
+              ) : activeRoom.startsWith("dm-") ? (
+                <button onClick={onCall} title="Видеозвонок" className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-110" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "#2ecc71" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
+                </button>
+              ) : null}
+              {renderMenu(isAssistant ? "assistant" : activeRoom.startsWith("dm-") ? "dm" : "jinn")}
+            </div>
           </div>
         );
       })()}

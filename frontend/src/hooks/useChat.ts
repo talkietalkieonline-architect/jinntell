@@ -138,6 +138,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   useEffect(() => { assistantNameRef.current = assistantName; }, [assistantName]);
   const myIdRef = useRef<number | null>(myId);
   useEffect(() => { myIdRef.current = myId; }, [myId]);
+  const loadHistoryRef = useRef<() => void>(() => {});
 
   // Подключаемся к WebSocket при монтировании
   const connectWS = useCallback(() => {
@@ -175,6 +176,9 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         setIsTyping(false);
       } else if (data.type === "delete") {
         setMessages((prev) => prev.filter((m) => m.id !== String(data.id)));
+      } else if (data.type === "clear") {
+        setMessages([]);
+        setTimeout(() => loadHistoryRef.current?.(), 150);
       } else if (data.type === "user_joined") {
         if (data.room_members) setRoomMembers(data.room_members as AgentRoomInfo[]);
         if (data.agent_info) {
@@ -241,6 +245,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
+  useEffect(() => { loadHistoryRef.current = loadHistory; }, [loadHistory]);
 
   // Инициализация при смене комнаты
   useEffect(() => {

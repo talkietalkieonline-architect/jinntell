@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, type ContactOut } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, addFavoriteAgent, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -167,6 +167,7 @@ export default function Home() {
           setCall(null);
         } else if (type === "chat_ping" && data.room) {
           const pinged = data.room;
+          if (isMuted(pinged)) return;
           setOpenChats((prev) => {
             const idx = prev.findIndex((c) => c.room === pinged);
             if (idx < 0) { syncRef.current?.(); return prev; }
@@ -360,6 +361,35 @@ export default function Home() {
     setView("chat");
   }, [setRoom]);
 
+  const muteKey = () => `jinntell_muted_${user?.id || 0}`;
+  const isMuted = (r: string) => { try { return (JSON.parse(localStorage.getItem(muteKey()) || "[]") as string[]).includes(r); } catch { return false; } };
+  const toggleMute = (r: string) => {
+    let list: string[] = [];
+    try { list = JSON.parse(localStorage.getItem(muteKey()) || "[]"); } catch { list = []; }
+    const has = list.includes(r);
+    localStorage.setItem(muteKey(), JSON.stringify(has ? list.filter((x) => x !== r) : [...list, r]));
+    return !has;
+  };
+  const handleChatAction = useCallback((action: string) => {
+    const r = room;
+    const am = r.match(/^agent-(\d+)/);
+    const agentId = am ? Number(am[1]) : 0;
+    switch (action) {
+      case "settings":
+      case "wallpaper": setSettingsOpen(true); break;
+      case "clear": clearHistory(r).catch(() => {}); break;
+      case "mute": setCommandHint(toggleMute(r) ? "Чат приглушён 🔕" : "Уведомления включены"); break;
+      case "close": closeChat(r); break;
+      case "invite": onInviteJinn(); break;
+      case "call": startCall(); break;
+      case "share": navigator.clipboard?.writeText(`${location.origin}/?agent=${agentId}`).catch(() => {}); setCommandHint("Ссылка скопирована 🔗"); break;
+      case "fav": if (agentId) addFavoriteAgent(agentId).catch(() => {}); setCommandHint("Добавлено в избранное ⭐"); break;
+      case "report": setCommandHint("Жалоба отправлена, спасибо"); break;
+      case "search": setCommandHint("Поиск по чату — скоро"); break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, closeChat, onInviteJinn, startCall]);
+
   useEffect(() => {
     const read = () => setDrive(localStorage.getItem("jinntell_drive") === "1");
     read();
@@ -447,6 +477,7 @@ export default function Home() {
         onFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
         onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
         onSettings={() => setSettingsOpen(true)}
+        onChatAction={handleChatAction}
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
         onCall={startCall}
