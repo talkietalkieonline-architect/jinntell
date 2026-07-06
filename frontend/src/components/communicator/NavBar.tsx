@@ -81,29 +81,36 @@ export default function NavBar({
         </div>
       </div>
 
-      {/* Лента открытых чатов */}
-      <div className="flex items-end justify-start gap-2 overflow-x-auto no-scrollbar pb-0.5 px-1">
-        {/* Помощник — закреплён первым */}
-        <ChatAvatar
-          active={isActive(assistantRoom)}
-          name={assistantName}
-          color="var(--accent)"
-          photo={assistantPhoto}
-          onClick={() => onSelectChat(assistantRoom)}
-        />
-        {openChats.map((c) => (
+      {/* Лента открытых чатов: помощник закреплён слева, остальные скроллятся */}
+      <div className="flex items-end gap-2 px-1">
+        {/* Помощник — всегда первый, не уезжает при скролле */}
+        <div className="shrink-0">
           <ChatAvatar
-            key={c.room}
-            active={isActive(c.room)}
-            name={c.name}
-            color={c.color}
-            photo={c.photo}
-            count={c.count}
-            online={c.online}
-            onClick={() => onSelectChat(c.room)}
-            onClose={() => onCloseChat(c.room)}
+            active={isActive(assistantRoom)}
+            name={assistantName}
+            color="var(--accent)"
+            photo={assistantPhoto}
+            onClick={() => onSelectChat(assistantRoom)}
           />
-        ))}
+        </div>
+        {openChats.length > 0 && (
+          <div className="w-px self-stretch my-1 shrink-0" style={{ background: "var(--bg-glass-border)" }} />
+        )}
+        <div className="flex items-end gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          {openChats.map((c) => (
+            <ChatAvatar
+              key={c.room}
+              active={isActive(c.room)}
+              name={c.name}
+              color={c.color}
+              photo={c.photo}
+              count={c.count}
+              online={c.online}
+              onClick={() => onSelectChat(c.room)}
+              onClose={() => onCloseChat(c.room)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Шапка активного чата */}
