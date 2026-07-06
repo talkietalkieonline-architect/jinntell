@@ -271,4 +271,9 @@ async def update_agent(
             setattr(agent, field, value)
 
     await db.flush()
+    try:
+        from app.services import discovery
+        await discovery.index_one(agent)
+    except Exception as e:
+        print(f"[discovery] index_one failed: {e}")
     return AgentDetailOut.model_validate(agent)

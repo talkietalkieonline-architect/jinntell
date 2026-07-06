@@ -384,6 +384,9 @@ export function getAgents(params?: {
 export function getAgent(id: number): Promise<AgentOut> {
   return apiFetch(`/api/agents/${id}`);
 }
+export function discoverAgents(q: string, limit = 20): Promise<AgentOut[]> {
+  return apiFetch(`/api/agents/discover?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
 
 /** Мои агенты (созданные мной) — полные данные для настройки */
 export function getMyAgents(): Promise<AgentFullOut[]> {

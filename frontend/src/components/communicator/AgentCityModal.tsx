@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { useAgents } from "@/hooks/useAgents";
-import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, type AgentOut } from "@/services/api";
+import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, discoverAgents, type AgentOut } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
    Город Джиннов — каталог из API с fallback на хардкод
@@ -52,6 +52,8 @@ export default function AgentCityModal({
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
+  const [semantic, setSemantic] = useState<AgentOut[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   // Данные из API (useAgents хук с fallback на хардкод)
   const { agents, total, businessCount, citizenCount } = useAgents();
@@ -80,6 +82,15 @@ export default function AgentCityModal({
       return matchSearch && matchProfession && matchType;
     });
   }, [agents, searchQuery, selectedProfession, selectedType]);
+
+  const displayed = semantic !== null ? semantic : filtered;
+
+  const runSemantic = async () => {
+    const q = searchQuery.trim();
+    if (q.length < 3) { setSemantic(null); return; }
+    setSearching(true);
+    try { setSemantic(await discoverAgents(q)); } catch { setSemantic(null); } finally { setSearching(false); }
+  };
 
   const counts = { total, business: businessCount, citizen: citizenCount, system: total - businessCount - citizenCount };
 
@@ -191,14 +202,15 @@ export default function AgentCityModal({
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по имени, профессии, бренду..."
+              onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value.trim()) setSemantic(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") runSemantic(); }}
+              placeholder="Опишите, кто нужен — и нажмите Enter"
               className="flex-1 bg-transparent outline-none text-sm"
               style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }}
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery("")}
+                onClick={() => { setSearchQuery(""); setSemantic(null); }}
                 className="text-xs"
                 style={{ color: "var(--text-muted)" }}
               >
@@ -384,8 +396,17 @@ export default function AgentCityModal({
                   </div>
                 </div>
               )}
+              {/* Заголовок семантического поиска */}
+              {semantic !== null && (
+                <div className="flex items-center gap-1.5 mb-2 px-1">
+                  <span className="text-sm">✨</span>
+                  <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "var(--text-muted)" }}>
+                    {searching ? "Ищу по смыслу…" : `Найдено по смыслу: ${semantic.length}`}
+                  </span>
+                </div>
+              )}
               {/* Список агентов */}
-              {filtered.length === 0 ? (
+              {displayed.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                     Агенты не найдены
@@ -395,6 +416,7 @@ export default function AgentCityModal({
                       setSearchQuery("");
                       setSelectedProfession("Все");
                       setSelectedType("all");
+                      setSemantic(null);
                     }}
                     className="text-sm mt-2"
                     style={{ color: "var(--accent)" }}
@@ -404,7 +426,7 @@ export default function AgentCityModal({
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  {filtered.map((agent) => (
+                  {displayed.map((agent) => (
                     <button
                       key={agent.id}
                       onClick={() => setSelectedAgent(agent.id)}
