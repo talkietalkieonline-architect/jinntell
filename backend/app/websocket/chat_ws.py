@@ -540,8 +540,13 @@ async def chat_websocket(websocket: WebSocket, room: str):
 
     try:
         while True:
-            data = await websocket.receive_text()
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=45)
+            except asyncio.TimeoutError:
+                raise WebSocketDisconnect()  # нет heartbeat -> соединение мёртвое
             payload = json.loads(data)
+            if payload.get("type") == "ping":
+                continue
 
             # WebRTC-сигналинг: релей offer/answer/ice/end/reject целевому пользователю
             signal = payload.get("signal")

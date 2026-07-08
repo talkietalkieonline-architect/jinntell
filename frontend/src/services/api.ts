@@ -1292,6 +1292,12 @@ export function connectChat(room: string, onMessage: (msg: any) => void): WebSoc
     } catch { /* ignore parse errors */ }
   };
 
+  // Heartbeat: держим соединение живым и даём серверу детектить обрыв (presence)
+  const hb = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) { try { ws.send(JSON.stringify({ type: "ping" })); } catch { /* noop */ } }
+  }, 25000);
+  ws.addEventListener("close", () => clearInterval(hb));
+
   return ws;
 }
 

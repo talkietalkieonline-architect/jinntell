@@ -84,6 +84,9 @@ export default function BottomBar({
   useEffect(() => { onSendRef.current = onSendMessage; }, [onSendMessage]);
   // Антидубль голоса: одна и та же фраза не уходит повторно в течение окна
   const lastVoiceRef = useRef<{ text: string; t: number }>({ text: "", t: 0 });
+  const voiceFullRef = useRef("");
+  const voiceSentRef = useRef("");
+  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendVoice = useCallback((raw: string) => {
     const t = (raw || "").trim();
     if (!t) return;
@@ -110,19 +113,23 @@ export default function BottomBar({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       if (ttsSpeakingRef.current || window.speechSynthesis?.speaking) return;
+      let full = "";
       let interim = "";
-      let final = "";
-      // Только НОВЫЕ результаты (resultIndex) — иначе continuous пере-отправляет всю накопленную фразу
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = 0; i < event.results.length; i++) {
         const r = event.results[i];
-        if (r.isFinal) final += r[0].transcript;
+        if (r.isFinal) full += r[0].transcript;
         else interim += r[0].transcript;
       }
       setVoiceText(interim);
-      if (final.trim()) {
-        sendVoice(final.trim());
-        setVoiceText("");
-      }
+      voiceFullRef.current = full;
+      // Дебаунс: отправляем законченную фразу целиком после паузы (гасит фрагментацию/дубли)
+      if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+      voiceTimerRef.current = setTimeout(() => {
+        const f = voiceFullRef.current.trim();
+        const sent = voiceSentRef.current;
+        const delta = f.startsWith(sent) ? f.slice(sent.length).trim() : f;
+        if (delta) { voiceSentRef.current = f; setVoiceText(""); sendVoice(delta); }
+      }, 900);
     };
 
     recognition.onerror = (event) => {
@@ -139,6 +146,9 @@ export default function BottomBar({
       }
     };
 
+    voiceSentRef.current = "";
+    voiceFullRef.current = "";
+    if (voiceTimerRef.current) { clearTimeout(voiceTimerRef.current); voiceTimerRef.current = null; }
     recognition.start();
     recognitionRef.current = recognition;
   // eslint-disable-next-line react-hooks/exhaustive-deps

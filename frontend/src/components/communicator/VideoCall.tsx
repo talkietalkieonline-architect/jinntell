@@ -34,11 +34,22 @@ export default function VideoCall({
   const endedRef = useRef(false);
   const [status, setStatus] = useState(role === "caller" ? "Соединение…" : "Соединение…");
   const [error, setError] = useState("");
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
 
   const cleanup = () => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     try { pcRef.current?.close(); } catch { /* noop */ }
     pcRef.current = null;
+  };
+
+  const toggleMic = () => {
+    const s = localStreamRef.current; if (!s) return;
+    const on = !micOn; s.getAudioTracks().forEach((t) => (t.enabled = on)); setMicOn(on);
+  };
+  const toggleCam = () => {
+    const s = localStreamRef.current; if (!s) return;
+    const on = !camOn; s.getVideoTracks().forEach((t) => (t.enabled = on)); setCamOn(on);
   };
 
   const end = (notify: boolean) => {
@@ -124,12 +135,26 @@ export default function VideoCall({
         <div className="text-lg font-semibold">{peerName}</div>
         <div className="text-sm opacity-80">{error || status}</div>
       </div>
-      <div className="absolute bottom-10 left-0 right-0 flex justify-center">
+      <div className="absolute bottom-10 left-0 right-0 flex justify-center items-center gap-4">
+        <button onClick={toggleMic} className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95" style={{ background: micOn ? "rgba(255,255,255,0.18)" : "#e74c3c" }} title={micOn ? "Выключить микрофон" : "Включить микрофон"}>
+          {micOn ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /></svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><line x1="1" y1="1" x2="23" y2="23" /><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" /><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" /><line x1="12" y1="19" x2="12" y2="23" /></svg>
+          )}
+        </button>
         <button onClick={() => end(true)} className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95" style={{ background: "#e74c3c" }} title="Завершить">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
             <path d="M3 3l18 18" />
             <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72" />
           </svg>
+        </button>
+        <button onClick={toggleCam} className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-95" style={{ background: camOn ? "rgba(255,255,255,0.18)" : "#e74c3c" }} title={camOn ? "Выключить камеру" : "Включить камеру"}>
+          {camOn ? (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
+          ) : (
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9"><line x1="1" y1="1" x2="23" y2="23" /><path d="M16 16H3a2 2 0 0 1-2-2V7m5-2h9a2 2 0 0 1 2 2v3l4-3v9" /></svg>
+          )}
         </button>
       </div>
     </div>

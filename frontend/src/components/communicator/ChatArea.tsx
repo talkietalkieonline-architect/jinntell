@@ -316,7 +316,7 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight 
           const raw = msg.mediaUrl as string;
           const src = raw.startsWith("blob:") || raw.startsWith("data:") ? raw : mediaUrl(raw);
           if (msg.mediaType === "image") return <img src={src} alt="" className="rounded-lg mb-2 max-w-full cursor-zoom-in" style={{ maxHeight: "240px", objectFit: "cover" }} onClick={() => setLightbox({ src, type: "image" })} />;
-          if (msg.mediaType === "note") return <video src={src} controls autoPlay muted loop playsInline className="mb-2" style={{ width: 220, height: 220, objectFit: "cover", borderRadius: 24 }} />;
+          if (msg.mediaType === "note") return <video src={src} controls autoPlay muted loop playsInline className="mb-2" style={{ width: 220, height: 220, objectFit: "cover", borderRadius: 24, transform: "scaleX(-1)" }} onClick={() => setLightbox({ src, type: "video" })} />;
           if (msg.mediaType === "video") return <video src={src} controls playsInline className="rounded-lg mb-2 max-w-full" style={{ maxHeight: "240px" }} />;
           return null;
         })()}

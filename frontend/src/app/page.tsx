@@ -100,6 +100,9 @@ export default function Home() {
   const viewRef = useRef(view);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { viewRef.current = view; }, [view]);
+  const callRef = useRef(call);
+  useEffect(() => { callRef.current = call; }, [call]);
+  const callStartRef = useRef(0);
   useEffect(() => { setChatSearchOpen(false); }, [room]);
 
   const assistantName = user?.assistant_name || "Джим";
@@ -165,12 +168,13 @@ export default function Home() {
         } else if (type === "call_ring") {
           setCall((cur) => (cur ? cur : { status: "incoming", role: "callee", peerId: data.from!, peerName: data.from_name || "Абонент" }));
         } else if (type === "call_accept") {
+          callStartRef.current = Date.now();
           setCall((cur) => (cur && cur.role === "caller" ? { ...cur, status: "active" } : cur));
         } else if (type === "call_offer" || type === "call_answer" || type === "call_ice") {
           callSignalRef.current?.(type, data);
         } else if (type === "call_end" || type === "call_reject") {
           callSignalRef.current?.(type, data);
-          setCall(null);
+          finishCall();
         } else if (type === "chat_ping" && data.room) {
           const pinged = data.room;
           if (isMuted(pinged)) return;
@@ -321,8 +325,20 @@ export default function Home() {
     if (!other) return;
     const oc = openChats.find((c) => c.room === room);
     sendSignal(other, "ring");
+    callStartRef.current = 0;
     setCall({ status: "calling", role: "caller", peerId: other, peerName: oc?.name || "Абонент" });
   }, [room, openChats, sendSignal]);
+
+  const finishCall = useCallback(() => {
+    const c = callRef.current;
+    if (c && c.role === "caller") {
+      const secs = callStartRef.current ? Math.round((Date.now() - callStartRef.current) / 1000) : 0;
+      const label = secs > 0 ? `📞 Видеозвонок · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}` : "📞 Вызов не отвечен";
+      sendMessage(label);
+    }
+    callStartRef.current = 0;
+    setCall(null);
+  }, [sendMessage]);
 
   const handleScreenTap = useCallback((e: React.PointerEvent) => {
     const el = e.target as HTMLElement;
@@ -608,7 +624,7 @@ export default function Home() {
           peerName={call.peerName}
           sendSignal={sendSignal}
           signalRef={callSignalRef}
-          onEnd={() => setCall(null)}
+          onEnd={finishCall}
         />
       )}
       {call?.status === "calling" && (
@@ -616,7 +632,7 @@ export default function Home() {
           <div className="flex flex-col items-center gap-5 text-white">
             <div className="text-xl font-semibold">{call.peerName}</div>
             <div className="text-sm opacity-80">Звоним…</div>
-            <button onClick={() => { sendSignal(call.peerId, "end"); setCall(null); }} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#e74c3c", color: "#fff" }} title="Отменить">✕</button>
+            <button onClick={() => { sendSignal(call.peerId, "end"); finishCall(); }} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#e74c3c", color: "#fff" }} title="Отменить">✕</button>
           </div>
         </div>
       )}
