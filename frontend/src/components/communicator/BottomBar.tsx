@@ -82,6 +82,16 @@ export default function BottomBar({
   const ttsSpeakingRef = useRef(false);
 
   useEffect(() => { onSendRef.current = onSendMessage; }, [onSendMessage]);
+  // Антидубль голоса: одна и та же фраза не уходит повторно в течение окна
+  const lastVoiceRef = useRef<{ text: string; t: number }>({ text: "", t: 0 });
+  const sendVoice = useCallback((raw: string) => {
+    const t = (raw || "").trim();
+    if (!t) return;
+    const now = Date.now();
+    if (t === lastVoiceRef.current.text && now - lastVoiceRef.current.t < 2500) return;
+    lastVoiceRef.current = { text: t, t: now };
+    onSendRef.current(t);
+  }, []);
   useEffect(() => {
     micStateRef.current = micState;
     onMicStateChange?.(micState === "on" || micState === "always");
@@ -110,7 +120,7 @@ export default function BottomBar({
       }
       setVoiceText(interim);
       if (final.trim()) {
-        onSendRef.current(final.trim());
+        sendVoice(final.trim());
         setVoiceText("");
       }
     };
@@ -214,14 +224,14 @@ export default function BottomBar({
         awaitingCommandRef.current = false;
         setWakeAwaiting(false);
         if (wakeCmdTimeout.current) { clearTimeout(wakeCmdTimeout.current); wakeCmdTimeout.current = null; }
-        onSendRef.current(text);
+        sendVoice(text);
         return;
       }
       const end = matchName(text);
       if (end >= 0) {
         const rest = text.slice(end).replace(/^[\s,.!?:;-]+/, "").trim();
         if (rest) {
-          onSendRef.current(rest);
+          sendVoice(rest);
         } else {
           // Обращение без команды — откликаемся «Да?» и ждём команду (без мусора в чате)
           awaitingCommandRef.current = true;
