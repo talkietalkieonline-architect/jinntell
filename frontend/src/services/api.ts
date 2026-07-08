@@ -226,7 +226,16 @@ export interface AgentOut {
   rating_count: number;
   greeting?: string;
   owner_id?: number;
+  scope?: string;
+  city?: string | null;
 }
+
+export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }
+export function getCities(): Promise<CityOut[]> { return apiFetch("/api/cities"); }
+export function getAllCities(): Promise<CityOut[]> { return apiFetch("/api/cities/all"); }
+export function nearestCity(lat: number, lng: number): Promise<CityOut | null> { return apiFetch("/api/cities/nearest", { method: "POST", body: JSON.stringify({ lat, lng }) }); }
+export function createCity(data: { name: string; slug: string; lat?: number; lng?: number }): Promise<CityOut> { return apiFetch("/api/cities", { method: "POST", body: JSON.stringify(data) }); }
+export function updateCity(id: number, data: Record<string, unknown>): Promise<CityOut> { return apiFetch(`/api/cities/${id}`, { method: "PATCH", body: JSON.stringify(data) }); }
 
 export interface AgentCreate {
   name: string;
@@ -384,8 +393,11 @@ export function getAgents(params?: {
 export function getAgent(id: number): Promise<AgentOut> {
   return apiFetch(`/api/agents/${id}`);
 }
-export function discoverAgents(q: string, limit = 20): Promise<AgentOut[]> {
-  return apiFetch(`/api/agents/discover?q=${encodeURIComponent(q)}&limit=${limit}`);
+export function discoverAgents(q: string, limit = 20, scope = "", city = ""): Promise<AgentOut[]> {
+  const p = new URLSearchParams({ q, limit: String(limit) });
+  if (scope) p.set("scope", scope);
+  if (city) p.set("city", city);
+  return apiFetch(`/api/agents/discover?${p.toString()}`);
 }
 
 /** Мои агенты (созданные мной) — полные данные для настройки */

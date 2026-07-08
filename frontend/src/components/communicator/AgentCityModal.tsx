@@ -1,7 +1,8 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { useAgents } from "@/hooks/useAgents";
-import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, discoverAgents, type AgentOut } from "@/services/api";
+import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, discoverAgents, getCities, nearestCity, updateMe, type AgentOut, type CityOut } from "@/services/api";
+import { useAuth } from "@/context/AuthContext";
 
 /* ══════════════════════════════════════════════════════════════
    Город Джиннов — каталог из API с fallback на хардкод
@@ -54,6 +55,12 @@ export default function AgentCityModal({
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
   const [semantic, setSemantic] = useState<AgentOut[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const { user } = useAuth();
+  const [cities, setCities] = useState<CityOut[]>([]);
+  const [userCity, setUserCity] = useState<string>("");
+  const [cityTab, setCityTab] = useState<"city" | "federal">("city");
+  const [geoLoading, setGeoLoading] = useState(false);
+  useEffect(() => { if (user?.city) setUserCity(user.city); }, [user?.city]);
 
   // Данные из API (useAgents хук с fallback на хардкод)
   const { agents, total, businessCount, citizenCount } = useAgents();
@@ -64,6 +71,7 @@ export default function AgentCityModal({
     let alive = true;
     getFavoriteAgents().then((f) => { if (alive) setFavorites(new Set(f.map((a) => a.id))); }).catch(() => {});
     getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
+    getCities().then((c) => { if (alive) setCities(c); }).catch(() => {});
     return () => { alive = false; };
   }, [isOpen]);
 
@@ -79,9 +87,12 @@ export default function AgentCityModal({
         selectedProfession === "Все" || a.profession === selectedProfession;
       const matchType =
         selectedType === "all" || a.agent_type === selectedType;
-      return matchSearch && matchProfession && matchType;
+      const matchScope = cityTab === "federal"
+        ? a.scope === "federal"
+        : a.scope === "city" && (!userCity || a.city === userCity);
+      return matchSearch && matchProfession && matchType && matchScope;
     });
-  }, [agents, searchQuery, selectedProfession, selectedType]);
+  }, [agents, searchQuery, selectedProfession, selectedType, cityTab, userCity]);
 
   const displayed = semantic !== null ? semantic : filtered;
 
@@ -89,7 +100,7 @@ export default function AgentCityModal({
     const q = searchQuery.trim();
     if (q.length < 3) { setSemantic(null); return; }
     setSearching(true);
-    try { setSemantic(await discoverAgents(q)); } catch { setSemantic(null); } finally { setSearching(false); }
+    try { setSemantic(await discoverAgents(q, 20, cityTab === "federal" ? "federal" : "city", cityTab === "federal" ? "" : userCity)); } catch { setSemantic(null); } finally { setSearching(false); }
   };
 
   const counts = { total, business: businessCount, citizen: citizenCount, system: total - businessCount - citizenCount };
@@ -101,6 +112,17 @@ export default function AgentCityModal({
     : null;
 
   const isFav = (id: number) => favorites.has(id);
+
+  const changeCity = (name: string) => { setUserCity(name); updateMe({ city: name || undefined } as never).catch(() => {}); };
+  const detectCity = () => {
+    if (!navigator.geolocation) return;
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { nearestCity(pos.coords.latitude, pos.coords.longitude).then((c) => { if (c) changeCity(c.name); }).catch(() => {}).finally(() => setGeoLoading(false)); },
+      () => setGeoLoading(false),
+      { timeout: 8000 }
+    );
+  };
 
   const toggleAdd = (id: number) => {
     const willAdd = !favorites.has(id);
@@ -177,6 +199,30 @@ export default function AgentCityModal({
                 ✕
               </button>
             </div>
+          </div>
+
+          {/* Город + охват */}
+          <div className="flex items-center gap-2 mb-2.5">
+            <select value={userCity} onChange={(e) => changeCity(e.target.value)}
+              className="flex-1 appearance-none rounded-xl px-3 py-2 text-sm outline-none cursor-pointer"
+              style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}>
+              <option value="">📍 Город не выбран</option>
+              {cities.map((c) => <option key={c.id} value={c.name}>📍 {c.name}</option>)}
+            </select>
+            <button onClick={detectCity} disabled={geoLoading} title="Определить по геолокации"
+              className="shrink-0 px-3 py-2 rounded-xl text-[13px] font-medium transition-all hover:opacity-90"
+              style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}>
+              {geoLoading ? "…" : "🎯"}
+            </button>
+          </div>
+          <div className="flex gap-1.5 mb-3">
+            {[{ id: "city", label: "В городе" }, { id: "federal", label: "Федеральные" }].map((t) => (
+              <button key={t.id} onClick={() => setCityTab(t.id as "city" | "federal")}
+                className="flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-all"
+                style={{ background: cityTab === t.id ? "var(--accent)" : "var(--bg-glass)", color: cityTab === t.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${cityTab === t.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                {t.label}
+              </button>
+            ))}
           </div>
 
           {/* Поиск */}
