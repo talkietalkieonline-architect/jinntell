@@ -35,6 +35,9 @@ import {
   type SystemInfo,
   type ContractorOut,
   type ContractorCreateData,
+  getAllCities,
+  createCity,
+  updateCity,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
 
@@ -43,7 +46,7 @@ import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
    Управление агентами, пользователями, статистика
    ══════════════════════════════════════════════════════════════ */
 
-type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations";
+type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities";
 
 const AGENT_TYPES = [
   { id: "", label: "Все" },
@@ -80,6 +83,8 @@ export default function AdminPage() {
 
   // Stats
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [citiesList, setCitiesList] = useState<{ id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }[]>([]);
+  const [newCity, setNewCity] = useState({ name: "", slug: "", lat: "", lng: "" });
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null);
 
   // System settings
@@ -199,6 +204,10 @@ export default function AdminPage() {
     } catch {}
   }, []);
 
+  const loadCities = useCallback(async () => {
+    try { setCitiesList(await getAllCities()); } catch {}
+  }, []);
+
   const loadIntegrations = useCallback(async () => {
     try { setIntegrations(await adminGetIntegrations()); } catch {}
     try { setEmbConfig(await adminGetEmbeddingConfig()); } catch {}
@@ -214,6 +223,7 @@ export default function AdminPage() {
       if (tab === "system") await loadSystemInfo();
       if (tab === "stats") await loadStats();
       if (tab === "integrations") await loadIntegrations();
+      if (tab === "cities") await loadCities();
     };
     load();
   }, [tab, isAdmin, loadAgents, loadCoreAgents, loadContractors, loadUsers, loadSystemInfo, loadStats, loadIntegrations]);
@@ -369,6 +379,7 @@ export default function AdminPage() {
             { id: "users" as Tab, label: "Пользователи", icon: "👥" },
             { id: "system" as Tab, label: "Система", icon: "🖥️" },
             { id: "stats" as Tab, label: "Статистика", icon: "📊" },
+            { id: "cities" as Tab, label: "Города", icon: "📍" },
             { id: "integrations" as Tab, label: "Интеграции", icon: "🔌" },
           ]).map((item) => (
             <button
@@ -1243,6 +1254,37 @@ export default function AdminPage() {
           )}
 
           {/* ═══ STATS TAB ═══ */}
+          {tab === "cities" && (
+            <div>
+              <h2 className="text-lg font-semibold mb-6">Города</h2>
+              <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 mb-6 max-w-2xl">
+                <div className="text-sm text-gray-400 mb-3">Добавить город</div>
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  <input placeholder="Название" value={newCity.name} onChange={(e) => setNewCity({ ...newCity, name: e.target.value })} className="bg-gray-800 rounded px-2 py-1.5 text-sm text-white col-span-2" />
+                  <input placeholder="slug" value={newCity.slug} onChange={(e) => setNewCity({ ...newCity, slug: e.target.value })} className="bg-gray-800 rounded px-2 py-1.5 text-sm text-white" />
+                  <div className="grid grid-cols-2 gap-1">
+                    <input placeholder="lat" value={newCity.lat} onChange={(e) => setNewCity({ ...newCity, lat: e.target.value })} className="bg-gray-800 rounded px-2 py-1.5 text-sm text-white" />
+                    <input placeholder="lng" value={newCity.lng} onChange={(e) => setNewCity({ ...newCity, lng: e.target.value })} className="bg-gray-800 rounded px-2 py-1.5 text-sm text-white" />
+                  </div>
+                </div>
+                <button onClick={async () => { if (!newCity.name || !newCity.slug) return; try { await createCity({ name: newCity.name, slug: newCity.slug, lat: newCity.lat ? Number(newCity.lat) : undefined, lng: newCity.lng ? Number(newCity.lng) : undefined }); setNewCity({ name: "", slug: "", lat: "", lng: "" }); loadCities(); } catch {} }} className="bg-amber-500 text-black rounded-lg px-4 py-1.5 text-sm font-medium">Добавить</button>
+              </div>
+              <div className="space-y-2 max-w-2xl">
+                {citiesList.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 bg-gray-900 rounded-lg px-4 py-2.5 border border-gray-800">
+                    <span className="text-lg">📍</span>
+                    <div className="flex-1">
+                      <div className="text-white text-sm font-medium">{c.name}</div>
+                      <div className="text-gray-500 text-xs">{c.slug} · {c.lat ?? "—"}, {c.lng ?? "—"}</div>
+                    </div>
+                    <button onClick={async () => { try { await updateCity(c.id, { is_active: !c.is_active }); loadCities(); } catch {} }} className={`px-3 py-1 rounded text-xs font-medium ${c.is_active ? "bg-green-900/50 text-green-300" : "bg-gray-800 text-gray-500"}`}>{c.is_active ? "активен" : "скрыт"}</button>
+                  </div>
+                ))}
+                {citiesList.length === 0 && <div className="text-gray-500 text-sm">Городов пока нет</div>}
+              </div>
+            </div>
+          )}
+
           {tab === "stats" && (
             <div>
               <h2 className="text-lg font-semibold mb-6">Статистика</h2>

@@ -13,6 +13,7 @@ import {
   adminGetRAGStats,
   adminGetRAGLog,
   adminDeleteAllRAGChunks,
+  getCities,
   type AgentDetailOut,
   type RAGSource,
   type RAGParseLog,
@@ -80,6 +81,8 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [customModel, setCustomModel] = useState(false);
+  const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
+  useEffect(() => { getCities().then((c) => setCities(c)).catch(() => {}); }, []);
 
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
@@ -228,6 +231,24 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                     }`}>{t}</button>
                 ))}
               </div>
+            </div>
+            )}
+            {!isCore && (
+            <div>
+              <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Охват</label>
+              <div className="flex gap-2">
+                {[{ id: "federal", label: "Федеральный" }, { id: "city", label: "Городской" }].map((o) => (
+                  <button key={o.id} onClick={() => setF("scope", o.id)}
+                    className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${(f("scope") || "federal") === o.id ? "bg-amber-500 text-black" : "bg-gray-800 text-gray-400"}`}>{o.label}</button>
+                ))}
+              </div>
+              {f("scope") === "city" && (
+                <select value={f("city")} onChange={(e) => setF("city", e.target.value)}
+                  className="mt-2 w-full bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border border-gray-700">
+                  <option value="">— выберите город —</option>
+                  {cities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              )}
             </div>
             )}
             <div>
