@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, type UserProfile } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -87,6 +87,25 @@ export default function SettingsModal({
 
   // Состояние сохранения
   const [saving, setSaving] = useState(false);
+  const [myJinn, setMyJinn] = useState<AgentFullOut | null>(null);
+  const [jName, setJName] = useState("");
+  const [jDesc, setJDesc] = useState("");
+  const [jGreet, setJGreet] = useState("");
+  const [jinnSaving, setJinnSaving] = useState(false);
+  const [jinnMsg, setJinnMsg] = useState("");
+  useEffect(() => {
+    if (!isOpen) return;
+    getMyJinn().then((a) => { if (a) { setMyJinn(a); setJName(a.name); setJDesc(a.description || ""); setJGreet(a.greeting || ""); } }).catch(() => {});
+  }, [isOpen]);
+  const createJinn = async () => {
+    setJinnSaving(true);
+    try { const a = await createMyJinn(); setMyJinn(a); setJName(a.name); setJDesc(a.description || ""); setJGreet(a.greeting || ""); } catch { /* noop */ } finally { setJinnSaving(false); }
+  };
+  const saveJinn = async () => {
+    if (!myJinn) return;
+    setJinnSaving(true); setJinnMsg("");
+    try { const a = await updateAgent(myJinn.id, { description: jDesc, greeting: jGreet }); setMyJinn(a); setJinnMsg("Сохранено!"); setTimeout(() => setJinnMsg(""), 2000); } catch { /* noop */ } finally { setJinnSaving(false); }
+  };
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
@@ -388,6 +407,26 @@ const _av = user.assistant_voice || "ermil";
 
               {error && <p className="text-xs text-center" style={{ color: "var(--danger)" }}>{error}</p>}
               {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
+
+              {/* Мой джинн в Городе */}
+              <div className="pt-4" style={{ borderTop: "1px solid var(--bg-glass-border)" }}>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Мой джинн в Городе</label>
+                {!myJinn ? (
+                  <div>
+                    <p className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>Ваш представитель в Городе — с ним смогут познакомиться и написать другие.</p>
+                    <button onClick={createJinn} disabled={jinnSaving} className="w-full py-2.5 rounded-xl text-sm font-medium transition-all hover:opacity-90" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)" }}>{jinnSaving ? "Создаю…" : "🧞 Создать моего джинна"}</button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px]" style={{ color: "var(--text-secondary)" }}>Имя: <b>{jName}</b> — из вашего профиля (поле «Ник»)</p>
+                    <textarea value={jDesc} onChange={(e) => setJDesc(e.target.value)} placeholder="О себе — что увидят собеседники" rows={2} className="w-full px-3 py-2 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
+                    <input value={jGreet} onChange={(e) => setJGreet(e.target.value)} placeholder="Приветствие" className="w-full px-3 py-2 rounded-xl outline-none text-sm" style={inputStyle} />
+                    <button onClick={saveJinn} disabled={jinnSaving} className="w-full py-2 rounded-xl text-sm font-medium transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{jinnSaving ? "Сохранение…" : "Сохранить джинна"}</button>
+                    {jinnMsg && <p className="text-[11px] text-center" style={{ color: "#2ecc71" }}>{jinnMsg}</p>}
+                    <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Виден в Городе → Жители. Аватар и цвет берутся из профиля.</p>
+                  </div>
+                )}
+              </div>
 
               <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
                 {saving ? "Сохранение..." : "Сохранить"}

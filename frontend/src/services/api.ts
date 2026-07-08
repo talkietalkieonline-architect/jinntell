@@ -404,6 +404,12 @@ export function discoverAgents(q: string, limit = 20, scope = "", city = ""): Pr
 export function getMyAgents(): Promise<AgentFullOut[]> {
   return apiFetch("/api/agents/my");
 }
+export function getMyJinn(): Promise<AgentFullOut | null> {
+  return apiFetch("/api/agents/my-jinn");
+}
+export function createMyJinn(): Promise<AgentFullOut> {
+  return apiFetch("/api/agents/my-jinn", { method: "POST" });
+}
 export function getFavoriteAgents(): Promise<AgentOut[]> {
   return apiFetch("/api/agents/favorites");
 }

@@ -86,7 +86,7 @@ export default function AgentCityModal({
       const matchProfession =
         selectedProfession === "Все" || a.profession === selectedProfession;
       const matchType =
-        selectedType === "all" || a.agent_type === selectedType;
+        selectedType === "all" || a.agent_type === selectedType || (selectedType === "citizen" && a.agent_type === "personal");
       const matchScope = cityTab === "federal"
         ? a.scope === "federal"
         : a.scope === "city" && (!userCity || a.city === userCity);

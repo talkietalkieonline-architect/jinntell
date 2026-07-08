@@ -220,6 +220,49 @@ async def reindex_agents(user: User = Depends(get_current_user), db: AsyncSessio
     return {"ok": True, "indexed": n}
 
 
+@router.get("/my-jinn")
+async def get_my_jinn(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Личный джинн-дубликат пользователя (или null)."""
+    res = await db.execute(select(Agent).where(Agent.owner_id == user.id, Agent.agent_type == "personal", Agent.is_active == True))
+    a = res.scalar_one_or_none()
+    return AgentDetailOut.model_validate(a) if a else None
+
+
+@router.post("/my-jinn", response_model=AgentDetailOut)
+async def create_my_jinn(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Создать (или вернуть) личного джинна из профиля пользователя."""
+    res = await db.execute(select(Agent).where(Agent.owner_id == user.id, Agent.agent_type == "personal", Agent.is_active == True))
+    a = res.scalar_one_or_none()
+    if a:
+        return AgentDetailOut.model_validate(a)
+    name = user.display_name or user.first_name or "Мой джинн"
+    interests = (user.interests or "").strip()
+    desc = f"Личный представитель {name} в Городе." + (f" Интересы: {interests}." if interests else "")
+    prompt = (
+        f"Ты — цифровой представитель человека по имени {name} в JinnTell. "
+        f"Общайся от его лица дружелюбно и живо, помогай познакомиться, договориться о встрече или деле. "
+        f"Не выдавай приватных данных о владельце. "
+        + (f"Интересы владельца: {interests}. " if interests else "")
+        + "Отвечай кратко, по-русски."
+    )
+    agent = Agent(
+        name=name, profession="Житель", brand="", description=desc,
+        color=user.avatar_color or "#6c7bff", agent_type="personal", visibility="public",
+        owner_id=user.id, scope="city", city=user.city, photo_url=user.avatar_url,
+        greeting=f"Привет! Я {name}. Рад(а) знакомству 🙂", system_prompt=prompt,
+        skills_text=interests,
+    )
+    db.add(agent)
+    await db.commit()
+    await db.refresh(agent)
+    try:
+        from app.services import discovery
+        await discovery.index_one(agent)
+    except Exception as e:
+        print(f"[discovery] my-jinn index failed: {e}")
+    return AgentDetailOut.model_validate(agent)
+
+
 @router.get("/link/{slug}")
 async def get_agent_by_link(slug: str, user: Optional[User] = Depends(get_current_user_optional), db: AsyncSession = Depends(get_db)):
     """Карточка агента по jinntell_link (скрытые — только для списка доступа)"""
