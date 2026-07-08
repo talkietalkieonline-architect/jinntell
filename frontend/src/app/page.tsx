@@ -162,9 +162,11 @@ export default function Home() {
         if (type === "presence" && data.user_id != null) {
           const uid = data.user_id;
           setOpenChats((prev) => prev.map((c) => (dmOtherId(c.room) === uid ? { ...c, online: !!data.online } : c)));
-        } else if (type === "call_offer") {
-          setCall((cur) => (cur ? cur : { status: "incoming", role: "callee", peerId: data.from!, peerName: data.from_name || "Абонент", offer: data.sdp }));
-        } else if (type === "call_answer" || type === "call_ice") {
+        } else if (type === "call_ring") {
+          setCall((cur) => (cur ? cur : { status: "incoming", role: "callee", peerId: data.from!, peerName: data.from_name || "Абонент" }));
+        } else if (type === "call_accept") {
+          setCall((cur) => (cur && cur.role === "caller" ? { ...cur, status: "active" } : cur));
+        } else if (type === "call_offer" || type === "call_answer" || type === "call_ice") {
           callSignalRef.current?.(type, data);
         } else if (type === "call_end" || type === "call_reject") {
           callSignalRef.current?.(type, data);
@@ -304,14 +306,23 @@ export default function Home() {
   }, [view, room, assistantRoom, findContact, openDM, sendMessage, setRoom]);
 
   const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
-    userWsRef.current?.send(JSON.stringify({ signal, to, ...(extra || {}) }));
+    const payload = JSON.stringify({ signal, to, ...(extra || {}) });
+    const ws = userWsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) { ws.send(payload); return; }
+    let tries = 0;
+    const iv = setInterval(() => {
+      const w = userWsRef.current;
+      if (w && w.readyState === WebSocket.OPEN) { w.send(payload); clearInterval(iv); }
+      else if (++tries > 12) clearInterval(iv);
+    }, 300);
   }, []);
   const startCall = useCallback(() => {
     const other = dmOtherId(room);
     if (!other) return;
     const oc = openChats.find((c) => c.room === room);
+    sendSignal(other, "ring");
     setCall({ status: "calling", role: "caller", peerId: other, peerName: oc?.name || "Абонент" });
-  }, [room, openChats]);
+  }, [room, openChats, sendSignal]);
 
   const handleScreenTap = useCallback((e: React.PointerEvent) => {
     const el = e.target as HTMLElement;
@@ -585,21 +596,29 @@ export default function Home() {
             <div className="text-sm opacity-80">Входящий видеозвонок…</div>
             <div className="flex gap-8">
               <button onClick={() => { sendSignal(call.peerId, "reject"); setCall(null); }} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#e74c3c", color: "#fff" }}>✕</button>
-              <button onClick={() => setCall((c) => (c ? { ...c, status: "active" } : c))} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#2ecc71" }}>📞</button>
+              <button onClick={() => { if (call) sendSignal(call.peerId, "accept"); setCall((c) => (c ? { ...c, status: "active" } : c)); }} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#2ecc71" }}>📞</button>
             </div>
           </div>
         </div>
       )}
-      {call && (call.status === "calling" || call.status === "active") && (
+      {call?.status === "active" && (
         <VideoCall
           role={call.role}
           peerId={call.peerId}
           peerName={call.peerName}
-          offer={call.offer}
           sendSignal={sendSignal}
           signalRef={callSignalRef}
           onEnd={() => setCall(null)}
         />
+      )}
+      {call?.status === "calling" && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 130, background: "rgba(0,0,0,0.85)" }}>
+          <div className="flex flex-col items-center gap-5 text-white">
+            <div className="text-xl font-semibold">{call.peerName}</div>
+            <div className="text-sm opacity-80">Звоним…</div>
+            <button onClick={() => { sendSignal(call.peerId, "end"); setCall(null); }} className="w-16 h-16 rounded-full flex items-center justify-center text-2xl" style={{ background: "#e74c3c", color: "#fff" }} title="Отменить">✕</button>
+          </div>
+        </div>
       )}
 
       {/* Центр Управления */}

@@ -14,7 +14,6 @@ export default function VideoCall({
   role,
   peerId,
   peerName,
-  offer,
   sendSignal,
   signalRef,
   onEnd,
@@ -22,7 +21,6 @@ export default function VideoCall({
   role: "caller" | "callee";
   peerId: number;
   peerName: string;
-  offer?: string;
   sendSignal: (to: number, signal: string, extra?: Record<string, unknown>) => void;
   signalRef: { current: ((type: string, data: SignalData) => void) | null };
   onEnd: () => void;
@@ -34,7 +32,7 @@ export default function VideoCall({
   const pendingIce = useRef<RTCIceCandidateInit[]>([]);
   const remoteSet = useRef(false);
   const endedRef = useRef(false);
-  const [status, setStatus] = useState(role === "caller" ? "Звоним…" : "Соединение…");
+  const [status, setStatus] = useState(role === "caller" ? "Соединение…" : "Соединение…");
   const [error, setError] = useState("");
 
   const cleanup = () => {
@@ -72,7 +70,16 @@ export default function VideoCall({
     signalRef.current = async (type, data) => {
       const p = pcRef.current;
       if (!p) return;
-      if (type === "call_answer" && data.sdp) {
+      if (type === "call_offer" && data.sdp) {
+        // Вызываемый: получили offer — отвечаем
+        await p.setRemoteDescription({ type: "offer", sdp: data.sdp });
+        remoteSet.current = true;
+        for (const c of pendingIce.current) { try { await p.addIceCandidate(c); } catch { /* noop */ } }
+        pendingIce.current = [];
+        const ans = await p.createAnswer();
+        await p.setLocalDescription(ans);
+        sendSignal(peerId, "answer", { sdp: ans.sdp });
+      } else if (type === "call_answer" && data.sdp) {
         await p.setRemoteDescription({ type: "answer", sdp: data.sdp });
         remoteSet.current = true;
         for (const c of pendingIce.current) { try { await p.addIceCandidate(c); } catch { /* noop */ } }
@@ -94,18 +101,12 @@ export default function VideoCall({
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
         if (role === "caller") {
+          // Звонящий инициирует offer после того, как вызываемый принял звонок
           const off = await pc.createOffer();
           await pc.setLocalDescription(off);
           sendSignal(peerId, "offer", { sdp: off.sdp });
-        } else {
-          await pc.setRemoteDescription({ type: "offer", sdp: offer });
-          remoteSet.current = true;
-          for (const c of pendingIce.current) { try { await pc.addIceCandidate(c); } catch { /* noop */ } }
-          pendingIce.current = [];
-          const ans = await pc.createAnswer();
-          await pc.setLocalDescription(ans);
-          sendSignal(peerId, "answer", { sdp: ans.sdp });
         }
+        // callee: ждёт call_offer через signalRef и отвечает
       } catch {
         setError("Нет доступа к камере/микрофону");
       }
