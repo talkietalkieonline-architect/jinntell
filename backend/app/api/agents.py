@@ -31,6 +31,8 @@ async def list_agents(
     search: str = Query("", description="Поиск по имени, профессии, бренду"),
     profession: str = Query("", description="Фильтр по профессии"),
     agent_type: str = Query("", description="Фильтр по типу: business, citizen, system"),
+    scope: str = Query("", description="Охват: city | federal"),
+    city: str = Query("", description="Город (для scope=city)"),
     user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
@@ -64,6 +66,11 @@ async def list_agents(
 
     if agent_type:
         query = query.where(Agent.agent_type == agent_type)
+
+    if scope:
+        query = query.where(Agent.scope == scope)
+        if scope == "city" and city:
+            query = query.where(Agent.city == city)
 
     query = query.order_by(Agent.rating.desc(), Agent.name)
 
@@ -171,6 +178,8 @@ async def recommended_agents(user: User = Depends(get_current_user), db: AsyncSe
 async def discover_agents(
     q: str = Query("", description="Запрос на естественном языке: кто нужен"),
     limit: int = Query(20, ge=1, le=50),
+    scope: str = Query(""),
+    city: str = Query(""),
     user: Optional[User] = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
@@ -190,6 +199,11 @@ async def discover_agents(
         a = by_id.get(aid)
         if a is None:
             continue
+        if scope:
+            if a.scope != scope:
+                continue
+            if scope == "city" and city and a.city != city:
+                continue
         if not await can_access_agent(db, a, uid):
             continue
         out.append(AgentOut.model_validate(a))
@@ -247,6 +261,7 @@ async def update_agent(
     if user.is_admin:
         editable = [
             "name", "profession", "brand", "description", "color",
+            "scope", "city",
             "system_prompt", "llm_model", "greeting",
             "voice_id", "voice_speed", "voice_pitch",
             "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
@@ -257,7 +272,7 @@ async def update_agent(
     else:
         # Бизнес: всё кроме name, profession, brand, color, agent_type
         editable = [
-            "description", "system_prompt", "llm_model", "greeting",
+            "description", "scope", "city", "system_prompt", "llm_model", "greeting",
             "voice_id", "voice_speed", "voice_pitch",
             "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
             "outfit_style", "outfit_top", "outfit_bottom", "outfit_shoes", "outfit_accessory",

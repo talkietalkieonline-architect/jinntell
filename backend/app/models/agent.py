@@ -28,6 +28,8 @@ class Agent(Base):
     is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     template_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("agents.id"), nullable=True)
     visibility: Mapped[str] = mapped_column(String(20), default="public")
+    scope: Mapped[str] = mapped_column(String(20), default="federal")
+    city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     unavailable_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # AI / LLM

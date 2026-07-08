@@ -15,6 +15,8 @@ class AgentOut(BaseModel):
     color: str
     agent_type: str
     visibility: str = "public"
+    scope: str = "federal"
+    city: Optional[str] = None
     jinntell_link: Optional[str] = None
     rating: float
     rating_count: int
@@ -147,6 +149,8 @@ class AgentUpdate(BaseModel):
     color: Optional[str] = Field(None, max_length=20)
     agent_type: Optional[str] = Field(None, max_length=30)
     visibility: Optional[str] = Field(None, max_length=20)
+    scope: Optional[str] = Field(None, max_length=20)
+    city: Optional[str] = Field(None, max_length=120)
 
     system_prompt: Optional[str] = Field(None, max_length=5000)
     llm_model: Optional[str] = Field(None, max_length=100)

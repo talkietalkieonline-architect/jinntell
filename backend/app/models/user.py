@@ -21,6 +21,7 @@ class User(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     about: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
