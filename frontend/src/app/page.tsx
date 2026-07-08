@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, type ContactOut } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -280,34 +280,53 @@ export default function Home() {
 
   /** Поиск контакта по имени/хендлу */
   const findContact = useCallback((name: string): ContactOut | undefined => {
-    const n = name.trim().toLowerCase().replace(/^@/, "");
+    const n = name.trim().toLowerCase().replace(/^@/, "").replace(/[.,!?]+$/, "");
+    if (!n) return undefined;
+    const stem = (w: string) => w.slice(0, Math.max(3, w.length - 2)); // грубо отбрасываем окончание (склонения)
     return contacts.find((c) => c.display_name.toLowerCase() === n)
+      || contacts.find((c) => (c.jinntell_link || "").toLowerCase() === n)
       || contacts.find((c) => c.display_name.toLowerCase().includes(n))
-      || contacts.find((c) => (c.jinntell_link || "").toLowerCase() === n);
+      || contacts.find((c) => { const d = c.display_name.toLowerCase(); return d.startsWith(stem(n)) || n.startsWith(stem(d)); });
   }, [contacts]);
+
+  const closeChatRef = useRef<(r: string) => void>(() => {});
 
   /** Ввод к помощнику: перехват голосовых/текстовых команд */
   const handleSend = useCallback((text: string) => {
     const inAssistant = view === "feed" || room === assistantRoom;
     if (inAssistant) {
-      const t = text.trim();
+      let t = text.trim();
+      const esc = (assistantName || "Джим").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      t = t.replace(new RegExp("^" + esc + "[,\\s]+", "i"), "").trim(); // убрать обращение по имени помощника
+      const uid = getUserId();
       let m: RegExpMatchArray | null;
-      if ((m = t.match(/^(?:джим[,\s]+)?(?:отправ\w*\s+сообщени\w*|напиши(?:те)?|сообщени\w*)\s+(?:для\s+|к\s+)?(.+)$/i))) {
+      // отправь <кому> [сообщение] <текст>  /  напиши <кому>: <текст>
+      if (uid && (m = t.match(/^(?:отправ\w*|напиши(?:те)?|передай(?:те)?)\s+(?:сообщени\w*\s+)?(?:для\s+|к\s+)?([\wёа-я@_-]+)[\s:,-]+(.+)$/i))) {
         const c = findContact(m[1]);
-        if (c) { openDM(c); setCommandHint(`Диктуйте сообщение для ${c.display_name}`); }
-        else setCommandHint(`Не нашёл контакт «${m[1].trim()}»`);
+        if (c) { const body = m[2].trim(); dmSend(c.id, body).then(() => setCommandHint(`Отправил ${c.display_name}: «${body}»`)).catch(() => setCommandHint("Не удалось отправить")); return; }
+        setCommandHint(`Не нашёл контакт «${m[1].trim()}»`); return;
+      }
+      // закрой [чат] [с <кем>]
+      if ((m = t.match(/^закр\w+(?:\s+чат)?(?:\s+с)?\s*(.*)$/i))) {
+        const who = m[1].trim();
+        if (who && uid) { const c = findContact(who); if (c) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } setCommandHint(`Не нашёл «${who}»`); return; }
+        if (!who && room !== assistantRoom) { closeChatRef.current(room); setCommandHint("Закрыл чат"); return; }
+      }
+      // открой чат / позови <кого>
+      if ((m = t.match(/^(?:открой(?:те)?(?:\s+чат)?(?:\s+с)?|позови(?:те)?)\s+(?:контакт\s+)?(.+)$/i))) {
+        const c = findContact(m[1]);
+        if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); } else setCommandHint(`Не нашёл «${m[1].trim()}»`);
         return;
       }
-      if ((m = t.match(/^(?:джим[,\s]+)?(?:открой(?:те)?(?:\s+чат)?(?:\s+с)?|позови(?:те)?)\s+(?:контакт\s+)?(.+)$/i))) {
+      // отправь <кому> (без текста) — открыть диалог и ждать
+      if ((m = t.match(/^(?:отправ\w*\s+сообщени\w*|напиши(?:те)?)\s+(?:для\s+|к\s+)?(.+)$/i))) {
         const c = findContact(m[1]);
-        if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); }
-        else setCommandHint(`Не нашёл «${m[1].trim()}»`);
-        return;
+        if (c) { openDM(c); setCommandHint(`Диктуйте сообщение для ${c.display_name}`); return; }
       }
     }
     if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
     sendMessage(text);
-  }, [view, room, assistantRoom, findContact, openDM, sendMessage, setRoom]);
+  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom]);
 
   const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
     const payload = JSON.stringify({ signal, to, ...(extra || {}) });
@@ -380,6 +399,7 @@ export default function Home() {
       setView("feed");
     }
   }, [room, setRoom, assistantRoom]);
+  useEffect(() => { closeChatRef.current = closeChat; }, [closeChat]);
 
   /** Переоткрыть закрытый чат (история подтянется по комнате) */
   const reopenChat = useCallback((r: string) => {

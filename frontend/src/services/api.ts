@@ -422,6 +422,9 @@ export function deleteMessage(id: number): Promise<{ ok: boolean }> {
 export function clearHistory(room: string): Promise<{ ok: boolean; cleared: number }> {
   return apiFetch(`/api/chat/history?room=${encodeURIComponent(room)}`, { method: "DELETE" });
 }
+export function dmSend(toUserId: number, text: string): Promise<{ ok: boolean; room: string }> {
+  return apiFetch("/api/chat/dm-send", { method: "POST", body: JSON.stringify({ to_user_id: toUserId, text }) });
+}
 
 export interface ContactOut {
   id: number;

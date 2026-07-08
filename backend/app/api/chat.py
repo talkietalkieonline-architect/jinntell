@@ -178,6 +178,38 @@ async def clear_history(
     return {"ok": True, "cleared": len(msgs)}
 
 
+class DMSendRequest(BaseModel):
+    to_user_id: int
+    text: str
+
+
+@router.post("/dm-send")
+async def dm_send(
+    body: DMSendRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Отправить сообщение в личный диалог указанному пользователю (для команд помощника). Рассылает в реалтайме."""
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "Пустое сообщение")
+    a, b = sorted([user.id, body.to_user_id])
+    room = f"dm-{a}-{b}"
+    msg = Message(room=room, sender_type="user", sender_user_id=user.id, sender_name=user.display_name, text=text)
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+    await manager.broadcast(room, {
+        "type": "message", "id": msg.id, "room": room,
+        "sender_type": "user", "sender_user_id": user.id, "sender_name": user.display_name,
+        "text": text, "media_url": None, "media_type": None,
+        "created_at": msg.created_at.isoformat(),
+    })
+    for uid in (a, b):
+        await manager.broadcast(f"user-{uid}", {"type": "chat_ping", "room": room})
+    return {"ok": True, "room": room}
+
+
 @router.delete("/message/{message_id}")
 async def delete_message(
     message_id: int,
