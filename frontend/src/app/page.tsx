@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, addFavoriteAgent, type ContactOut } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -80,6 +80,8 @@ export default function Home() {
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [recorderAuto, setRecorderAuto] = useState(false);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [mutedRooms, setMutedRooms] = useState<string[]>([]);
+  const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
   const userWsRef = useRef<WebSocket | null>(null);
   const [chatHidden, setChatHidden] = useState(false);
@@ -369,9 +371,18 @@ export default function Home() {
     let list: string[] = [];
     try { list = JSON.parse(localStorage.getItem(muteKey()) || "[]"); } catch { list = []; }
     const has = list.includes(r);
-    localStorage.setItem(muteKey(), JSON.stringify(has ? list.filter((x) => x !== r) : [...list, r]));
+    const next = has ? list.filter((x) => x !== r) : [...list, r];
+    localStorage.setItem(muteKey(), JSON.stringify(next));
+    setMutedRooms(next);
     return !has;
   };
+  useEffect(() => {
+    try { setMutedRooms(JSON.parse(localStorage.getItem(muteKey()) || "[]")); } catch { setMutedRooms([]); }
+    getFavoriteAgents().then((f) => setFavIds(new Set(f.map((a) => a.id)))).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+  const activeAgentId = (() => { const m = room.match(/^agent-(\d+)/); return m ? Number(m[1]) : 0; })();
+  const activeIsFav = activeAgentId ? favIds.has(activeAgentId) : false;
   const handleChatAction = useCallback((action: string) => {
     const r = room;
     const am = r.match(/^agent-(\d+)/);
@@ -385,12 +396,17 @@ export default function Home() {
       case "invite": onInviteJinn(); break;
       case "call": startCall(); break;
       case "share": navigator.clipboard?.writeText(`${location.origin}/?agent=${agentId}`).catch(() => {}); setCommandHint("Ссылка скопирована 🔗"); break;
-      case "fav": if (agentId) addFavoriteAgent(agentId).catch(() => {}); setCommandHint("Добавлено в избранное ⭐"); break;
+      case "fav":
+        if (agentId) {
+          if (favIds.has(agentId)) { removeFavoriteAgent(agentId).catch(() => {}); setFavIds((s) => { const n = new Set(s); n.delete(agentId); return n; }); setCommandHint("Убрано из избранного"); }
+          else { addFavoriteAgent(agentId).catch(() => {}); setFavIds((s) => new Set(s).add(agentId)); setCommandHint("Добавлено в избранное ⭐"); }
+        }
+        break;
       case "report": setCommandHint("Жалоба отправлена, спасибо"); break;
       case "search": setChatSearchOpen(true); break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, closeChat, onInviteJinn, startCall]);
+  }, [room, closeChat, onInviteJinn, startCall, favIds]);
 
   useEffect(() => {
     const read = () => setDrive(localStorage.getItem("jinntell_drive") === "1");
@@ -480,6 +496,8 @@ export default function Home() {
         onFeed={() => { setRoom(assistantRoom); setView("feed"); }}
         onSettings={() => setSettingsOpen(true)}
         onChatAction={handleChatAction}
+        mutedRooms={mutedRooms}
+        activeIsFav={activeIsFav}
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
         onCall={startCall}

@@ -23,6 +23,8 @@ export default function NavBar({
   onFeed,
   onSettings,
   onChatAction,
+  mutedRooms,
+  activeIsFav,
 }: {
   onHeightChange?: (h: number) => void;
   assistantName: string;
@@ -41,6 +43,8 @@ export default function NavBar({
   onFeed: () => void;
   onSettings?: () => void;
   onChatAction?: (action: string) => void;
+  mutedRooms?: string[];
+  activeIsFav?: boolean;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -64,10 +68,10 @@ export default function NavBar({
     return () => { clearTimeout(t); document.removeEventListener("click", h); };
   }, [menuOpen]);
   const CHAT_MENU: Record<string, { a: string; label: string; danger?: boolean }[]> = {
-    assistant: [ { a: "settings", label: "⚙️ Настройки помощника" }, { a: "clear", label: "🧹 Очистить историю" } ],
+    assistant: [ { a: "settings", label: "⚙️ Настройки помощника" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "clear", label: "🧹 Очистить историю" } ],
     dm: [ { a: "wallpaper", label: "🖼 Сменить обои" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "mute", label: "🔕 Приглушить" }, { a: "clear", label: "🧹 Очистить историю" }, { a: "close", label: "🗑 Удалить чат", danger: true } ],
-    jinn: [ { a: "share", label: "🔗 Поделиться ссылкой" }, { a: "fav", label: "⭐ В избранное" }, { a: "mute", label: "🔕 Приглушить" }, { a: "report", label: "⚠️ Пожаловаться", danger: true }, { a: "close", label: "❌ Закрыть чат" } ],
-    room: [ { a: "invite", label: "➕ Добавить джинна" }, { a: "clear", label: "🧹 Очистить историю" }, { a: "close", label: "🚪 Закрыть комнату" } ],
+    jinn: [ { a: "share", label: "🔗 Поделиться ссылкой" }, { a: "fav", label: activeIsFav ? "⭐ Убрать из избранного" : "⭐ В избранное" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "mute", label: "🔕 Приглушить" }, { a: "report", label: "⚠️ Пожаловаться", danger: true }, { a: "close", label: "❌ Закрыть чат" } ],
+    room: [ { a: "invite", label: "➕ Добавить джинна" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "clear", label: "🧹 Очистить историю" }, { a: "close", label: "🚪 Закрыть комнату" } ],
   };
   const renderMenu = (type: string) => (
     <div className="relative shrink-0">
@@ -136,6 +140,7 @@ export default function NavBar({
               photo={c.photo}
               count={c.count}
               online={c.online}
+              muted={mutedRooms?.includes(c.room)}
               onClick={() => onSelectChat(c.room)}
               onClose={() => onCloseChat(c.room)}
             />
@@ -267,6 +272,7 @@ function ChatAvatar({
   onClose,
   count,
   online,
+  muted,
 }: {
   active: boolean;
   name: string;
@@ -276,6 +282,7 @@ function ChatAvatar({
   onClose?: () => void;
   count?: number;
   online?: boolean;
+  muted?: boolean;
 }) {
   const size = active ? 54 : 42;
   return (
@@ -331,6 +338,9 @@ function ChatAvatar({
           className="absolute rounded-full"
           style={{ top: active ? 44 : 32, right: active ? 6 : 10, width: 9, height: 9, background: online ? "#2ecc71" : "#8a8a8a", border: "1.5px solid var(--bar-bg)" }}
         />
+      )}
+      {muted && (
+        <span className="absolute" style={{ top: active ? 40 : 28, left: active ? 4 : 8, fontSize: 11, lineHeight: 1 }}>🔕</span>
       )}
       <span
         className="text-[9px] truncate max-w-[58px] text-center"
