@@ -291,13 +291,14 @@ def _est_tokens(text: str) -> int:
     return max(1, len(text or "") // 3)
 
 
-async def _record_usage(user_id, agent_id, provider, model, prompt_tokens, completion_tokens):
+async def _record_usage(user_id, agent_id, provider, model, prompt_tokens, completion_tokens, payer_type=None, payer_id=None):
     try:
         from app.core.database import async_session
         from app.models.llm_usage import LlmUsage
         async with async_session() as db:
             db.add(LlmUsage(user_id=user_id or None, agent_id=agent_id, provider=provider,
-                            model=model, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens))
+                            model=model, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                            payer_type=payer_type, payer_id=payer_id))
             await db.commit()
     except Exception as e:
         print(f"[usage] record failed: {e}")
@@ -311,6 +312,8 @@ async def get_llm_reply(
     user_persona_suffix: Optional[str] = None,
     user_id: int = 0,
     agent_id: Optional[int] = None,
+    payer_type: Optional[str] = None,
+    payer_id: Optional[int] = None,
     max_tokens: int = 1000,
 ) -> str:
     """Получить ответ от LLM. Автовыбор провайдера."""
@@ -391,7 +394,7 @@ async def get_llm_reply(
         final = reply or random.choice(FALLBACK_REPLIES)
         try:
             pt = sum(_est_tokens(m.get("content", "")) for m in messages)
-            asyncio.create_task(_record_usage(user_id, agent_id, pname, llm_model, pt, _est_tokens(final)))
+            asyncio.create_task(_record_usage(user_id, agent_id, pname, llm_model, pt, _est_tokens(final), payer_type, payer_id))
         except Exception:
             pass
         return final
@@ -515,6 +518,8 @@ async def get_agent_reply(
     rag_context: Optional[str] = None,
     user_id: int = 0,
     agent_id: Optional[int] = None,
+    payer_type: Optional[str] = None,
+    payer_id: Optional[int] = None,
     max_tokens: int = 1000,
 ) -> str:
     """Получить ответ от конкретного агента."""
@@ -542,5 +547,7 @@ async def get_agent_reply(
         conversation_history=conversation_history,
         user_id=user_id,
         agent_id=agent_id,
+        payer_type=payer_type,
+        payer_id=payer_id,
         max_tokens=max_tokens,
     )

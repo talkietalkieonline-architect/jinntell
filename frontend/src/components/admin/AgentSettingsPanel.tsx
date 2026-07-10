@@ -249,6 +249,10 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                   {cities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               )}
+              <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                <input type="checkbox" checked={!!f("is_paid")} onChange={(e) => setF("is_paid", e.target.checked)} className="w-4 h-4" />
+                <span className="text-sm text-gray-300">Платный джинн <span className="text-gray-500">(за общение платит пользователь)</span></span>
+              </label>
             </div>
             )}
             <div>

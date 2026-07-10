@@ -30,6 +30,7 @@ class Agent(Base):
     visibility: Mapped[str] = mapped_column(String(20), default="public")
     scope: Mapped[str] = mapped_column(String(20), default="federal")
     city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
     unavailable_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # AI / LLM

@@ -1358,7 +1358,20 @@ export default function AdminPage() {
                     ))}
                     <span className="text-[11px] text-gray-500 self-center">Наценка = наша цена − себестоимость. Меняешь → клик вне поля → сохранится и пересчитается.</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Кто платит */}
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    {[
+                      { label: "💼 Контрагенты", t: usage.by_payer_type.contractor },
+                      { label: "👤 Пользователи (платно)", t: usage.by_payer_type.user },
+                      { label: "🆓 Бесплатно (платформа)", t: usage.by_payer_type.free },
+                    ].map((x) => (
+                      <div key={x.label} className="bg-gray-900 rounded-xl p-4 border border-gray-800 text-center">
+                        <div className="text-xl font-bold text-white">{x.t.revenue.toLocaleString()} {usage.currency}</div>
+                        <div className="text-xs text-gray-500 mt-1">{x.label} · {x.t.tokens.toLocaleString()} тк</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                       <div className="text-sm text-gray-400 mb-2">По моделям</div>
                       {usage.by_model.length ? usage.by_model.map((m) => (
@@ -1366,16 +1379,25 @@ export default function AdminPage() {
                           <span className="text-gray-300 truncate mr-2">{m.model}</span>
                           <span className="text-gray-500 shrink-0">{m.tokens.toLocaleString()} тк · {m.revenue.toLocaleString()}{usage.currency}</span>
                         </div>
-                      )) : <div className="text-gray-600 text-sm">пока пусто</div>}
+                      )) : <div className="text-gray-600 text-sm">пусто</div>}
                     </div>
                     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                      <div className="text-sm text-gray-400 mb-2">Топ пользователей</div>
-                      {usage.by_user.length ? usage.by_user.map((u) => (
-                        <div key={u.user_id ?? "none"} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
-                          <span className="text-gray-300">user #{u.user_id ?? "—"}</span>
-                          <span className="text-gray-500 shrink-0">{u.tokens.toLocaleString()} тк · {u.revenue.toLocaleString()}{usage.currency}</span>
+                      <div className="text-sm text-gray-400 mb-2">Счёт контрагентам</div>
+                      {usage.contractors.length ? usage.contractors.map((u) => (
+                        <div key={u.payer_id ?? "none"} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
+                          <span className="text-gray-300">контрагент #{u.payer_id ?? "—"}</span>
+                          <span className="text-emerald-400 shrink-0">{u.revenue.toLocaleString()}{usage.currency}</span>
                         </div>
-                      )) : <div className="text-gray-600 text-sm">пока пусто</div>}
+                      )) : <div className="text-gray-600 text-sm">пусто</div>}
+                    </div>
+                    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                      <div className="text-sm text-gray-400 mb-2">Счёт пользователям</div>
+                      {usage.paying_users.length ? usage.paying_users.map((u) => (
+                        <div key={u.payer_id ?? "none"} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
+                          <span className="text-gray-300">user #{u.payer_id ?? "—"}</span>
+                          <span className="text-emerald-400 shrink-0">{u.revenue.toLocaleString()}{usage.currency}</span>
+                        </div>
+                      )) : <div className="text-gray-600 text-sm">пусто</div>}
                     </div>
                   </div>
                 </div>

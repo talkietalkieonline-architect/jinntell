@@ -17,6 +17,7 @@ class AgentOut(BaseModel):
     visibility: str = "public"
     scope: str = "federal"
     city: Optional[str] = None
+    is_paid: bool = False
     jinntell_link: Optional[str] = None
     rating: float
     rating_count: int
@@ -151,6 +152,7 @@ class AgentUpdate(BaseModel):
     visibility: Optional[str] = Field(None, max_length=20)
     scope: Optional[str] = Field(None, max_length=20)
     city: Optional[str] = Field(None, max_length=120)
+    is_paid: Optional[bool] = None
 
     system_prompt: Optional[str] = Field(None, max_length=5000)
     llm_model: Optional[str] = Field(None, max_length=100)

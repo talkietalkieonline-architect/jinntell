@@ -14,6 +14,8 @@ class LlmUsage(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     agent_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    payer_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    payer_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     provider: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)

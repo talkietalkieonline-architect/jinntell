@@ -327,6 +327,7 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         conversation_history=history,
         user_persona_suffix=user_persona,
         user_id=user_id,
+        payer_type="free",
     )
 
     # Сохраняем ответ помощника в БД
@@ -394,6 +395,8 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
 
     _uu = re.search(r"-u(\d+)$", room)
     _uid = int(_uu.group(1)) if _uu else 0
+    from app.services.billing import resolve_payer
+    _ptype, _pid = resolve_payer(agent, _uid)
     reply_text = await get_agent_reply(
         agent_name=agent.name,
         agent_profession=agent.profession,
@@ -412,6 +415,8 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         rag_context=rag_context,
         user_id=_uid,
         agent_id=agent.id,
+        payer_type=_ptype,
+        payer_id=_pid,
     )
 
     async with async_session() as db:

@@ -233,7 +233,8 @@ export interface AgentOut {
 export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }
 export function getCities(): Promise<CityOut[]> { return apiFetch("/api/cities"); }
 export function getAllCities(): Promise<CityOut[]> { return apiFetch("/api/cities/all"); }
-export interface UsageSummary { total_calls: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; sell_per_1k: number; cost_per_1k: number; currency: string; revenue: number; cost: number; margin: number; by_model: { model: string; calls: number; tokens: number; revenue: number }[]; by_user: { user_id: number | null; calls: number; tokens: number; revenue: number }[] }
+export interface UsagePayer { payer_id: number | null; calls: number; tokens: number; revenue: number }
+export interface UsageSummary { total_calls: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; billable_tokens: number; free_tokens: number; sell_per_1k: number; cost_per_1k: number; currency: string; revenue: number; cost: number; margin: number; by_payer_type: { contractor: { tokens: number; revenue: number }; user: { tokens: number; revenue: number }; free: { tokens: number; revenue: number } }; contractors: UsagePayer[]; paying_users: UsagePayer[]; by_model: { model: string; calls: number; tokens: number; revenue: number }[]; by_user: { user_id: number | null; calls: number; tokens: number; revenue: number }[] }
 export function adminGetPricing(): Promise<{ key: string; label: string; value: string }[]> { return apiFetch("/api/admin/pricing"); }
 export function adminSetPricing(key: string, value: string): Promise<{ ok: boolean }> { return apiFetch(`/api/admin/pricing/${key}`, { method: "PATCH", body: JSON.stringify({ value }) }); }
 export function adminGetUsage(): Promise<UsageSummary> { return apiFetch("/api/admin/usage"); }

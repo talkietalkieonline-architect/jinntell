@@ -307,14 +307,34 @@ async def admin_usage(admin: User = Depends(get_admin_user), db: AsyncSession = 
     total_tokens = int(tot[0]) + int(tot[1])
     money = lambda tk: round((tk or 0) / 1000.0 * sell, 2)
     costs = lambda tk: round((tk or 0) / 1000.0 * cost, 2)
+    # разбивка по типу плательщика
+    byt = (await db.execute(_sel(LlmUsage.payer_type, total_tok).group_by(LlmUsage.payer_type))).all()
+    tbt = {(pt or "free"): int(v or 0) for pt, v in byt}
+    contractor_tok = tbt.get("contractor", 0)
+    user_tok = tbt.get("user", 0)
+    free_tok = tbt.get("free", 0)
+    billable_tok = contractor_tok + user_tok
+    bycontr = (await db.execute(_sel(LlmUsage.payer_id, func.count(LlmUsage.id), total_tok).where(LlmUsage.payer_type == "contractor").group_by(LlmUsage.payer_id).order_by(total_tok.desc()).limit(10))).all()
+    bypayu = (await db.execute(_sel(LlmUsage.payer_id, func.count(LlmUsage.id), total_tok).where(LlmUsage.payer_type == "user").group_by(LlmUsage.payer_id).order_by(total_tok.desc()).limit(10))).all()
+    revenue = money(billable_tok)
+    prov_cost = costs(total_tokens)
     return {
         "total_calls": tot[2],
         "prompt_tokens": int(tot[0]),
         "completion_tokens": int(tot[1]),
         "total_tokens": total_tokens,
+        "billable_tokens": billable_tok,
+        "free_tokens": free_tok,
         "sell_per_1k": sell, "cost_per_1k": cost, "currency": cur,
-        "revenue": money(total_tokens), "cost": costs(total_tokens),
-        "margin": round(money(total_tokens) - costs(total_tokens), 2),
+        "revenue": revenue, "cost": prov_cost,
+        "margin": round(revenue - prov_cost, 2),
+        "by_payer_type": {
+            "contractor": {"tokens": contractor_tok, "revenue": money(contractor_tok)},
+            "user": {"tokens": user_tok, "revenue": money(user_tok)},
+            "free": {"tokens": free_tok, "revenue": 0},
+        },
+        "contractors": [{"payer_id": p, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for p, c, t in bycontr],
+        "paying_users": [{"payer_id": p, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for p, c, t in bypayu],
         "by_model": [{"model": m or "?", "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for m, c, t in bym],
         "by_user": [{"user_id": u, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for u, c, t in byu],
     }
