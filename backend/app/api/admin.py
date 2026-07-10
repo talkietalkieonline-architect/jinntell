@@ -287,56 +287,63 @@ async def admin_restore_agent(
 
 @router.get("/usage")
 async def admin_usage(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
-    """Сводка расхода LLM (оценка токенов)."""
+    """Сводка расхода LLM: выручка/себестоимость/маржа по моделям (ставки за 1 млн токенов), плательщикам и контрагентам."""
     from sqlalchemy import func, select as _sel
     from app.models.llm_usage import LlmUsage
-    tot = (await db.execute(_sel(
-        func.coalesce(func.sum(LlmUsage.prompt_tokens), 0),
-        func.coalesce(func.sum(LlmUsage.completion_tokens), 0),
-        func.count(LlmUsage.id),
-    ))).one()
-    total_tok = func.coalesce(func.sum(LlmUsage.prompt_tokens + LlmUsage.completion_tokens), 0)
-    bym = (await db.execute(_sel(LlmUsage.model, func.count(LlmUsage.id), total_tok)
-                            .group_by(LlmUsage.model).order_by(total_tok.desc()))).all()
-    byu = (await db.execute(_sel(LlmUsage.user_id, func.count(LlmUsage.id), total_tok)
-                            .group_by(LlmUsage.user_id).order_by(total_tok.desc()).limit(10))).all()
-    pr = await _pricing_values()
-    sell = float(pr.get("TOKEN_SELL_PER_1K") or 2)
-    cost = float(pr.get("TOKEN_COST_PER_1K") or 0.2)
-    cur = pr.get("TOKEN_CURRENCY") or "₽"
-    total_tokens = int(tot[0]) + int(tot[1])
-    money = lambda tk: round((tk or 0) / 1000.0 * sell, 2)
-    costs = lambda tk: round((tk or 0) / 1000.0 * cost, 2)
-    # разбивка по типу плательщика
-    byt = (await db.execute(_sel(LlmUsage.payer_type, total_tok).group_by(LlmUsage.payer_type))).all()
-    tbt = {(pt or "free"): int(v or 0) for pt, v in byt}
-    contractor_tok = tbt.get("contractor", 0)
-    user_tok = tbt.get("user", 0)
-    free_tok = tbt.get("free", 0)
-    billable_tok = contractor_tok + user_tok
-    bycontr = (await db.execute(_sel(LlmUsage.payer_id, func.count(LlmUsage.id), total_tok).where(LlmUsage.payer_type == "contractor").group_by(LlmUsage.payer_id).order_by(total_tok.desc()).limit(10))).all()
-    bypayu = (await db.execute(_sel(LlmUsage.payer_id, func.count(LlmUsage.id), total_tok).where(LlmUsage.payer_type == "user").group_by(LlmUsage.payer_id).order_by(total_tok.desc()).limit(10))).all()
-    revenue = money(billable_tok)
-    prov_cost = costs(total_tokens)
+    rates = await _get_rates()
+    cur = await _get_currency()
+
+    def _rate(m):
+        r = rates.get(m) or rates.get("default") or {"cost": 0, "sell": 0}
+        return float(r.get("cost", 0) or 0), float(r.get("sell", 0) or 0)
+
+    tok = func.coalesce(func.sum(LlmUsage.prompt_tokens + LlmUsage.completion_tokens), 0)
+    rows = (await db.execute(_sel(
+        LlmUsage.payer_type, LlmUsage.payer_id, LlmUsage.model, tok, func.count(LlmUsage.id)
+    ).group_by(LlmUsage.payer_type, LlmUsage.payer_id, LlmUsage.model))).all()
+
+    total_tokens = total_calls = billable_tok = 0
+    total_rev = total_cost = 0.0
+    bytype = {k: {"tokens": 0, "revenue": 0.0, "cost": 0.0} for k in ("contractor", "user", "free")}
+    contr, usrs, models = {}, {}, {}
+    for pt, pid, model, tk, calls in rows:
+        pt = pt if pt in ("contractor", "user") else "free"
+        tk = int(tk or 0); calls = int(calls or 0)
+        cost_m, sell_m = _rate(model)
+        r = tk / 1_000_000.0 * sell_m
+        c = tk / 1_000_000.0 * cost_m
+        total_tokens += tk; total_calls += calls; total_cost += c
+        m = models.setdefault(model or "?", {"tokens": 0, "revenue": 0.0, "cost": 0.0, "calls": 0})
+        m["tokens"] += tk; m["cost"] += c; m["calls"] += calls
+        bytype[pt]["tokens"] += tk; bytype[pt]["cost"] += c
+        if pt in ("contractor", "user"):
+            billable_tok += tk; total_rev += r; bytype[pt]["revenue"] += r; m["revenue"] += r
+            tgt = contr if pt == "contractor" else usrs
+            e = tgt.setdefault(pid, {"tokens": 0, "revenue": 0.0, "cost": 0.0, "calls": 0})
+            e["tokens"] += tk; e["revenue"] += r; e["cost"] += c; e["calls"] += calls
+
+    def _fmt(v):
+        return {k: (round(x, 2) if isinstance(x, float) else x) for k, x in v.items()}
+
+    def _top(dct):
+        out = [{"payer_id": pid, **_fmt(v), "margin": round(v["revenue"] - v["cost"], 2)} for pid, v in dct.items()]
+        return sorted(out, key=lambda x: x["revenue"], reverse=True)[:15]
+
     return {
-        "total_calls": tot[2],
-        "prompt_tokens": int(tot[0]),
-        "completion_tokens": int(tot[1]),
+        "currency": cur,
+        "total_calls": total_calls,
         "total_tokens": total_tokens,
         "billable_tokens": billable_tok,
-        "free_tokens": free_tok,
-        "sell_per_1k": sell, "cost_per_1k": cost, "currency": cur,
-        "revenue": revenue, "cost": prov_cost,
-        "margin": round(revenue - prov_cost, 2),
-        "by_payer_type": {
-            "contractor": {"tokens": contractor_tok, "revenue": money(contractor_tok)},
-            "user": {"tokens": user_tok, "revenue": money(user_tok)},
-            "free": {"tokens": free_tok, "revenue": 0},
-        },
-        "contractors": [{"payer_id": p, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for p, c, t in bycontr],
-        "paying_users": [{"payer_id": p, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for p, c, t in bypayu],
-        "by_model": [{"model": m or "?", "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for m, c, t in bym],
-        "by_user": [{"user_id": u, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for u, c, t in byu],
+        "free_tokens": bytype["free"]["tokens"],
+        "revenue": round(total_rev, 2),
+        "cost": round(total_cost, 2),
+        "margin": round(total_rev - total_cost, 2),
+        "by_payer_type": {k: _fmt(v) for k, v in bytype.items()},
+        "contractors": _top(contr),
+        "paying_users": _top(usrs),
+        "by_model": sorted(
+            [{"model": mm, **_fmt(v), "margin": round(v["revenue"] - v["cost"], 2)} for mm, v in models.items()],
+            key=lambda x: x["tokens"], reverse=True),
     }
 
 
@@ -1093,31 +1100,99 @@ async def admin_set_embedding_config(
     return {"ok": True}
 
 
-PRICING_CONFIG = [
-    {"key": "TOKEN_SELL_PER_1K", "label": "Наша цена за 1К токенов", "default": "2"},
-    {"key": "TOKEN_COST_PER_1K", "label": "Себестоимость за 1К токенов", "default": "0.2"},
-    {"key": "TOKEN_CURRENCY", "label": "Валюта", "default": "₽"},
-]
+import json as _json
+
+_DEFAULT_RATES = {"default": {"cost": 30.0, "sell": 150.0}}
 
 
-async def _pricing_values() -> dict:
+async def _get_rates() -> dict:
+    """Ставки за 1 млн токенов по моделям: {model: {cost, sell}} + default."""
     from app.services.settings_store import get_setting
-    out = {}
-    for it in PRICING_CONFIG:
-        out[it["key"]] = (await get_setting(it["key"])) or it["default"]
-    return out
+    raw = await get_setting("MODEL_RATES")
+    try:
+        r = _json.loads(raw) if raw else {}
+    except Exception:
+        r = {}
+    if "default" not in r:
+        r["default"] = dict(_DEFAULT_RATES["default"])
+    return r
+
+
+async def _get_currency() -> str:
+    from app.services.settings_store import get_setting
+    return (await get_setting("TOKEN_CURRENCY")) or "₽"
 
 
 @router.get("/pricing")
-async def admin_get_pricing(admin: User = Depends(get_admin_user)):
-    from app.services.settings_store import get_setting
-    return [{"key": it["key"], "label": it["label"], "value": (await get_setting(it["key"])) or it["default"]} for it in PRICING_CONFIG]
+async def admin_get_pricing(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import select as _sel
+    from app.models.llm_usage import LlmUsage
+    seen = [m for m in (await db.execute(_sel(LlmUsage.model).distinct())).scalars().all() if m]
+    return {"currency": await _get_currency(), "rates": await _get_rates(), "models_seen": seen}
 
 
-@router.patch("/pricing/{key}")
-async def admin_set_pricing(key: str, value: str = Body(..., embed=True), admin: User = Depends(get_admin_user)):
-    if key not in {k["key"] for k in PRICING_CONFIG}:
-        raise HTTPException(404, "Неизвестный ключ")
+@router.patch("/pricing")
+async def admin_set_pricing(body: dict = Body(...), admin: User = Depends(get_admin_user)):
     from app.services.settings_store import set_setting
-    await set_setting(key, value.strip())
+    if "currency" in body:
+        await set_setting("TOKEN_CURRENCY", str(body["currency"]).strip())
+        return {"ok": True}
+    model = (body.get("model") or "").strip()
+    if not model:
+        raise HTTPException(400, "нужна модель или currency")
+    rates = await _get_rates()
+    entry = {"cost": float(body.get("cost", 0) or 0), "sell": float(body.get("sell", 0) or 0)}
+    for f in ("valid_until", "provider", "note"):
+        v = (body.get(f) or "").strip()
+        if v:
+            entry[f] = v
+    rates[model] = entry
+    await set_setting("MODEL_RATES", _json.dumps(rates))
+    return {"ok": True, "rates": rates}
+
+
+@router.delete("/pricing/{model}")
+async def admin_del_pricing(model: str, admin: User = Depends(get_admin_user)):
+    from app.services.settings_store import set_setting
+    rates = await _get_rates()
+    if model in rates and model != "default":
+        del rates[model]
+        await set_setting("MODEL_RATES", _json.dumps(rates))
     return {"ok": True}
+
+
+@router.get("/models")
+async def admin_models(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Реестр моделей: ставки/сроки/провайдер + расход и в скольких джиннах используется."""
+    from sqlalchemy import func, select as _sel
+    from app.models.llm_usage import LlmUsage
+    from app.models.agent import Agent
+    rates = await _get_rates()
+    cur = await _get_currency()
+    tok = func.coalesce(func.sum(LlmUsage.prompt_tokens + LlmUsage.completion_tokens), 0)
+    urows = {m: (int(t or 0), int(c or 0)) for m, t, c in (await db.execute(
+        _sel(LlmUsage.model, tok, func.count(LlmUsage.id)).group_by(LlmUsage.model))).all()}
+    brows = {m: int(t or 0) for m, t in (await db.execute(
+        _sel(LlmUsage.model, tok).where(LlmUsage.payer_type.in_(["contractor", "user"])).group_by(LlmUsage.model))).all()}
+    arows = {m: int(c) for m, c in (await db.execute(
+        _sel(Agent.llm_model, func.count(Agent.id)).where(Agent.is_active == True).group_by(Agent.llm_model))).all()}
+    names = (set(rates.keys()) | set(urows.keys()) | set(arows.keys()))
+    names.discard("default")
+    names.discard(None)
+    out = []
+    for m in sorted(n for n in names if n):
+        r = rates.get(m) or {}
+        cost = float((r.get("cost") if r else None) or (rates["default"].get("cost") or 0))
+        sell = float((r.get("sell") if r else None) or (rates["default"].get("sell") or 0))
+        tk, calls = urows.get(m, (0, 0))
+        btk = brows.get(m, 0)
+        revenue = round(btk / 1_000_000.0 * sell, 2)
+        cost_total = round(tk / 1_000_000.0 * cost, 2)
+        out.append({
+            "model": m, "provider": r.get("provider", ""), "cost": cost, "sell": sell,
+            "valid_until": r.get("valid_until", ""), "note": r.get("note", ""),
+            "tokens": tk, "calls": calls, "revenue": revenue, "cost_total": cost_total,
+            "margin": round(revenue - cost_total, 2), "agents": arows.get(m, 0),
+            "has_rate": m in rates,
+        })
+    return {"currency": cur, "default": rates.get("default"), "models": out}

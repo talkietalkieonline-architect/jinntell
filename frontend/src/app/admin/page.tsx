@@ -39,9 +39,11 @@ import {
   createCity,
   updateCity,
   adminGetUsage,
-  adminGetPricing,
+  adminGetModels,
   adminSetPricing,
+  adminDelPricing,
   type UsageSummary,
+  type ModelInfo,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
 
@@ -88,8 +90,21 @@ export default function AdminPage() {
   // Stats
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [pricing, setPricing] = useState<{ key: string; label: string; value: string }[]>([]);
-  const savePrice = async (key: string, value: string) => { try { await adminSetPricing(key, value); const u = await adminGetUsage().catch(() => null); setUsage(u); } catch { /* noop */ } };
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelCur, setModelCur] = useState("₽");
+  const [modelDrafts, setModelDrafts] = useState<Record<string, { provider: string; cost: string; sell: string; valid_until: string }>>({});
+  const [newModel, setNewModel] = useState("");
+  const loadModels = async () => {
+    try {
+      const r = await adminGetModels();
+      setModels(r.models); setModelCur(r.currency);
+      setModelDrafts(Object.fromEntries(r.models.map((m) => [m.model, { provider: m.provider, cost: String(m.cost), sell: String(m.sell), valid_until: m.valid_until }])));
+    } catch { /* noop */ }
+  };
+  const saveModel = async (model: string) => {
+    const d = modelDrafts[model]; if (!d) return;
+    try { await adminSetPricing({ model, provider: d.provider, cost: Number(d.cost) || 0, sell: Number(d.sell) || 0, valid_until: d.valid_until }); await loadModels(); const u = await adminGetUsage().catch(() => null); setUsage(u); } catch { /* noop */ }
+  };
   const [citiesList, setCitiesList] = useState<{ id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }[]>([]);
   const [newCity, setNewCity] = useState({ name: "", slug: "", lat: "", lng: "" });
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null);
@@ -196,16 +211,14 @@ export default function AdminPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [statsData, llmData, sysData, usageData, pricingData] = await Promise.all([
+      const [statsData, llmData, sysData, usageData] = await Promise.all([
         adminGetStats(),
         adminGetLLMStatus(),
         adminGetSystemSettings(),
         adminGetUsage().catch(() => null),
-        adminGetPricing().catch(() => []),
       ]);
       setStats(statsData);
       setUsage(usageData);
-      setPricing(pricingData);
       setLlmStatus(llmData);
       setSystemSettings(sysData);
       setSmsProvider(sysData.sms_provider);
@@ -233,7 +246,7 @@ export default function AdminPage() {
       if (tab === "users") await loadUsers();
       if (tab === "system") await loadSystemInfo();
       if (tab === "stats") await loadStats();
-      if (tab === "integrations") await loadIntegrations();
+      if (tab === "integrations") { await loadIntegrations(); await loadModels(); }
       if (tab === "cities") await loadCities();
     };
     load();
@@ -1063,6 +1076,41 @@ export default function AdminPage() {
             <div className="space-y-4">
               <p className="text-sm text-gray-400">Ключи интеграций. Сохраняются в БД и применяются сразу — без правки .env.</p>
 
+              {/* Реестр моделей: ставки/сроки/расход */}
+              <div className="bg-gray-900 border border-emerald-800/40 rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-emerald-400 font-medium">Модели — ставки (за 1 млн токенов), сроки и расход</p>
+                  <label className="flex items-center gap-2"><span className="text-[11px] text-gray-500">Валюта</span>
+                    <input defaultValue={modelCur} onBlur={(e) => adminSetPricing({ currency: e.target.value }).then(loadModels)} className="w-14 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-sm text-white" /></label>
+                </div>
+                <div className="grid grid-cols-12 gap-2 text-[11px] text-gray-500 px-1">
+                  <span className="col-span-3">Модель</span><span className="col-span-2">Провайдер</span><span>Себест./1М</span><span>Прод./1М</span><span className="col-span-2">Действует до</span><span className="col-span-2">Выручка·маржа</span><span>Джиннов</span>
+                </div>
+                {models.map((m) => {
+                  const d = modelDrafts[m.model] || { provider: "", cost: "0", sell: "0", valid_until: "" };
+                  const upd = (k: string, v: string) => setModelDrafts((prev) => ({ ...prev, [m.model]: { ...(prev[m.model] || d), [k]: v } }));
+                  return (
+                    <div key={m.model} className="grid grid-cols-12 gap-2 items-center text-sm">
+                      <span className="col-span-3 text-gray-200 truncate" title={m.model}>{m.model}</span>
+                      <input value={d.provider} onChange={(e) => upd("provider", e.target.value)} placeholder="—" className="col-span-2 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-white text-xs" />
+                      <input value={d.cost} onChange={(e) => upd("cost", e.target.value)} className="bg-gray-950 border border-gray-700 rounded px-2 py-1 text-white text-xs w-full" />
+                      <input value={d.sell} onChange={(e) => upd("sell", e.target.value)} className="bg-gray-950 border border-gray-700 rounded px-2 py-1 text-white text-xs w-full" />
+                      <input value={d.valid_until} onChange={(e) => upd("valid_until", e.target.value)} placeholder="ГГГГ-ММ-ДД" className="col-span-2 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-white text-xs" />
+                      <span className="col-span-2 text-xs text-gray-400">{m.revenue.toLocaleString()}/<span className={m.margin >= 0 ? "text-emerald-400" : "text-red-400"}>{m.margin.toLocaleString()}</span>{modelCur}</span>
+                      <span className="text-xs text-gray-400 flex items-center gap-1">{m.agents}
+                        <button onClick={() => saveModel(m.model)} className="ml-1 px-2 py-0.5 rounded bg-emerald-600 text-white text-xs">✓</button>
+                        {m.has_rate && <button onClick={() => adminDelPricing(m.model).then(loadModels)} className="text-gray-600 text-xs" title="Сбросить ставку">✕</button>}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-800">
+                  <input placeholder="новая модель (id, напр. deepseek-reasoner)" value={newModel} onChange={(e) => setNewModel(e.target.value)} className="flex-1 bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-sm text-white" />
+                  <button onClick={() => { const nm = newModel.trim(); if (nm) adminSetPricing({ model: nm, cost: 0, sell: 0 }).then(() => { setNewModel(""); loadModels(); }); }} className="px-3 py-1.5 rounded text-sm bg-emerald-600 text-white">+ модель</button>
+                </div>
+                <p className="text-[11px] text-gray-600">Ставки — за 1 млн токенов. «default» применяется к моделям без своей ставки. ✓ сохранить · ✕ сбросить.</p>
+              </div>
+
               <div className="bg-gray-900 border border-amber-800/40 rounded-lg p-4 space-y-3">
                 <p className="text-sm text-amber-400 font-medium">Эмбеддинги (семантика / RAG)</p>
                 {embConfig.map((c) => (
@@ -1323,13 +1371,13 @@ export default function AdminPage() {
               {/* Расход LLM */}
               {usage && (
                 <div className="mt-8">
-                  <h3 className="text-lg font-semibold mb-4">Расход LLM <span className="text-xs text-gray-500 font-normal">(оценка токенов)</span></h3>
+                  <h3 className="text-lg font-semibold mb-4">Расход LLM <span className="text-xs text-gray-500 font-normal">(оценка токенов; ставки — во вкладке «Интеграции»)</span></h3>
                   <div className="grid grid-cols-4 gap-4 mb-4">
                     {[
                       { label: "Вызовов", value: usage.total_calls.toLocaleString(), color: "text-white" },
                       { label: "Всего токенов", value: usage.total_tokens.toLocaleString(), color: "text-amber-300" },
-                      { label: "Промпт", value: usage.prompt_tokens.toLocaleString(), color: "text-blue-300" },
-                      { label: "Ответы", value: usage.completion_tokens.toLocaleString(), color: "text-green-300" },
+                      { label: "Оплачиваемых", value: usage.billable_tokens.toLocaleString(), color: "text-blue-300" },
+                      { label: "Бесплатных", value: usage.free_tokens.toLocaleString(), color: "text-gray-400" },
                     ].map((s) => (
                       <div key={s.label} className="bg-gray-900 rounded-xl p-5 border border-gray-800 text-center">
                         <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
@@ -1339,9 +1387,9 @@ export default function AdminPage() {
                   </div>
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     {[
-                      { label: "Выручка (наша цена)", value: `${usage.revenue.toLocaleString()} ${usage.currency}`, color: "text-emerald-300" },
+                      { label: "Выручка", value: `${usage.revenue.toLocaleString()} ${usage.currency}`, color: "text-emerald-300" },
                       { label: "Себестоимость", value: `${usage.cost.toLocaleString()} ${usage.currency}`, color: "text-red-300" },
-                      { label: "Маржа", value: `${usage.margin.toLocaleString()} ${usage.currency}`, color: "text-amber-300" },
+                      { label: "Маржа", value: `${usage.margin.toLocaleString()} ${usage.currency}`, color: usage.margin >= 0 ? "text-amber-300" : "text-red-400" },
                     ].map((s) => (
                       <div key={s.label} className="bg-gray-900 rounded-xl p-5 border border-gray-800 text-center">
                         <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
@@ -1349,16 +1397,6 @@ export default function AdminPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 mb-4 flex flex-wrap items-end gap-4">
-                    {pricing.map((p) => (
-                      <label key={p.key} className="flex flex-col gap-1">
-                        <span className="text-[11px] text-gray-500">{p.label}</span>
-                        <input defaultValue={p.value} onBlur={(e) => savePrice(p.key, e.target.value)} className="bg-gray-800 rounded px-2 py-1.5 text-sm text-white w-44 border border-gray-700" />
-                      </label>
-                    ))}
-                    <span className="text-[11px] text-gray-500 self-center">Наценка = наша цена − себестоимость. Меняешь → клик вне поля → сохранится и пересчитается.</span>
-                  </div>
-                  {/* Кто платит */}
                   <div className="grid grid-cols-3 gap-4 mb-4">
                     {[
                       { label: "💼 Контрагенты", t: usage.by_payer_type.contractor },
@@ -1366,27 +1404,28 @@ export default function AdminPage() {
                       { label: "🆓 Бесплатно (платформа)", t: usage.by_payer_type.free },
                     ].map((x) => (
                       <div key={x.label} className="bg-gray-900 rounded-xl p-4 border border-gray-800 text-center">
-                        <div className="text-xl font-bold text-white">{x.t.revenue.toLocaleString()} {usage.currency}</div>
-                        <div className="text-xs text-gray-500 mt-1">{x.label} · {x.t.tokens.toLocaleString()} тк</div>
+                        <div className="text-lg font-bold text-white">{x.t.revenue.toLocaleString()} {usage.currency}</div>
+                        <div className="text-[11px] text-gray-500 mt-1">{x.label}</div>
+                        <div className="text-[11px] text-gray-600">{x.t.tokens.toLocaleString()} тк · себест. {x.t.cost.toLocaleString()}{usage.currency}</div>
                       </div>
                     ))}
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                      <div className="text-sm text-gray-400 mb-2">По моделям</div>
+                      <div className="text-sm text-gray-400 mb-2">По моделям (выручка/себест./маржа)</div>
                       {usage.by_model.length ? usage.by_model.map((m) => (
                         <div key={m.model} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
                           <span className="text-gray-300 truncate mr-2">{m.model}</span>
-                          <span className="text-gray-500 shrink-0">{m.tokens.toLocaleString()} тк · {m.revenue.toLocaleString()}{usage.currency}</span>
+                          <span className="text-gray-500 shrink-0">{m.revenue.toLocaleString()}/{m.cost.toLocaleString()}/<span className={m.margin >= 0 ? "text-emerald-400" : "text-red-400"}>{m.margin.toLocaleString()}</span></span>
                         </div>
                       )) : <div className="text-gray-600 text-sm">пусто</div>}
                     </div>
                     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                      <div className="text-sm text-gray-400 mb-2">Счёт контрагентам</div>
+                      <div className="text-sm text-gray-400 mb-2">Счёт контрагентам (выручка · маржа)</div>
                       {usage.contractors.length ? usage.contractors.map((u) => (
                         <div key={u.payer_id ?? "none"} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
                           <span className="text-gray-300">контрагент #{u.payer_id ?? "—"}</span>
-                          <span className="text-emerald-400 shrink-0">{u.revenue.toLocaleString()}{usage.currency}</span>
+                          <span className="shrink-0 text-gray-500">{u.revenue.toLocaleString()}{usage.currency} · <span className={u.margin >= 0 ? "text-emerald-400" : "text-red-400"}>{u.margin.toLocaleString()}</span></span>
                         </div>
                       )) : <div className="text-gray-600 text-sm">пусто</div>}
                     </div>
@@ -1403,7 +1442,7 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* LLM Статус */}
+                            {/* LLM Статус */}
               <h3 className="text-lg font-semibold mt-8 mb-4">LLM Провайдеры</h3>
               {llmStatus ? (
                 <div>
