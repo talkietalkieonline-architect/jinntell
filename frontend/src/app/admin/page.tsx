@@ -39,6 +39,8 @@ import {
   createCity,
   updateCity,
   adminGetUsage,
+  adminGetPricing,
+  adminSetPricing,
   type UsageSummary,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
@@ -86,6 +88,8 @@ export default function AdminPage() {
   // Stats
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [pricing, setPricing] = useState<{ key: string; label: string; value: string }[]>([]);
+  const savePrice = async (key: string, value: string) => { try { await adminSetPricing(key, value); const u = await adminGetUsage().catch(() => null); setUsage(u); } catch { /* noop */ } };
   const [citiesList, setCitiesList] = useState<{ id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }[]>([]);
   const [newCity, setNewCity] = useState({ name: "", slug: "", lat: "", lng: "" });
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null);
@@ -192,14 +196,16 @@ export default function AdminPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [statsData, llmData, sysData, usageData] = await Promise.all([
+      const [statsData, llmData, sysData, usageData, pricingData] = await Promise.all([
         adminGetStats(),
         adminGetLLMStatus(),
         adminGetSystemSettings(),
         adminGetUsage().catch(() => null),
+        adminGetPricing().catch(() => []),
       ]);
       setStats(statsData);
       setUsage(usageData);
+      setPricing(pricingData);
       setLlmStatus(llmData);
       setSystemSettings(sysData);
       setSmsProvider(sysData.sms_provider);
@@ -1331,13 +1337,34 @@ export default function AdminPage() {
                       </div>
                     ))}
                   </div>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    {[
+                      { label: "Выручка (наша цена)", value: `${usage.revenue.toLocaleString()} ${usage.currency}`, color: "text-emerald-300" },
+                      { label: "Себестоимость", value: `${usage.cost.toLocaleString()} ${usage.currency}`, color: "text-red-300" },
+                      { label: "Маржа", value: `${usage.margin.toLocaleString()} ${usage.currency}`, color: "text-amber-300" },
+                    ].map((s) => (
+                      <div key={s.label} className="bg-gray-900 rounded-xl p-5 border border-gray-800 text-center">
+                        <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                        <div className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 mb-4 flex flex-wrap items-end gap-4">
+                    {pricing.map((p) => (
+                      <label key={p.key} className="flex flex-col gap-1">
+                        <span className="text-[11px] text-gray-500">{p.label}</span>
+                        <input defaultValue={p.value} onBlur={(e) => savePrice(p.key, e.target.value)} className="bg-gray-800 rounded px-2 py-1.5 text-sm text-white w-44 border border-gray-700" />
+                      </label>
+                    ))}
+                    <span className="text-[11px] text-gray-500 self-center">Наценка = наша цена − себестоимость. Меняешь → клик вне поля → сохранится и пересчитается.</span>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                       <div className="text-sm text-gray-400 mb-2">По моделям</div>
                       {usage.by_model.length ? usage.by_model.map((m) => (
                         <div key={m.model} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
                           <span className="text-gray-300 truncate mr-2">{m.model}</span>
-                          <span className="text-gray-500 shrink-0">{m.tokens.toLocaleString()} · {m.calls}×</span>
+                          <span className="text-gray-500 shrink-0">{m.tokens.toLocaleString()} тк · {m.revenue.toLocaleString()}{usage.currency}</span>
                         </div>
                       )) : <div className="text-gray-600 text-sm">пока пусто</div>}
                     </div>
@@ -1346,7 +1373,7 @@ export default function AdminPage() {
                       {usage.by_user.length ? usage.by_user.map((u) => (
                         <div key={u.user_id ?? "none"} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
                           <span className="text-gray-300">user #{u.user_id ?? "—"}</span>
-                          <span className="text-gray-500 shrink-0">{u.tokens.toLocaleString()} · {u.calls}×</span>
+                          <span className="text-gray-500 shrink-0">{u.tokens.toLocaleString()} тк · {u.revenue.toLocaleString()}{usage.currency}</span>
                         </div>
                       )) : <div className="text-gray-600 text-sm">пока пусто</div>}
                     </div>

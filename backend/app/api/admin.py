@@ -300,13 +300,23 @@ async def admin_usage(admin: User = Depends(get_admin_user), db: AsyncSession = 
                             .group_by(LlmUsage.model).order_by(total_tok.desc()))).all()
     byu = (await db.execute(_sel(LlmUsage.user_id, func.count(LlmUsage.id), total_tok)
                             .group_by(LlmUsage.user_id).order_by(total_tok.desc()).limit(10))).all()
+    pr = await _pricing_values()
+    sell = float(pr.get("TOKEN_SELL_PER_1K") or 2)
+    cost = float(pr.get("TOKEN_COST_PER_1K") or 0.2)
+    cur = pr.get("TOKEN_CURRENCY") or "₽"
+    total_tokens = int(tot[0]) + int(tot[1])
+    money = lambda tk: round((tk or 0) / 1000.0 * sell, 2)
+    costs = lambda tk: round((tk or 0) / 1000.0 * cost, 2)
     return {
         "total_calls": tot[2],
         "prompt_tokens": int(tot[0]),
         "completion_tokens": int(tot[1]),
-        "total_tokens": int(tot[0]) + int(tot[1]),
-        "by_model": [{"model": m or "?", "calls": c, "tokens": int(t or 0)} for m, c, t in bym],
-        "by_user": [{"user_id": u, "calls": c, "tokens": int(t or 0)} for u, c, t in byu],
+        "total_tokens": total_tokens,
+        "sell_per_1k": sell, "cost_per_1k": cost, "currency": cur,
+        "revenue": money(total_tokens), "cost": costs(total_tokens),
+        "margin": round(money(total_tokens) - costs(total_tokens), 2),
+        "by_model": [{"model": m or "?", "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for m, c, t in bym],
+        "by_user": [{"user_id": u, "calls": c, "tokens": int(t or 0), "revenue": money(int(t or 0))} for u, c, t in byu],
     }
 
 
@@ -1057,6 +1067,36 @@ async def admin_set_embedding_config(
     admin: User = Depends(get_admin_user),
 ):
     if key not in {k["key"] for k in EMBEDDING_CONFIG}:
+        raise HTTPException(404, "Неизвестный ключ")
+    from app.services.settings_store import set_setting
+    await set_setting(key, value.strip())
+    return {"ok": True}
+
+
+PRICING_CONFIG = [
+    {"key": "TOKEN_SELL_PER_1K", "label": "Наша цена за 1К токенов", "default": "2"},
+    {"key": "TOKEN_COST_PER_1K", "label": "Себестоимость за 1К токенов", "default": "0.2"},
+    {"key": "TOKEN_CURRENCY", "label": "Валюта", "default": "₽"},
+]
+
+
+async def _pricing_values() -> dict:
+    from app.services.settings_store import get_setting
+    out = {}
+    for it in PRICING_CONFIG:
+        out[it["key"]] = (await get_setting(it["key"])) or it["default"]
+    return out
+
+
+@router.get("/pricing")
+async def admin_get_pricing(admin: User = Depends(get_admin_user)):
+    from app.services.settings_store import get_setting
+    return [{"key": it["key"], "label": it["label"], "value": (await get_setting(it["key"])) or it["default"]} for it in PRICING_CONFIG]
+
+
+@router.patch("/pricing/{key}")
+async def admin_set_pricing(key: str, value: str = Body(..., embed=True), admin: User = Depends(get_admin_user)):
+    if key not in {k["key"] for k in PRICING_CONFIG}:
         raise HTTPException(404, "Неизвестный ключ")
     from app.services.settings_store import set_setting
     await set_setting(key, value.strip())
