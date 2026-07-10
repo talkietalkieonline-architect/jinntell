@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, type ContactOut } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -217,11 +217,11 @@ export default function Home() {
   }, [archivedChats]);
 
   /** Открыть личный чат с агентом (добавить в ленту открытых + переключиться) */
-  const openAgentChat = useCallback((agentId: number) => {
+  const openAgentChat = useCallback((agentId: number, meta?: { name?: string; color?: string }) => {
     const uid = getUserId();
     const r = uid ? `agent-${agentId}-u${uid}` : `agent-${agentId}`;
     setOpenChats((prev) =>
-      prev.some((c) => c.room === r) ? prev : [...prev, { room: r, agentId, name: "Джинн", color: "#6c7bff" }]
+      prev.some((c) => c.room === r) ? prev : [...prev, { room: r, agentId, name: meta?.name || "Джинн", color: meta?.color || "#6c7bff" }]
     );
     setRoom(r);
     setView("chat");
@@ -292,6 +292,16 @@ export default function Home() {
   const closeChatRef = useRef<(r: string) => void>(() => {});
 
   /** Ввод к помощнику: перехват голосовых/текстовых команд */
+  const summonJinn = useCallback(async (name: string): Promise<boolean> => {
+    try {
+      const res = await getAgents({ search: name });
+      let a = res.agents.find((x) => x.name.toLowerCase() === name.toLowerCase()) || res.agents[0];
+      if (!a) { const d = await discoverAgents(name, 3); a = d[0]; }
+      if (a) { openAgentChat(a.id, { name: a.name, color: a.color }); setCommandHint(`Позвал джинна: ${a.name}`); return true; }
+    } catch { /* noop */ }
+    return false;
+  }, [openAgentChat]);
+
   const handleSend = useCallback((text: string) => {
     const inAssistant = view === "feed" || room === assistantRoom;
     if (inAssistant) {
@@ -312,10 +322,13 @@ export default function Home() {
         if (who && uid) { const c = findContact(who); if (c) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } setCommandHint(`Не нашёл «${who}»`); return; }
         if (!who && room !== assistantRoom) { closeChatRef.current(room); setCommandHint("Закрыл чат"); return; }
       }
-      // открой чат / позови <кого>
-      if ((m = t.match(/^(?:открой(?:те)?(?:\s+чат)?(?:\s+с)?|позови(?:те)?)\s+(?:контакт\s+)?(.+)$/i))) {
-        const c = findContact(m[1]);
-        if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); } else setCommandHint(`Не нашёл «${m[1].trim()}»`);
+      // открой чат / позови / пригласи <кого> (контакт или джинн из Города)
+      if ((m = t.match(/^(?:открой(?:те)?(?:\s+чат)?(?:\s+с)?|позови(?:те)?|пригласи(?:те)?|призови(?:те)?)\s+(?:джинна\s+|контакт\s+)?(.+)$/i))) {
+        const name = m[1].trim();
+        const c = findContact(name);
+        if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); return; }
+        setCommandHint(`Ищу джинна «${name}»…`);
+        summonJinn(name).then((ok) => { if (!ok) setCommandHint(`Не нашёл «${name}»`); });
         return;
       }
       // отправь <кому> (без текста) — открыть диалог и ждать
@@ -326,7 +339,7 @@ export default function Home() {
     }
     if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
     sendMessage(text);
-  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom]);
+  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn]);
 
   const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
     const payload = JSON.stringify({ signal, to, ...(extra || {}) });
