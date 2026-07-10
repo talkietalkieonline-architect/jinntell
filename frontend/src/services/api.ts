@@ -233,6 +233,8 @@ export interface AgentOut {
 export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }
 export function getCities(): Promise<CityOut[]> { return apiFetch("/api/cities"); }
 export function getAllCities(): Promise<CityOut[]> { return apiFetch("/api/cities/all"); }
+export interface UsageSummary { total_calls: number; prompt_tokens: number; completion_tokens: number; total_tokens: number; by_model: { model: string; calls: number; tokens: number }[]; by_user: { user_id: number | null; calls: number; tokens: number }[] }
+export function adminGetUsage(): Promise<UsageSummary> { return apiFetch("/api/admin/usage"); }
 export function nearestCity(lat: number, lng: number): Promise<CityOut | null> { return apiFetch("/api/cities/nearest", { method: "POST", body: JSON.stringify({ lat, lng }) }); }
 export function createCity(data: { name: string; slug: string; lat?: number; lng?: number }): Promise<CityOut> { return apiFetch("/api/cities", { method: "POST", body: JSON.stringify(data) }); }
 export function updateCity(id: number, data: Record<string, unknown>): Promise<CityOut> { return apiFetch(`/api/cities/${id}`, { method: "PATCH", body: JSON.stringify(data) }); }

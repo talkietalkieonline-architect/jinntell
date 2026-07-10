@@ -285,6 +285,31 @@ async def admin_restore_agent(
 #  CORE AGENTS (системное ядро)
 # ═══════════════════════════════════════════════
 
+@router.get("/usage")
+async def admin_usage(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Сводка расхода LLM (оценка токенов)."""
+    from sqlalchemy import func, select as _sel
+    from app.models.llm_usage import LlmUsage
+    tot = (await db.execute(_sel(
+        func.coalesce(func.sum(LlmUsage.prompt_tokens), 0),
+        func.coalesce(func.sum(LlmUsage.completion_tokens), 0),
+        func.count(LlmUsage.id),
+    ))).one()
+    total_tok = func.coalesce(func.sum(LlmUsage.prompt_tokens + LlmUsage.completion_tokens), 0)
+    bym = (await db.execute(_sel(LlmUsage.model, func.count(LlmUsage.id), total_tok)
+                            .group_by(LlmUsage.model).order_by(total_tok.desc()))).all()
+    byu = (await db.execute(_sel(LlmUsage.user_id, func.count(LlmUsage.id), total_tok)
+                            .group_by(LlmUsage.user_id).order_by(total_tok.desc()).limit(10))).all()
+    return {
+        "total_calls": tot[2],
+        "prompt_tokens": int(tot[0]),
+        "completion_tokens": int(tot[1]),
+        "total_tokens": int(tot[0]) + int(tot[1]),
+        "by_model": [{"model": m or "?", "calls": c, "tokens": int(t or 0)} for m, c, t in bym],
+        "by_user": [{"user_id": u, "calls": c, "tokens": int(t or 0)} for u, c, t in byu],
+    }
+
+
 @router.get("/core-agents", response_model=list[AgentDetailOut])
 async def admin_list_core_agents(
     db: AsyncSession = Depends(get_db),

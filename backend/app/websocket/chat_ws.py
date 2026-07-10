@@ -326,6 +326,7 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         max_tokens=(asst.llm_max_tokens if asst else 1000),
         conversation_history=history,
         user_persona_suffix=user_persona,
+        user_id=user_id,
     )
 
     # Сохраняем ответ помощника в БД
@@ -391,6 +392,8 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         except Exception as e:
             print(f"[ws] RAG search error for agent {agent.id}: {e}")
 
+    _uu = re.search(r"-u(\d+)$", room)
+    _uid = int(_uu.group(1)) if _uu else 0
     reply_text = await get_agent_reply(
         agent_name=agent.name,
         agent_profession=agent.profession,
@@ -407,6 +410,8 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         skills_text=agent.skills_text,
         exclusions_text=agent.exclusions_text,
         rag_context=rag_context,
+        user_id=_uid,
+        agent_id=agent.id,
     )
 
     async with async_session() as db:

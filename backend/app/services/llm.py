@@ -2,6 +2,7 @@
 LLM Service — мульти-провайдер: DeepSeek, OpenAI, Gemini, Groq, OpenRouter.
 Автовыбор по наличию ключей.
 """
+import asyncio
 import json
 import random
 import re
@@ -286,12 +287,30 @@ async def _call_openrouter(messages: list, model: str, api_key: str, max_tokens:
     return ""
 
 
+def _est_tokens(text: str) -> int:
+    return max(1, len(text or "") // 3)
+
+
+async def _record_usage(user_id, agent_id, provider, model, prompt_tokens, completion_tokens):
+    try:
+        from app.core.database import async_session
+        from app.models.llm_usage import LlmUsage
+        async with async_session() as db:
+            db.add(LlmUsage(user_id=user_id or None, agent_id=agent_id, provider=provider,
+                            model=model, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens))
+            await db.commit()
+    except Exception as e:
+        print(f"[usage] record failed: {e}")
+
+
 async def get_llm_reply(
     user_message: str,
     system_prompt: Optional[str] = None,
     model: Optional[str] = None,
     conversation_history: Optional[list] = None,
     user_persona_suffix: Optional[str] = None,
+    user_id: int = 0,
+    agent_id: Optional[int] = None,
     max_tokens: int = 1000,
 ) -> str:
     """Получить ответ от LLM. Автовыбор провайдера."""
@@ -369,7 +388,13 @@ async def get_llm_reply(
                 return random.choice(FALLBACK_REPLIES)
         if reply:
             reply = _clean_reasoning(reply)
-        return reply or random.choice(FALLBACK_REPLIES)
+        final = reply or random.choice(FALLBACK_REPLIES)
+        try:
+            pt = sum(_est_tokens(m.get("content", "")) for m in messages)
+            asyncio.create_task(_record_usage(user_id, agent_id, pname, llm_model, pt, _est_tokens(final)))
+        except Exception:
+            pass
+        return final
     except Exception as e:
         print(f"[llm] Error ({pname}): {e}")
         return random.choice(FALLBACK_REPLIES)
@@ -488,6 +513,8 @@ async def get_agent_reply(
     mode_rules: Optional[str] = None,
     mode_context: Optional[str] = None,
     rag_context: Optional[str] = None,
+    user_id: int = 0,
+    agent_id: Optional[int] = None,
     max_tokens: int = 1000,
 ) -> str:
     """Получить ответ от конкретного агента."""
@@ -513,5 +540,7 @@ async def get_agent_reply(
         system_prompt=prompt,
         model=llm_model,
         conversation_history=conversation_history,
+        user_id=user_id,
+        agent_id=agent_id,
         max_tokens=max_tokens,
     )

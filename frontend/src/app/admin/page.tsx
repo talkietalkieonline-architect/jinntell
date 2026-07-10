@@ -38,6 +38,8 @@ import {
   getAllCities,
   createCity,
   updateCity,
+  adminGetUsage,
+  type UsageSummary,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
 
@@ -83,6 +85,7 @@ export default function AdminPage() {
 
   // Stats
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [citiesList, setCitiesList] = useState<{ id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }[]>([]);
   const [newCity, setNewCity] = useState({ name: "", slug: "", lat: "", lng: "" });
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null);
@@ -189,12 +192,14 @@ export default function AdminPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const [statsData, llmData, sysData] = await Promise.all([
+      const [statsData, llmData, sysData, usageData] = await Promise.all([
         adminGetStats(),
         adminGetLLMStatus(),
         adminGetSystemSettings(),
+        adminGetUsage().catch(() => null),
       ]);
       setStats(statsData);
+      setUsage(usageData);
       setLlmStatus(llmData);
       setSystemSettings(sysData);
       setSmsProvider(sysData.sms_provider);
@@ -1307,6 +1312,46 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <p className="text-gray-500">Загрузка...</p>
+              )}
+
+              {/* Расход LLM */}
+              {usage && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold mb-4">Расход LLM <span className="text-xs text-gray-500 font-normal">(оценка токенов)</span></h3>
+                  <div className="grid grid-cols-4 gap-4 mb-4">
+                    {[
+                      { label: "Вызовов", value: usage.total_calls.toLocaleString(), color: "text-white" },
+                      { label: "Всего токенов", value: usage.total_tokens.toLocaleString(), color: "text-amber-300" },
+                      { label: "Промпт", value: usage.prompt_tokens.toLocaleString(), color: "text-blue-300" },
+                      { label: "Ответы", value: usage.completion_tokens.toLocaleString(), color: "text-green-300" },
+                    ].map((s) => (
+                      <div key={s.label} className="bg-gray-900 rounded-xl p-5 border border-gray-800 text-center">
+                        <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                        <div className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                      <div className="text-sm text-gray-400 mb-2">По моделям</div>
+                      {usage.by_model.length ? usage.by_model.map((m) => (
+                        <div key={m.model} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
+                          <span className="text-gray-300 truncate mr-2">{m.model}</span>
+                          <span className="text-gray-500 shrink-0">{m.tokens.toLocaleString()} · {m.calls}×</span>
+                        </div>
+                      )) : <div className="text-gray-600 text-sm">пока пусто</div>}
+                    </div>
+                    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                      <div className="text-sm text-gray-400 mb-2">Топ пользователей</div>
+                      {usage.by_user.length ? usage.by_user.map((u) => (
+                        <div key={u.user_id ?? "none"} className="flex justify-between text-sm py-1 border-b border-gray-800/50">
+                          <span className="text-gray-300">user #{u.user_id ?? "—"}</span>
+                          <span className="text-gray-500 shrink-0">{u.tokens.toLocaleString()} · {u.calls}×</span>
+                        </div>
+                      )) : <div className="text-gray-600 text-sm">пока пусто</div>}
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* LLM Статус */}
