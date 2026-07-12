@@ -112,6 +112,7 @@ interface UseChatResult {
   isConnected: boolean;
   sendMessage: (text: string) => void;
   attachMedia: (file: File, asNote?: boolean) => void;
+  pushAssistant: (text: string) => void;
   room: string;
   setRoom: (room: string) => void;
   agentInfo: AgentRoomInfo | null;
@@ -247,6 +248,10 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   }, [room]);
   useEffect(() => { loadHistoryRef.current = loadHistory; }, [loadHistory]);
 
+  const pushAssistant = useCallback((text: string) => {
+    setMessages((prev) => [...prev, { id: `local-${Date.now()}`, sender: "assistant", name: assistantNameRef.current || "Джим", text, color: "var(--accent)", timestamp: new Date() }]);
+  }, []);
+
   // Инициализация при смене комнаты
   useEffect(() => {
     if (!room.startsWith("agent-")) {
@@ -364,6 +369,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
     isConnected,
     sendMessage,
     attachMedia,
+    pushAssistant,
     room,
     setRoom,
     agentInfo,

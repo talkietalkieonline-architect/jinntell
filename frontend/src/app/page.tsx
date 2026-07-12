@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, type ContactOut } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -93,7 +93,7 @@ export default function Home() {
   // Чат — через хук (WebSocket + offline fallback)
   const {
     messages, isTyping, typingName, isConnected,
-    sendMessage, attachMedia, room, setRoom, agentInfo, roomMembers,
+    sendMessage, attachMedia, pushAssistant, room, setRoom, agentInfo, roomMembers,
   } = useChat(getJimRoom());
 
   const roomRef = useRef(room);
@@ -302,6 +302,46 @@ export default function Home() {
     return false;
   }, [openAgentChat]);
 
+  const classifyAndAct = useCallback(async (t: string) => {
+    let intent;
+    try { intent = await classifyIntent(t); } catch { intent = { action: "chat", target: "", text: "", query: "" }; }
+    const a = intent.action;
+    const target = (intent.target || "").trim();
+    const uid = getUserId();
+    if (a === "chat") { sendMessage(t); return; }
+    if (a === "clarify") { pushAssistant(intent.text || "Уточни, что именно сделать?"); return; }
+    if (a === "web_search") { pushAssistant(`🔎 «${intent.query || t}» — веб-поиск скоро подключим.`); return; }
+    if (a === "send_media") { pushAssistant("Прикрепи фото через 📎 и скажи, кому переслать."); return; }
+    if (a === "open_chat" || a === "summon_jinn") {
+      const c = target ? findContact(target) : undefined;
+      if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); return; }
+      setCommandHint(`Ищу «${target}»…`);
+      const ok = await summonJinn(target); if (!ok) pushAssistant(`Не нашёл «${target}».`); return;
+    }
+    if (a === "close_chat") {
+      if (target) { const c = findContact(target); if (c && uid) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } pushAssistant(`Не нашёл чат «${target}».`); return; }
+      if (room !== assistantRoom) { closeChatRef.current(room); setCommandHint("Закрыл чат"); return; }
+      pushAssistant("Какой чат закрыть?"); return;
+    }
+    if (a === "send_message") {
+      const c = target ? findContact(target) : undefined;
+      if (c) { if (intent.text) { dmSend(c.id, intent.text).then(() => setCommandHint(`Отправил ${c.display_name}`)).catch(() => setCommandHint("Не удалось отправить")); } else { openDM(c); setCommandHint(`Диктуйте сообщение для ${c.display_name}`); } return; }
+      pushAssistant(`Не нашёл контакт «${target}».`); return;
+    }
+    if (a === "call") {
+      const c = target ? findContact(target) : undefined;
+      if (c) { openDM(c); pushAssistant(`Открыл чат с ${c.display_name} — нажми 📹, чтобы позвонить.`); return; }
+      pushAssistant("Кому позвонить?"); return;
+    }
+    if (a === "clear_history") { clearHistory(room).catch(() => {}); setCommandHint("Очистил историю"); return; }
+    if (a === "favorite") {
+      setCommandHint(`Ищу «${target}»…`);
+      try { const res = await getAgents({ search: target }); const ag = res.agents[0]; if (ag) { addFavoriteAgent(ag.id).catch(() => {}); setFavIds((sset) => new Set(sset).add(ag.id)); setCommandHint(`В избранном: ${ag.name}`); return; } } catch { /* noop */ }
+      pushAssistant(`Не нашёл джинна «${target}».`); return;
+    }
+    sendMessage(t);
+  }, [findContact, openDM, summonJinn, sendMessage, pushAssistant, room, assistantRoom]);
+
   const handleSend = useCallback((text: string) => {
     const inAssistant = view === "feed" || room === assistantRoom;
     if (inAssistant) {
@@ -336,10 +376,13 @@ export default function Home() {
         const c = findContact(m[1]);
         if (c) { openDM(c); setCommandHint(`Диктуйте сообщение для ${c.display_name}`); return; }
       }
+      // Уровень 2: не распознали шаблоном — понимаем смысл
+      if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
+      classifyAndAct(t);
+      return;
     }
-    if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
     sendMessage(text);
-  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn]);
+  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct]);
 
   const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
     const payload = JSON.stringify({ signal, to, ...(extra || {}) });

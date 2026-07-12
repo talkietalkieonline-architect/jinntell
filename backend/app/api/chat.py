@@ -21,6 +21,7 @@ from app.models.room import Room, RoomMember
 from app.models.user import User
 from app.schemas.message import MessageOut, SendMessageRequest
 from app.websocket.manager import manager
+from app.services.llm import get_llm_reply
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -156,6 +157,51 @@ async def send_message(
     await db.flush()
     await db.refresh(msg)
     return MessageOut.model_validate(msg)
+
+
+_INTENT_PROMPT = """Ты — классификатор намерений помощника JinnTell. По сообщению пользователя верни СТРОГО один JSON-объект, без markdown и пояснений, вида:
+{"action": "...", "target": "", "text": "", "query": ""}
+action — одно из:
+- open_chat: открыть чат / позвать (target = имя человека или джинна)
+- close_chat: закрыть/убрать чат (target = имя; пусто = текущий)
+- send_message: отправить сообщение (target = кому, text = что отправить)
+- summon_jinn: позвать джинна из Города (target = имя или описание нужного специалиста)
+- call: видеозвонок (target = кому)
+- clear_history: очистить историю текущего чата
+- favorite: добавить джинна в избранное (target = имя/описание)
+- web_search: найти в интернете (query = поисковый запрос)
+- send_media: отправить фото/медиа в другой чат (target = кому)
+- clarify: непонятно — нужно переспросить (text = короткий уточняющий вопрос)
+- chat: обычный разговор, не команда
+Если это не явная команда/просьба к действию — action=chat. Верни только JSON."""
+
+
+class IntentRequest(BaseModel):
+    text: str
+
+
+@router.post("/intent")
+async def assistant_intent(body: IntentRequest, user: User = Depends(get_current_user)):
+    """Классификация намерения (для умного помощника)."""
+    raw = await get_llm_reply(user_message=(body.text or "")[:500], system_prompt=_INTENT_PROMPT,
+                              max_tokens=120, user_id=user.id, payer_type="free")
+    import json as _j, re as _re
+    data = {}
+    m = _re.search(r"\{.*\}", raw or "", _re.S)
+    if m:
+        try:
+            data = _j.loads(m.group(0))
+        except Exception:
+            data = {}
+    valid = {"open_chat", "close_chat", "send_message", "summon_jinn", "call",
+             "clear_history", "favorite", "web_search", "send_media", "clarify", "chat"}
+    action = data.get("action") if data.get("action") in valid else "chat"
+    return {
+        "action": action,
+        "target": (data.get("target") or "").strip(),
+        "text": (data.get("text") or "").strip(),
+        "query": (data.get("query") or "").strip(),
+    }
 
 
 @router.delete("/history")

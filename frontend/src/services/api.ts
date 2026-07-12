@@ -438,6 +438,10 @@ export function clearHistory(room: string): Promise<{ ok: boolean; cleared: numb
 export function dmSend(toUserId: number, text: string): Promise<{ ok: boolean; room: string }> {
   return apiFetch("/api/chat/dm-send", { method: "POST", body: JSON.stringify({ to_user_id: toUserId, text }) });
 }
+export interface IntentResult { action: string; target: string; text: string; query: string }
+export function classifyIntent(text: string): Promise<IntentResult> {
+  return apiFetch("/api/chat/intent", { method: "POST", body: JSON.stringify({ text }) });
+}
 
 export interface ContactOut {
   id: number;
