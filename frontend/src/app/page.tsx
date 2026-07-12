@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, mediaUrl, type ContactOut, type ChannelPost } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, type ContactOut, type ChannelPost } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -105,7 +105,8 @@ export default function Home() {
   useEffect(() => {
     const m = room.match(/^agent-(\d+)/);
     if (!m) { setChannelPosts([]); return; }
-    getChannelPosts(Number(m[1])).then((p) => setChannelPosts(p)).catch(() => setChannelPosts([]));
+    const aid = Number(m[1]);
+    getChannelPosts(aid).then((p) => { setChannelPosts(p); if (p.length) markChannelRead(aid).catch(() => {}); }).catch(() => setChannelPosts([]));
   }, [room]);
   const callRef = useRef(call);
   useEffect(() => { callRef.current = call; }, [call]);

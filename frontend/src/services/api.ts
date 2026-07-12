@@ -445,6 +445,9 @@ export interface ChannelPost { id: number; agent_id: number; title: string; body
 export function getChannelPosts(agentId: number, limit = 30): Promise<ChannelPost[]> {
   return apiFetch(`/api/channels/${agentId}?limit=${limit}`);
 }
+export interface ChannelUnread { agent_id: number; name: string; color: string; unread: number; link_room: string }
+export function getChannelsUnread(): Promise<ChannelUnread[]> { return apiFetch("/api/channels/unread"); }
+export function markChannelRead(agentId: number): Promise<{ ok: boolean }> { return apiFetch(`/api/channels/${agentId}/read`, { method: "POST" }); }
 export interface IntentResult { action: string; target: string; text: string; query: string }
 export function classifyIntent(text: string): Promise<IntentResult> {
   return apiFetch("/api/chat/intent", { method: "POST", body: JSON.stringify({ text }) });

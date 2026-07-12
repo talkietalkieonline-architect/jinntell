@@ -9,6 +9,7 @@ from app.models.room import Room, RoomMember
 from app.models.agent_access import AgentAccess
 from app.models.user_favorite import UserFavorite
 from app.models.channel_post import ChannelPost
+from app.models.channel_read import ChannelRead
 from app.models.city import City
 from app.models.llm_usage import LlmUsage
 from app.models.contact import Contact

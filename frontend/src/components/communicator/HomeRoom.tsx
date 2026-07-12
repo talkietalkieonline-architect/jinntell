@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getFeed, dismissFeed, type FeedEvent } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, type FeedEvent, type ChannelUnread } from "@/services/api";
 
 interface Props {
   topPad: number;
@@ -29,11 +29,15 @@ function timeAgo(iso: string): string {
 
 export default function HomeRoom({ topPad, bottomPad, assistantName, onOpenAssistant, onOpenChat }: Props) {
   const [events, setEvents] = useState<FeedEvent[]>([]);
+  const [channels, setChannels] = useState<ChannelUnread[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
-    const load = () => getFeed().then((list) => { if (alive) setEvents(list); }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
+    const load = () => {
+      getFeed().then((list) => { if (alive) setEvents(list); }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
+      getChannelsUnread().then((c) => { if (alive) setChannels(c); }).catch(() => {});
+    };
     load();
     const iv = setInterval(load, 20000);
     const onPing = () => load();
@@ -71,6 +75,18 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, onOpenAssis
             Чат с {assistantName}
           </button>
         </div>
+
+        {/* Непрочитанное по каналам */}
+        {channels.map((ch) => (
+          <button key={ch.agent_id} onClick={() => onOpenChat(ch.link_room)} className="rounded-2xl p-3.5 flex items-center gap-3 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style={{ background: `${ch.color}22`, border: `1.5px solid ${ch.color}55`, color: ch.color }}>📰</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{ch.name}</p>
+              <p className="text-[12px]" style={{ color: "var(--text-muted)" }}>{ch.unread} непрочитанных новостей →</p>
+            </div>
+            <span className="shrink-0 min-w-[22px] h-[22px] px-1.5 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{ch.unread}</span>
+          </button>
+        ))}
 
         {/* События */}
         {loading ? (
