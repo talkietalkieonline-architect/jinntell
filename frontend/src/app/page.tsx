@@ -176,6 +176,8 @@ export default function Home() {
         } else if (type === "call_end" || type === "call_reject") {
           callSignalRef.current?.(type, data);
           finishCall();
+        } else if (type === "feed_ping") {
+          window.dispatchEvent(new Event("jinntell_feed_ping"));
         } else if (type === "chat_ping" && data.room) {
           const pinged = data.room;
           if (isMuted(pinged)) return;

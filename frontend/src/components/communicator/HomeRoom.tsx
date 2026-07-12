@@ -33,11 +33,12 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, onOpenAssis
 
   useEffect(() => {
     let alive = true;
-    getFeed()
-      .then((list) => { if (alive) setEvents(list); })
-      .catch(() => {})
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+    const load = () => getFeed().then((list) => { if (alive) setEvents(list); }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
+    load();
+    const iv = setInterval(load, 20000);
+    const onPing = () => load();
+    window.addEventListener("jinntell_feed_ping", onPing);
+    return () => { alive = false; clearInterval(iv); window.removeEventListener("jinntell_feed_ping", onPing); };
   }, []);
 
   const handleDismiss = async (id: number) => {

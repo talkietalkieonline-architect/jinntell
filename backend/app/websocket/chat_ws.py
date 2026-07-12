@@ -609,6 +609,31 @@ async def chat_websocket(websocket: WebSocket, room: str):
             await manager.broadcast(room, msg_data)
             await _notify_participants(room)
 
+            # Событие Ленты для собеседника при входящем DM (если он сейчас не в этом чате)
+            if _dm:
+                _a, _b = int(_dm.group(1)), int(_dm.group(2))
+                _other = _b if user_id == _a else _a
+                if _other not in manager.get_online_users(room):
+                    try:
+                        from app.api.feed import create_feed_event
+                        from app.models.feed import FeedEvent
+                        _bd = (text[:80] if text else "📎 медиа")
+                        async with async_session() as _fdb:
+                            _ex = (await _fdb.execute(select(FeedEvent).where(
+                                FeedEvent.user_id == _other, FeedEvent.link_room == room, FeedEvent.is_read == False
+                            ))).scalar_one_or_none()
+                            if _ex:
+                                _ex.title = f"Сообщение от {user_name}"
+                                _ex.body = _bd
+                                _ex.created_at = datetime.now(timezone.utc)
+                                await _fdb.commit()
+                            else:
+                                await create_feed_event(_fdb, _other, f"Сообщение от {user_name}",
+                                                        kind="message", icon="💬", body=_bd, link_room=room)
+                        await manager.broadcast(f"user-{_other}", {"type": "feed_ping"})
+                    except Exception as _e:
+                        print(f"[feed] dm event failed: {_e}")
+
             if text and agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
             elif text and room_members:
