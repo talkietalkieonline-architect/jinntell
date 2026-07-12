@@ -421,6 +421,7 @@ export default function ChatArea({
   searchOpen = false,
   onCloseSearch,
   onForward,
+  channelPosts,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -438,6 +439,7 @@ export default function ChatArea({
   searchOpen?: boolean;
   onCloseSearch?: () => void;
   onForward?: (m: ChatMessage) => void;
+  channelPosts?: { id: number; title: string; body?: string | null; url?: string | null }[];
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -553,6 +555,19 @@ export default function ChatArea({
         <div className={`flex flex-col items-center min-h-full w-full ${topAlign ? "justify-start" : "justify-end"}`}>
           <div className="flex flex-col gap-3 w-full max-w-[620px] mx-auto py-4 pb-6 px-4">
             {headerSlot}
+            {channelPosts && channelPosts.length > 0 && (
+              <div className="rounded-2xl p-3 mb-1" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <div className="text-[11px] uppercase tracking-wider font-semibold mb-2" style={{ color: "var(--text-muted)" }}>📰 Канал · последние новости</div>
+                <div className="flex flex-col gap-1.5">
+                  {channelPosts.slice(0, 12).map((p) => (
+                    <a key={p.id} href={p.url || undefined} target="_blank" rel="noreferrer" className="block rounded-lg p-2 transition-all hover:opacity-90" style={{ background: "var(--bg-glass-hover)" }}>
+                      <div className="text-[13px] font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{p.title}</div>
+                      {p.body && <div className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>{p.body}</div>}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {messages.map((msg) => {
               const userSide = isUser(msg.sender);
 

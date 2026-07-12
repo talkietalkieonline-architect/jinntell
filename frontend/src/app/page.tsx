@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, mediaUrl, type ContactOut } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, mediaUrl, type ContactOut, type ChannelPost } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -81,6 +81,12 @@ export default function Home() {
   const [recorderAuto, setRecorderAuto] = useState(false);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [forwardMsg, setForwardMsg] = useState<ChatMessage | null>(null);
+  const [channelPosts, setChannelPosts] = useState<ChannelPost[]>([]);
+  useEffect(() => {
+    const m = room.match(/^agent-(\d+)/);
+    if (!m) { setChannelPosts([]); return; }
+    getChannelPosts(Number(m[1])).then((p) => setChannelPosts(p)).catch(() => setChannelPosts([]));
+  }, [room]);
   const [mutedRooms, setMutedRooms] = useState<string[]>([]);
   const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
@@ -651,6 +657,7 @@ export default function Home() {
           searchOpen={chatSearchOpen}
           onCloseSearch={() => setChatSearchOpen(false)}
           onForward={(m) => setForwardMsg(m)}
+          channelPosts={channelPosts}
           headerSlot={room === assistantRoom ? (
             <ChatJournal openChats={openChats} archivedChats={archivedChats} onSelect={selectChat} onReopen={reopenChat} />
           ) : null}

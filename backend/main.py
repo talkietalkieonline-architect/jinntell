@@ -22,6 +22,7 @@ from app.api.feed import router as feed_router
 from app.api.rooms import router as rooms_router
 from app.api.contacts import router as contacts_router
 from app.api.cities import router as cities_router
+from app.api.channels import router as channels_router
 from app.websocket.chat_ws import router as ws_router
 from app.services.seed import seed_agents, seed_core_agents
 
@@ -40,8 +41,13 @@ async def lifespan(app: FastAPI):
         # Добавляем core-агентов на существующую БД (если их ещё нет)
         await seed_core_agents(db)
 
+    import asyncio
+    from app.services.news import news_scheduler
+    _news_task = asyncio.create_task(news_scheduler())
+
     print(f"[jinntell] Сервер запущен — {settings.APP_NAME} v{settings.APP_VERSION}")
     yield
+    _news_task.cancel()
     print("[jinntell] Сервер остановлен")
 
 
@@ -74,6 +80,7 @@ app.include_router(feed_router)
 app.include_router(rooms_router)
 app.include_router(contacts_router)
 app.include_router(cities_router)
+app.include_router(channels_router)
 app.include_router(ws_router)
 
 # Хранилище загруженных файлов (фото агентов, гардероб, в будущем RAG-база контрагента)

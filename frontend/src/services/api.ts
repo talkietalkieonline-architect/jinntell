@@ -441,6 +441,10 @@ export function dmSend(toUserId: number, text: string): Promise<{ ok: boolean; r
 export function forwardMessage(room: string, data: { text?: string; media_url?: string; media_type?: string }): Promise<{ ok: boolean; room: string }> {
   return apiFetch("/api/chat/forward", { method: "POST", body: JSON.stringify({ room, ...data }) });
 }
+export interface ChannelPost { id: number; agent_id: number; title: string; body?: string | null; url?: string | null; created_at: string }
+export function getChannelPosts(agentId: number, limit = 30): Promise<ChannelPost[]> {
+  return apiFetch(`/api/channels/${agentId}?limit=${limit}`);
+}
 export interface IntentResult { action: string; target: string; text: string; query: string }
 export function classifyIntent(text: string): Promise<IntentResult> {
   return apiFetch("/api/chat/intent", { method: "POST", body: JSON.stringify({ text }) });
