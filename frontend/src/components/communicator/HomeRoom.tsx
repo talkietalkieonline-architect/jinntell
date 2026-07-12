@@ -78,7 +78,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, onOpenAssis
 
         {/* Непрочитанное по каналам */}
         {channels.map((ch) => (
-          <button key={ch.agent_id} onClick={() => onOpenChat(ch.link_room)} className="rounded-2xl p-3.5 flex items-center gap-3 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+          <button key={ch.agent_id} onClick={() => onOpenChat?.(ch.link_room)} className="rounded-2xl p-3.5 flex items-center gap-3 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
             <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style={{ background: `${ch.color}22`, border: `1.5px solid ${ch.color}55`, color: ch.color }}>📰</div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{ch.name}</p>
