@@ -204,6 +204,49 @@ async def assistant_intent(body: IntentRequest, user: User = Depends(get_current
     }
 
 
+class ForwardRequest(BaseModel):
+    room: str
+    text: str = ""
+    media_url: Optional[str] = None
+    media_type: Optional[str] = None
+
+
+@router.post("/forward")
+async def forward_message(
+    body: ForwardRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Переслать сообщение (текст/медиа) в другой чат/комнату/джину. Realtime."""
+    room = body.room
+    if not (body.text or body.media_url):
+        raise HTTPException(400, "Нечего пересылать")
+    dm = re.match(r"^dm-(\d+)-(\d+)$", room)
+    ag = re.match(r"^agent-\d+-u(\d+)$", room)
+    jm = re.match(r"^jim-(\d+)$", room)
+    if dm and user.id not in (int(dm.group(1)), int(dm.group(2))):
+        raise HTTPException(403, "Нет доступа к чату")
+    if ag and int(ag.group(1)) != user.id:
+        raise HTTPException(403, "Нет доступа к чату")
+    if jm and int(jm.group(1)) != user.id:
+        raise HTTPException(403, "Нет доступа к чату")
+    msg = Message(room=room, sender_type="user", sender_user_id=user.id, sender_name=user.display_name,
+                  text=body.text or "", media_url=body.media_url, media_type=body.media_type)
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+    await manager.broadcast(room, {
+        "type": "message", "id": msg.id, "room": room,
+        "sender_type": "user", "sender_user_id": user.id, "sender_name": user.display_name,
+        "text": body.text or "", "media_url": body.media_url, "media_type": body.media_type,
+        "created_at": msg.created_at.isoformat(),
+    })
+    if dm:
+        for uid in (int(dm.group(1)), int(dm.group(2))):
+            await manager.broadcast(f"user-{uid}", {"type": "chat_ping", "room": room})
+    return {"ok": True, "room": room}
+
+
 @router.delete("/history")
 async def clear_history(
     room: str = Query(...),

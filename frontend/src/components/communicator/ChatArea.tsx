@@ -178,9 +178,9 @@ function VoiceBubble({ text, accent }: { text: string; accent?: boolean }) {
 
 /** Контекстное меню пузыря (long press на мобиле, правый клик на десктопе) */
 function BubbleContextMenu({
-  x, y, msg, canDelete, onClose,
+  x, y, msg, canDelete, onForward, onClose,
 }: {
-  x: number; y: number; msg: ChatMessage; canDelete?: boolean; onClose: () => void;
+  x: number; y: number; msg: ChatMessage; canDelete?: boolean; onForward?: (m: ChatMessage) => void; onClose: () => void;
 }) {
   useEffect(() => {
     const handler = () => onClose();
@@ -210,6 +210,14 @@ function BubbleContextMenu({
         a.click();
         onClose();
       },
+    });
+  }
+
+  if ((msg.text || msg.mediaUrl) && onForward) {
+    items.push({
+      icon: "↪️",
+      label: "Переслать",
+      action: () => { onForward(msg); onClose(); },
     });
   }
 
@@ -259,7 +267,7 @@ function BubbleContextMenu({
 }
 
 /** Пузырь сообщения */
-function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight }: { msg: ChatMessage; userSide: boolean; privateChat?: boolean; highlight?: boolean; activeHighlight?: boolean }) {
+function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight, onForward }: { msg: ChatMessage; userSide: boolean; privateChat?: boolean; highlight?: boolean; activeHighlight?: boolean; onForward?: (m: ChatMessage) => void }) {
   const [showAsVoice, setShowAsVoice] = useState(!!msg.isVoice);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; type: string } | null>(null);
@@ -378,6 +386,7 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight 
           y={ctxMenu.y}
           msg={msg}
           canDelete={msg.sender === "user" || !!privateChat}
+          onForward={onForward}
           onClose={() => setCtxMenu(null)}
         />
       )}
@@ -411,6 +420,7 @@ export default function ChatArea({
   privateChat = false,
   searchOpen = false,
   onCloseSearch,
+  onForward,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -427,6 +437,7 @@ export default function ChatArea({
   privateChat?: boolean;
   searchOpen?: boolean;
   onCloseSearch?: () => void;
+  onForward?: (m: ChatMessage) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -574,7 +585,7 @@ export default function ChatArea({
                     )}
 
                     {/* Пузырь */}
-                    <MessageBubble msg={msg} userSide={userSide} privateChat={privateChat} highlight={matchSet.has(msg.id)} activeHighlight={msg.id === activeId} />
+                    <MessageBubble msg={msg} userSide={userSide} privateChat={privateChat} highlight={matchSet.has(msg.id)} activeHighlight={msg.id === activeId} onForward={onForward} />
                   </div>
 
                   {/* Аватар агента/помощника (справа) */}

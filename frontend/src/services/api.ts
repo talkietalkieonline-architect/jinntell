@@ -438,6 +438,9 @@ export function clearHistory(room: string): Promise<{ ok: boolean; cleared: numb
 export function dmSend(toUserId: number, text: string): Promise<{ ok: boolean; room: string }> {
   return apiFetch("/api/chat/dm-send", { method: "POST", body: JSON.stringify({ to_user_id: toUserId, text }) });
 }
+export function forwardMessage(room: string, data: { text?: string; media_url?: string; media_type?: string }): Promise<{ ok: boolean; room: string }> {
+  return apiFetch("/api/chat/forward", { method: "POST", body: JSON.stringify({ room, ...data }) });
+}
 export interface IntentResult { action: string; target: string; text: string; query: string }
 export function classifyIntent(text: string): Promise<IntentResult> {
   return apiFetch("/api/chat/intent", { method: "POST", body: JSON.stringify({ text }) });

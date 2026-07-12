@@ -8,8 +8,8 @@ import dynamic from "next/dynamic";
 import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
-import ChatArea from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, type ContactOut } from "@/services/api";
+import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, mediaUrl, type ContactOut } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -80,6 +80,7 @@ export default function Home() {
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [recorderAuto, setRecorderAuto] = useState(false);
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [forwardMsg, setForwardMsg] = useState<ChatMessage | null>(null);
   const [mutedRooms, setMutedRooms] = useState<string[]>([]);
   const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
@@ -647,6 +648,7 @@ export default function Home() {
           privateChat={room === assistantRoom || /^agent-/.test(room)}
           searchOpen={chatSearchOpen}
           onCloseSearch={() => setChatSearchOpen(false)}
+          onForward={(m) => setForwardMsg(m)}
           headerSlot={room === assistantRoom ? (
             <ChatJournal openChats={openChats} archivedChats={archivedChats} onSelect={selectChat} onReopen={reopenChat} />
           ) : null}
@@ -670,6 +672,31 @@ export default function Home() {
       {chatHidden && (
         <div className="fixed bottom-6 left-0 right-0 text-center text-[11px] animate-fade-in" style={{ zIndex: 40, color: "var(--text-muted)" }}>
           Три касания по экрану — вернуть чат
+        </div>
+      )}
+
+      {forwardMsg && (
+        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 150, background: "rgba(0,0,0,0.6)" }} onClick={() => setForwardMsg(null)}>
+          <div className="relative w-full max-w-sm rounded-2xl p-4 max-h-[70vh] overflow-y-auto" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Переслать</div>
+            <div className="text-[11px] mb-3" style={{ color: "var(--text-muted)" }}>{forwardMsg.mediaUrl ? "медиа" : "сообщение"}{forwardMsg.text ? `: «${forwardMsg.text.slice(0, 40)}»` : ""}</div>
+            {(() => {
+              const uid = getUserId();
+              const targets: { room: string; name: string; color: string; photo?: string | null }[] = [];
+              openChats.forEach((c) => { if (c.room !== room) targets.push({ room: c.room, name: c.name, color: c.color, photo: c.photo }); });
+              contacts.forEach((c) => { const r = uid ? dmRoom(uid, c.id) : ""; if (r && r !== room && !targets.some((x) => x.room === r)) targets.push({ room: r, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url }); });
+              if (!targets.length) return <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>Нет доступных чатов — откройте диалог или добавьте контакт.</div>;
+              return targets.map((t) => (
+                <button key={t.room} onClick={() => { forwardMessage(t.room, { text: forwardMsg.text || undefined, media_url: forwardMsg.mediaUrl, media_type: forwardMsg.mediaType }).then(() => { setForwardMsg(null); setCommandHint(`Переслано: ${t.name}`); }).catch(() => setCommandHint("Не удалось переслать")); }}
+                  className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-left transition-all hover:opacity-90 mb-1.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden shrink-0" style={{ background: t.photo ? "transparent" : `${t.color}22`, border: `1.5px solid ${t.color}55`, color: t.color }}>
+                    {t.photo ? <img src={t.photo.startsWith("data:") ? t.photo : mediaUrl(t.photo)} alt="" className="w-full h-full object-cover" /> : t.name[0]}
+                  </div>
+                  <span className="text-sm" style={{ color: "var(--text-primary)" }}>{t.name}</span>
+                </button>
+              ));
+            })()}
+          </div>
         </div>
       )}
 
