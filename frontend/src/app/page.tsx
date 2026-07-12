@@ -82,11 +82,6 @@ export default function Home() {
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [forwardMsg, setForwardMsg] = useState<ChatMessage | null>(null);
   const [channelPosts, setChannelPosts] = useState<ChannelPost[]>([]);
-  useEffect(() => {
-    const m = room.match(/^agent-(\d+)/);
-    if (!m) { setChannelPosts([]); return; }
-    getChannelPosts(Number(m[1])).then((p) => setChannelPosts(p)).catch(() => setChannelPosts([]));
-  }, [room]);
   const [mutedRooms, setMutedRooms] = useState<string[]>([]);
   const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
@@ -107,6 +102,11 @@ export default function Home() {
   const viewRef = useRef(view);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { viewRef.current = view; }, [view]);
+  useEffect(() => {
+    const m = room.match(/^agent-(\d+)/);
+    if (!m) { setChannelPosts([]); return; }
+    getChannelPosts(Number(m[1])).then((p) => setChannelPosts(p)).catch(() => setChannelPosts([]));
+  }, [room]);
   const callRef = useRef(call);
   useEffect(() => { callRef.current = call; }, [call]);
   const callStartRef = useRef(0);
