@@ -304,7 +304,7 @@ async def update_agent(
     if user.is_admin:
         editable = [
             "name", "profession", "brand", "description", "color",
-            "scope", "city", "is_paid",
+            "scope", "city", "is_paid", "unavailable_message",
             "system_prompt", "llm_model", "greeting",
             "voice_id", "voice_speed", "voice_pitch",
             "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
@@ -315,7 +315,7 @@ async def update_agent(
     else:
         # Бизнес: всё кроме name, profession, brand, color, agent_type
         editable = [
-            "description", "scope", "city", "is_paid", "system_prompt", "llm_model", "greeting",
+            "description", "scope", "city", "is_paid", "unavailable_message", "system_prompt", "llm_model", "greeting",
             "voice_id", "voice_speed", "voice_pitch",
             "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
             "outfit_style", "outfit_top", "outfit_bottom", "outfit_shoes", "outfit_accessory",

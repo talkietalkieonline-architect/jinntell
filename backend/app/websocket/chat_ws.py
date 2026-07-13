@@ -395,9 +395,10 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
 
     _uu = re.search(r"-u(\d+)$", room)
     _uid = int(_uu.group(1)) if _uu else 0
-    from app.services.billing import resolve_payer
+    from app.services.billing import resolve_payer, payer_balance
     _ptype, _pid = resolve_payer(agent, _uid)
-    reply_text = await get_agent_reply(
+    _blocked = bool(_ptype in ("contractor", "user") and _pid and await payer_balance(_ptype, _pid) <= 0)
+    reply_text = ((agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂") if _blocked else await get_agent_reply(
         agent_name=agent.name,
         agent_profession=agent.profession,
         agent_description=agent.description or "",
@@ -417,7 +418,7 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         agent_id=agent.id,
         payer_type=_ptype,
         payer_id=_pid,
-    )
+    ))
 
     async with async_session() as db:
         agent_msg = Message(

@@ -253,6 +253,10 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                 <input type="checkbox" checked={!!f("is_paid")} onChange={(e) => setF("is_paid", e.target.checked)} className="w-4 h-4" />
                 <span className="text-sm text-gray-300">Платный джинн <span className="text-gray-500">(за общение платит пользователь)</span></span>
               </label>
+              <div className="mt-3">
+                <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Сообщение, когда недоступен (баланс/отъезд)</label>
+                <input value={f("unavailable_message")} onChange={(e) => setF("unavailable_message", e.target.value)} placeholder="Извините, сейчас я не на связи — загляните позже" className="w-full bg-gray-800 text-white rounded-lg px-3 py-2 text-sm border border-gray-700" />
+              </div>
             </div>
             )}
             <div>

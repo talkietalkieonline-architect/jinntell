@@ -18,6 +18,7 @@ class AgentOut(BaseModel):
     scope: str = "federal"
     city: Optional[str] = None
     is_paid: bool = False
+    unavailable_message: Optional[str] = None
     jinntell_link: Optional[str] = None
     rating: float
     rating_count: int
@@ -153,6 +154,7 @@ class AgentUpdate(BaseModel):
     scope: Optional[str] = Field(None, max_length=20)
     city: Optional[str] = Field(None, max_length=120)
     is_paid: Optional[bool] = None
+    unavailable_message: Optional[str] = Field(None, max_length=500)
 
     system_prompt: Optional[str] = Field(None, max_length=5000)
     llm_model: Optional[str] = Field(None, max_length=100)
