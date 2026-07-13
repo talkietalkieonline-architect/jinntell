@@ -299,6 +299,28 @@ async def _record_usage(user_id, agent_id, provider, model, prompt_tokens, compl
             db.add(LlmUsage(user_id=user_id or None, agent_id=agent_id, provider=provider,
                             model=model, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
                             payer_type=payer_type, payer_id=payer_id))
+            # Списание с плательщика по нашей цене (кроме free)
+            if payer_type in ("contractor", "user") and payer_id:
+                try:
+                    import json as _j
+                    from app.services.settings_store import get_setting
+                    rates = _j.loads(await get_setting("MODEL_RATES") or "{}")
+                    rr = rates.get(model) or rates.get("default") or {}
+                    sell = float(rr.get("sell", 0) or 0)  # за 1 млн, в валюте
+                    kop = round((prompt_tokens + completion_tokens) / 1_000_000.0 * sell * 100)
+                    if kop > 0:
+                        if payer_type == "contractor":
+                            from app.models.contractor import Contractor
+                            _c = await db.get(Contractor, payer_id)
+                            if _c:
+                                _c.balance_kopecks = (_c.balance_kopecks or 0) - kop
+                        else:
+                            from app.models.user import User as _U
+                            _u = await db.get(_U, payer_id)
+                            if _u:
+                                _u.balance_kopecks = (_u.balance_kopecks or 0) - kop
+                except Exception as _e:
+                    print(f"[usage] deduct failed: {_e}")
             await db.commit()
     except Exception as e:
         print(f"[usage] record failed: {e}")

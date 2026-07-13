@@ -285,6 +285,17 @@ async def admin_restore_agent(
 #  CORE AGENTS (системное ядро)
 # ═══════════════════════════════════════════════
 
+@router.post("/users/{user_id}/add-balance")
+async def admin_add_user_balance(user_id: int, amount_kopecks: int = Body(..., embed=True),
+                                 admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    u = await db.get(User, user_id)
+    if not u:
+        raise HTTPException(404, "Пользователь не найден")
+    u.balance_kopecks = (getattr(u, "balance_kopecks", 0) or 0) + int(amount_kopecks)
+    await db.commit()
+    return {"ok": True, "balance_kopecks": u.balance_kopecks}
+
+
 @router.get("/usage")
 async def admin_usage(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
     """Сводка расхода LLM: выручка/себестоимость/маржа по моделям (ставки за 1 млн токенов), плательщикам и контрагентам."""
@@ -399,6 +410,7 @@ async def admin_list_users(
             "vk_linked": bool(u.vk_id),
             "telegram_linked": bool(u.telegram_id),
             "yandex_linked": bool(u.yandex_id),
+            "balance_kopecks": getattr(u, "balance_kopecks", 0) or 0,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users

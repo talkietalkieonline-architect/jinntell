@@ -408,6 +408,13 @@ const _av = user.assistant_voice || "ermil";
               {error && <p className="text-xs text-center" style={{ color: "var(--danger)" }}>{error}</p>}
               {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
 
+              {/* Баланс */}
+              <div className="pt-4" style={{ borderTop: "1px solid var(--bg-glass-border)" }}>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Баланс</label>
+                <div className="text-lg font-semibold" style={{ color: "var(--accent)" }}>{(((user?.balance_kopecks ?? 0)) / 100).toLocaleString("ru")} ₽</div>
+                <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Списывается за платных джиннов и вашего джинна. Пополнение — скоро.</p>
+              </div>
+
               {/* Мой джинн в Городе */}
               <div className="pt-4" style={{ borderTop: "1px solid var(--bg-glass-border)" }}>
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Мой джинн в Городе</label>

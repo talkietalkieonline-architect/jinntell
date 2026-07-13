@@ -36,6 +36,7 @@ class UserOut(BaseModel):
     vk_linked: bool = False
     telegram_linked: bool = False
     yandex_linked: bool = False
+    balance_kopecks: int = 0
 
     class Config:
         from_attributes = True
@@ -68,6 +69,7 @@ class UserOut(BaseModel):
             assistant_gender=user.assistant_gender or "male",
             assistant_voice=user.assistant_voice or "male_low",
             assistant_photo=user.assistant_photo,
+            balance_kopecks=getattr(user, "balance_kopecks", 0) or 0,
             vk_linked=bool(user.vk_id),
             telegram_linked=bool(user.telegram_id),
             yandex_linked=bool(user.yandex_id),

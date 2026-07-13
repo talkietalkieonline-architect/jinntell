@@ -42,6 +42,7 @@ import {
   adminGetModels,
   adminSetPricing,
   adminDelPricing,
+  adminAddUserBalance,
   type UsageSummary,
   type ModelInfo,
 } from "@/services/api";
@@ -1021,6 +1022,7 @@ export default function AdminPage() {
                       <th className="text-left px-4 py-3">Роль</th>
                       <th className="text-left px-4 py-3">Соцсети</th>
                       <th className="text-left px-4 py-3">Статус</th>
+                      <th className="text-left px-4 py-3">Баланс</th>
                       <th className="text-left px-4 py-3">Дата</th>
                     </tr>
                   </thead>
@@ -1055,6 +1057,10 @@ export default function AdminPage() {
                         <td className="px-4 py-3">
                           <span className={`w-2 h-2 rounded-full inline-block mr-1 ${u.is_online ? "bg-green-400" : "bg-gray-600"}`} />
                           <span className="text-xs text-gray-400">{u.is_online ? "Online" : "Offline"}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={(u.balance_kopecks ?? 0) > 0 ? "text-green-400 text-xs" : "text-gray-500 text-xs"}>{(((u.balance_kopecks ?? 0)) / 100).toLocaleString("ru")} ₽</span>
+                          <button onClick={async () => { const v = prompt(`Пополнить #${u.id} на (₽):`); const r = parseFloat(v || ""); if (r > 0) { try { await adminAddUserBalance(u.id, Math.round(r * 100)); loadUsers(); } catch { /* noop */ } } }} className="ml-2 px-1.5 rounded bg-amber-600 text-black text-xs" title="Пополнить">＋</button>
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">
                           {u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—"}

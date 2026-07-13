@@ -517,6 +517,9 @@ export interface AdminStats {
   users: { total: number };
 }
 
+export function adminAddUserBalance(userId: number, amountKopecks: number): Promise<{ ok: boolean; balance_kopecks: number }> {
+  return apiFetch(`/api/admin/users/${userId}/add-balance`, { method: "POST", body: JSON.stringify({ amount_kopecks: amountKopecks }) });
+}
 export interface AdminUser {
   id: number;
   phone: string;
@@ -531,6 +534,7 @@ export interface AdminUser {
   vk_linked: boolean;
   telegram_linked: boolean;
   yandex_linked: boolean;
+  balance_kopecks?: number;
   created_at?: string;
 }
 
@@ -1191,6 +1195,7 @@ export interface UserProfile {
   avatar_url?: string;
   assistant_photo?: string;
   user_age?: number;
+  balance_kopecks?: number;
 }
 
 /** Профиль текущего пользователя */
