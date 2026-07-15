@@ -24,6 +24,7 @@ from app.api.contacts import router as contacts_router
 from app.api.cities import router as cities_router
 from app.api.channels import router as channels_router
 from app.api.public import router as public_router
+from app.api.turn import router as turn_router
 from app.websocket.chat_ws import router as ws_router
 from app.services.seed import seed_agents, seed_core_agents
 
@@ -86,6 +87,7 @@ app.include_router(contacts_router)
 app.include_router(cities_router)
 app.include_router(channels_router)
 app.include_router(public_router)
+app.include_router(turn_router)
 app.include_router(ws_router)
 
 # Хранилище загруженных файлов (фото агентов, гардероб, в будущем RAG-база контрагента)

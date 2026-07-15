@@ -1,0 +1,27 @@
+listening-port=3478
+tls-listening-port=5349
+fingerprint
+use-auth-secret
+static-auth-secret=__SET_IN_ENV__
+realm=jinntell.ru
+server-name=jinntell.ru
+external-ip=194.67.101.9
+min-port=49160
+max-port=49200
+cert=/etc/coturn/certs/fullchain.pem
+pkey=/etc/coturn/certs/privkey.pem
+no-tcp-relay
+no-multicast-peers
+simple-log
+log-file=stdout
+# Защита релея: запрет доступа к внутренним/приватным адресам (baraban, postgres, redis и т.п.)
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff

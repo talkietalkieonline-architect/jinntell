@@ -60,6 +60,11 @@ services:
       JINA_API_KEY: "${JINA_API_KEY:-}"
       SECRET_KEY: "${SECRET_KEY}"
       DEBUG: "${DEBUG:-true}"
+      # TURN (coturn)
+      TURN_SECRET: "${TURN_SECRET:-}"
+      TURN_REALM: "${TURN_REALM:-jinntell.ru}"
+      TURN_HOST: "${TURN_HOST:-jinntell.ru}"
+      TURN_PUBLIC_IP: "${TURN_PUBLIC_IP:-194.67.101.9}"
       # LLM
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
@@ -124,6 +129,17 @@ services:
     depends_on:
       - frontend
       - backend
+
+  # ── coturn — TURN/STUN для звонков за NAT ────────
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    mem_limit: 128m
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ./coturn/certs:/etc/coturn/certs:ro
 
   # ── Certbot — Let's Encrypt SSL ─────────────────
   certbot:

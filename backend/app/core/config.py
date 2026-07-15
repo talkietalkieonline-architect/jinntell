@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     DATABASE_URL_SYNC: str = "postgresql://jinntell:jinntell@localhost:5432/jinntell"
 
     SECRET_KEY: str = "jinntell-dev-secret-key-change-in-production"
+    TURN_SECRET: str = ""
+    TURN_REALM: str = "jinntell.ru"
+    TURN_HOST: str = "jinntell.ru"
+    TURN_PUBLIC_IP: str = "194.67.101.9"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
 

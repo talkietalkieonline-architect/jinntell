@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { getTurnConfig } from "@/services/api";
 
 const ICE: RTCConfiguration = {
   iceServers: [
@@ -65,6 +66,14 @@ export default function VideoCall({
     const pc = new RTCPeerConnection(ICE);
     pcRef.current = pc;
 
+    // Подтягиваем TURN-креды и применяем ДО setLocalDescription (иначе relay-кандидаты не соберутся)
+    const turnReady = (async () => {
+      try {
+        const cfg = await getTurnConfig();
+        if (cfg?.iceServers?.length) pc.setConfiguration({ iceServers: cfg.iceServers });
+      } catch { /* остаёмся на STUN */ }
+    })();
+
     pc.onicecandidate = (e) => {
       if (e.candidate) sendSignal(peerId, "ice", { candidate: e.candidate.toJSON() });
     };
@@ -87,6 +96,7 @@ export default function VideoCall({
         remoteSet.current = true;
         for (const c of pendingIce.current) { try { await p.addIceCandidate(c); } catch { /* noop */ } }
         pendingIce.current = [];
+        await turnReady;
         const ans = await p.createAnswer();
         await p.setLocalDescription(ans);
         sendSignal(peerId, "answer", { sdp: ans.sdp });
@@ -113,6 +123,7 @@ export default function VideoCall({
 
         if (role === "caller") {
           // Звонящий инициирует offer после того, как вызываемый принял звонок
+          await turnReady;
           const off = await pc.createOffer();
           await pc.setLocalDescription(off);
           sendSignal(peerId, "offer", { sdp: off.sdp });

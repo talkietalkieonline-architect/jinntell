@@ -639,6 +639,12 @@ export function getPublicConfig(): Promise<PublicConfig> {
   return apiFetch("/api/public/config");
 }
 
+export interface TurnConfig { iceServers: RTCIceServer[]; ttl?: number; }
+/** Эфемерные TURN/STUN-креды для звонков */
+export function getTurnConfig(): Promise<TurnConfig> {
+  return apiFetch("/api/turn");
+}
+
 export function adminGetSystemSettings(): Promise<SystemSettings> {
   return apiFetch("/api/admin/system-settings");
 }

@@ -24,3 +24,5 @@ storage/
 backups/
 data/
 frontend/src/app/*.bak_*
+coturn/certs/
+coturn/turnserver.conf
