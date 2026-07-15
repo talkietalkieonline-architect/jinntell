@@ -304,6 +304,17 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         except Exception as e:
             print(f"[ws] room memory digest error: {e}")
         try:
+            from app.services.memory import recall as _recall
+            _facts = await _recall(user_id, user_message, k=5)
+            if _facts:
+                user_persona += (
+                    "\n\n=== ЧТО ТЫ ПОМНИШЬ О ПОЛЬЗОВАТЕЛЕ (память) ===\n- "
+                    + "\n- ".join(_facts)
+                    + "\n=== КОНЕЦ ПАМЯТИ ===\nИспользуй эти факты естественно, не перечисляй списком без нужды."
+                )
+        except Exception as e:
+            print(f"[ws] memory recall error: {e}")
+        try:
             _agents = await _find_relevant_agents(user_message, user_id)
             if _agents:
                 _lst = "; ".join(f"{a.name} — {a.profession}" for a in _agents)

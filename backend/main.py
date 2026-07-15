@@ -43,11 +43,14 @@ async def lifespan(app: FastAPI):
 
     import asyncio
     from app.services.news import news_scheduler
+    from app.services.memory import memory_scheduler
     _news_task = asyncio.create_task(news_scheduler())
+    _mem_task = asyncio.create_task(memory_scheduler())
 
     print(f"[jinntell] Сервер запущен — {settings.APP_NAME} v{settings.APP_VERSION}")
     yield
     _news_task.cancel()
+    _mem_task.cancel()
     print("[jinntell] Сервер остановлен")
 
 

@@ -247,6 +247,14 @@ async def forward_message(
     return {"ok": True, "room": room}
 
 
+@router.post("/memory/clear")
+async def clear_memory(user: User = Depends(get_current_user)):
+    """Очистить динамическую память помощника о пользователе."""
+    from app.services.memory import clear as _clear
+    await _clear(user.id)
+    return {"ok": True}
+
+
 @router.delete("/history")
 async def clear_history(
     room: str = Query(...),

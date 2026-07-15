@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, type UserProfile, type AgentFullOut } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -413,6 +413,7 @@ const _av = user.assistant_voice || "ermil";
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Баланс</label>
                 <div className="text-lg font-semibold" style={{ color: "var(--accent)" }}>{(((user?.balance_kopecks ?? 0)) / 100).toLocaleString("ru")} ₽</div>
                 <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Списывается за платных джиннов и вашего джинна. Пополнение — скоро.</p>
+                <button onClick={async () => { if (confirm("Очистить всё, что помощник запомнил о вас?")) { try { await clearAssistantMemory(); alert("Память помощника очищена"); } catch { /* noop */ } } }} className="mt-2 text-[12px] transition-opacity hover:opacity-70" style={{ color: "var(--text-muted)" }}>🧠 Очистить память помощника</button>
               </div>
 
               {/* Мой джинн в Городе */}

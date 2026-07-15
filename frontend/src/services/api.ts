@@ -432,6 +432,9 @@ export function removeFavoriteAgent(agentId: number): Promise<{ ok: boolean }> {
 export function deleteMessage(id: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/chat/message/${id}`, { method: "DELETE" });
 }
+export function clearAssistantMemory(): Promise<{ ok: boolean }> {
+  return apiFetch("/api/chat/memory/clear", { method: "POST" });
+}
 export function clearHistory(room: string): Promise<{ ok: boolean; cleared: number }> {
   return apiFetch(`/api/chat/history?room=${encodeURIComponent(room)}`, { method: "DELETE" });
 }
