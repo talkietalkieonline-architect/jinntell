@@ -386,9 +386,10 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
 
     history = await _get_conversation_history(room, exclude_text=user_message)
 
-    # RAG-поиск для агентов со своей базой знаний (специалисты, персонажи-citizen, бизнес)
+    # RAG-поиск у всех джиннов с базой знаний (search сам вернёт [] если коллекции нет).
+    # Порог score отсекает нерелевантные чанки — исключаем только внутренних core-агентов.
     rag_context = None
-    if agent.agent_type in ("specialist", "citizen", "business"):
+    if agent.agent_type != "core":
         try:
             rag_results = await rag_service.search(
                 agent_id=agent.id,

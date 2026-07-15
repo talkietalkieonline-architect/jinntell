@@ -632,6 +632,7 @@ export interface SystemSettings {
   jina_api_key: string;
   jina_api_key_set: boolean;
   shader_bg_enabled: boolean;
+  rag_min_score: number;
 }
 
 export interface PublicConfig { shader_bg_enabled: boolean; }

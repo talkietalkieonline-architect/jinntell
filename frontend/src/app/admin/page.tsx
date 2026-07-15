@@ -118,6 +118,7 @@ export default function AdminPage() {
   const [smscPassword, setSmscPassword] = useState("");
   const [debugMode, setDebugMode] = useState(true);
   const [shaderBg, setShaderBg] = useState(true);
+  const [ragMinScore, setRagMinScore] = useState(0.6);
   const [systemSaving, setSystemSaving] = useState(false);
   const [embeddingProvider, setEmbeddingProvider] = useState("jina");
   const [jinaApiKey, setJinaApiKey] = useState("");
@@ -227,6 +228,7 @@ export default function AdminPage() {
       setSmscLogin(sysData.smsc_login);
       setDebugMode(sysData.debug_mode);
       setShaderBg(sysData.shader_bg_enabled ?? true);
+      setRagMinScore(sysData.rag_min_score ?? 0.6);
       setEmbeddingProvider(sysData.embedding_provider || "jina");
     } catch {}
   }, []);
@@ -350,6 +352,7 @@ export default function AdminPage() {
         sms_provider: smsProvider,
         debug_mode: debugMode,
         shader_bg_enabled: shaderBg,
+        rag_min_score: ragMinScore,
         smsc_login: smscLogin,
         embedding_provider: embeddingProvider,
       };
@@ -1294,6 +1297,14 @@ export default function AdminPage() {
                     <p className="text-[10px] text-gray-500 mt-1">Глобальный рубильник анимированных WebGL-фонов. Выключите, если библиотека Paper станет недоступна — пресеты «Аврора» исчезнут, текущие фоны откатятся автоматически.</p>
                   </div>
 
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Порог релевантности RAG (score): {ragMinScore.toFixed(2)}</label>
+                    <input type="range" min="0" max="0.95" step="0.05" value={ragMinScore}
+                      onChange={(e) => setRagMinScore(parseFloat(e.target.value))}
+                      className="w-full" style={{ accentColor: "#d4a843" }} />
+                    <p className="text-[10px] text-gray-500 mt-1">Чанки знаний со score ниже порога не подмешиваются в ответ джинна. Выше — строже (меньше шума, но можно потерять полезное); ниже — больше контекста. 0 — без фильтра. Рекомендуется 0.55–0.65.</p>
+                  </div>
+
                   {smsProvider === "sms_ru" && (
                     <div className="mb-4">
                       <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
@@ -1530,6 +1541,14 @@ export default function AdminPage() {
                       {shaderBg ? "ВКЛ — доступны пользователям" : "ВЫКЛ — скрыты, откат на обычный фон"}
                     </button>
                     <p className="text-[10px] text-gray-500 mt-1">Глобальный рубильник анимированных WebGL-фонов. Выключите, если библиотека Paper станет недоступна — пресеты «Аврора» исчезнут, текущие фоны откатятся автоматически.</p>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Порог релевантности RAG (score): {ragMinScore.toFixed(2)}</label>
+                    <input type="range" min="0" max="0.95" step="0.05" value={ragMinScore}
+                      onChange={(e) => setRagMinScore(parseFloat(e.target.value))}
+                      className="w-full" style={{ accentColor: "#d4a843" }} />
+                    <p className="text-[10px] text-gray-500 mt-1">Чанки знаний со score ниже порога не подмешиваются в ответ джинна. Выше — строже (меньше шума, но можно потерять полезное); ниже — больше контекста. 0 — без фильтра. Рекомендуется 0.55–0.65.</p>
                   </div>
 
                   {smsProvider === "sms_ru" && (

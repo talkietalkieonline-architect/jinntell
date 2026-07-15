@@ -2,6 +2,7 @@
 RAG Service — индексация и семантический поиск через Qdrant.
 Управляет коллекциями агентов, индексирует chunks, ищет релевантные фрагменты.
 """
+import time as _time
 import uuid
 from typing import List, Optional
 from dataclasses import dataclass
@@ -10,6 +11,33 @@ import httpx
 
 from app.core.config import settings
 from app.services.embedding import get_embedding, get_embeddings, get_embedding_dimensions
+
+
+# Порог релевантности: настраивается из админки (system:settings.rag_min_score), кэш 60с
+_MIN_SCORE_CACHE = {"v": None, "t": 0.0}
+
+
+async def _get_min_score() -> float:
+    now = _time.time()
+    c = _MIN_SCORE_CACHE
+    if c["v"] is not None and now - c["t"] < 60:
+        return c["v"]
+    val = float(getattr(settings, "RAG_MIN_SCORE", 0.6) or 0.6)
+    try:
+        import json
+        import redis.asyncio as aioredis
+        r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        sj = await r.get("system:settings")
+        await r.aclose()
+        if sj:
+            ss = json.loads(sj)
+            if ss.get("rag_min_score") not in (None, ""):
+                val = float(ss.get("rag_min_score"))
+    except Exception:
+        pass
+    c["v"] = val
+    c["t"] = now
+    return val
 
 
 @dataclass
@@ -139,6 +167,7 @@ async def search(
     query: str,
     top_k: int = 5,
     layer: Optional[str] = None,
+    min_score: Optional[float] = None,
 ) -> List[RAGChunk]:
     """
     Семантический поиск по знаниям агента.
@@ -169,6 +198,9 @@ async def search(
         "limit": top_k,
         "with_payload": True,
     }
+    ms = min_score if min_score is not None else await _get_min_score()
+    if ms and ms > 0:
+        search_body["score_threshold"] = ms
     if search_filter:
         search_body["filter"] = search_filter
 

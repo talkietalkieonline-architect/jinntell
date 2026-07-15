@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     SMSC_PASSWORD: str = ""
 
     REDIS_URL: str = "redis://localhost:6379/0"
+    RAG_MIN_SCORE: float = 0.6  # порог релевантности чанка (ниже — не подмешиваем)
 
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION_PREFIX: str = "jinntell"
