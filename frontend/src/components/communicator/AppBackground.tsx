@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { MeshGradient } from "@paper-design/shaders-react";
 
 export interface BgPreset {
   id: string;
   name: string;
   theme: "light" | "dark";
-  kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust";
+  kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust" | "shader";
   css?: string;
   preview: string;
 }
@@ -16,17 +17,25 @@ export const BACKGROUNDS: BgPreset[] = [
   { id: "soft", name: "Серо-жёлтый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#ebe6d4,#e1dbc4)", preview: "linear-gradient(160deg,#ebe6d4,#e1dbc4)" },
   { id: "sky", name: "Небо", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#e7f0fb,#dfeaf8)", preview: "linear-gradient(160deg,#e7f0fb,#dfeaf8)" },
   { id: "cream", name: "Тёплый", theme: "light", kind: "gradient", css: "linear-gradient(160deg,#faf6ee,#f2ebdd)", preview: "linear-gradient(160deg,#faf6ee,#f2ebdd)" },
+  { id: "aurora-l", name: "Аврора", theme: "light", kind: "shader", preview: "linear-gradient(135deg,#f2ebdd,#d9a534)" },
   // Тёмные
   { id: "graphite", name: "Графит", theme: "dark", kind: "gradient", css: "linear-gradient(160deg,#0d1322,#160f28,#0a0e1a)", preview: "linear-gradient(160deg,#0d1322,#160f28)" },
   { id: "indigo", name: "Индиго", theme: "dark", kind: "anim-gradient", css: "linear-gradient(-45deg,#1a1140,#0e1430,#2a124e,#0b0f1f)", preview: "linear-gradient(135deg,#1a1140,#2a124e)" },
   { id: "emerald", name: "Изумруд", theme: "dark", kind: "anim-gradient", css: "linear-gradient(-45deg,#06231c,#0a1726,#0d3226,#08121a)", preview: "linear-gradient(135deg,#06231c,#0d3226)" },
   { id: "midnight", name: "Полночь", theme: "dark", kind: "gradient", css: "radial-gradient(circle at 50% -10%,#1c2748,#0a0e18 60%)", preview: "radial-gradient(circle at 50% 0%,#1c2748,#0a0e18)" },
+  { id: "aurora-d", name: "Аврора", theme: "dark", kind: "shader", preview: "linear-gradient(135deg,#1a1140,#2a124e)" },
   { id: "stars", name: "Звёзды", theme: "dark", kind: "stars", preview: "radial-gradient(circle,#0b1020,#05060c)" },
   { id: "lava", name: "Лава-лампа", theme: "dark", kind: "lava", preview: "linear-gradient(160deg,#2a124e,#0d3226)" },
   { id: "dust", name: "Золотая пыль", theme: "dark", kind: "dust", preview: "radial-gradient(circle,#15110a,#0a0a0a)" },
 ];
 
 const DEFAULT_BG_FOR: Record<string, string> = { light: "soft", dark: "indigo", custom: "graphite" };
+
+// Палитры для шейдер-фона «Аврора»
+const SHADER_COLORS: Record<string, string[]> = {
+  light: ["#f6f2e8", "#e7e1cf", "#e9d29a", "#d9a534", "#eef1f6"],
+  dark: ["#0e1430", "#1a1140", "#2a124e", "#0d3226", "#0a0e18"],
+};
 
 export function backgroundsForTheme(theme: string): BgPreset[] {
   if (theme === "custom") return BACKGROUNDS;
@@ -48,9 +57,11 @@ export default function AppBackground() {
   const [bgId, setBgId] = useState("soft");
   const [theme, setTheme] = useState("light");
   const [anim, setAnim] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    setMounted(true);
     const read = () => {
       const t = curTheme();
       setTheme(t);
@@ -127,7 +138,11 @@ export default function AppBackground() {
       ? "radial-gradient(circle at 50% 40%,#14110a,#08080a)"
       : bg.kind === "lava"
         ? "linear-gradient(160deg,#160f26,#0a0e1a)"
-        : bg.css;
+        : bg.kind === "shader"
+          ? (bg.theme === "dark" ? "#0a0e18" : "#eef1f6")
+          : bg.css;
+
+  const shaderTheme = bg.theme === "dark" ? "dark" : "light";
 
   return (
     <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0, overflow: "hidden" }}>
@@ -139,6 +154,22 @@ export default function AppBackground() {
           animation: bg.kind === "anim-gradient" && anim ? "bgShift 22s ease infinite" : undefined,
         }}
       />
+      {bg.kind === "shader" && mounted && (
+        <>
+          <MeshGradient
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+            colors={SHADER_COLORS[shaderTheme]}
+            speed={anim ? 0.16 : 0}
+            distortion={0.85}
+            swirl={0.55}
+          />
+          {/* мягкий скрим — чтобы стеклянные панели и текст читались */}
+          <div
+            className="absolute inset-0"
+            style={{ background: shaderTheme === "dark" ? "rgba(8,10,20,0.34)" : "rgba(246,243,233,0.26)" }}
+          />
+        </>
+      )}
       {(bg.kind === "stars" || bg.kind === "dust") && <canvas ref={canvasRef} className="absolute inset-0" />}
       {bg.kind === "lava" && anim && (
         <>
