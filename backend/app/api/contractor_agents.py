@@ -82,6 +82,89 @@ async def _agent_rooms(agent_id: int, db: AsyncSession) -> list[str]:
     return list(rooms)
 
 
+@router.get("/billing")
+async def contractor_billing(
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Счёт контрагента: баланс + расход по его джиннам/моделям за текущий месяц и всего.
+    Сумма считается по цене продажи из реестра моделей (как в админском /usage)."""
+    from app.models.llm_usage import LlmUsage
+    from app.api.admin import _get_rates, _get_currency
+
+    rates = await _get_rates()
+    currency = await _get_currency()
+
+    def _sell(model: str) -> float:
+        r = rates.get(model) or rates.get("default") or {}
+        return float(r.get("sell", 0) or 0)
+
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    tok = func.coalesce(func.sum(LlmUsage.prompt_tokens + LlmUsage.completion_tokens), 0)
+
+    async def _rows(since):
+        q = select(LlmUsage.agent_id, LlmUsage.model, tok, func.count(LlmUsage.id)).where(
+            LlmUsage.payer_type == "contractor", LlmUsage.payer_id == contractor.id
+        ).group_by(LlmUsage.agent_id, LlmUsage.model)
+        if since is not None:
+            q = q.where(LlmUsage.created_at >= since)
+        return (await db.execute(q)).all()
+
+    # текущий месяц — детально
+    by_agent: dict[int, dict] = {}
+    by_model: dict[str, dict] = {}
+    month_total = 0.0
+    month_tokens = month_calls = 0
+    for agent_id, model, tk, calls in await _rows(month_start):
+        tk = int(tk or 0); calls = int(calls or 0)
+        amount = tk / 1_000_000.0 * _sell(model)
+        month_total += amount; month_tokens += tk; month_calls += calls
+        a = by_agent.setdefault(agent_id or 0, {"agent_id": agent_id, "amount": 0.0, "tokens": 0, "calls": 0})
+        a["amount"] += amount; a["tokens"] += tk; a["calls"] += calls
+        m = by_model.setdefault(model or "?", {"model": model or "?", "amount": 0.0, "tokens": 0, "calls": 0})
+        m["amount"] += amount; m["tokens"] += tk; m["calls"] += calls
+
+    # имена джиннов
+    ids = [aid for aid in by_agent.keys() if aid]
+    names = {}
+    if ids:
+        for a in (await db.execute(select(Agent.id, Agent.name).where(Agent.id.in_(ids)))).all():
+            names[a[0]] = a[1]
+
+    # всего за всё время
+    all_total = 0.0; all_tokens = 0
+    for _aid, model, tk, _calls in await _rows(None):
+        tk = int(tk or 0)
+        all_total += tk / 1_000_000.0 * _sell(model); all_tokens += tk
+
+    def _r2(x): return round(x, 2)
+    months_ru = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
+                 "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+
+    return {
+        "currency": currency,
+        "balance": _r2((contractor.balance_kopecks or 0) / 100.0),
+        "period_label": f"{months_ru[now.month]} {now.year}",
+        "bank_details": contractor.bank_details or "",
+        "company_name": contractor.company_name,
+        "this_month": {
+            "total": _r2(month_total),
+            "tokens": month_tokens,
+            "calls": month_calls,
+            "by_agent": sorted(
+                [{**a, "name": names.get(a["agent_id"], "Джинн"), "amount": _r2(a["amount"])}
+                 for a in by_agent.values()],
+                key=lambda x: x["amount"], reverse=True),
+            "by_model": sorted(
+                [{**m, "amount": _r2(m["amount"])} for m in by_model.values()],
+                key=lambda x: x["amount"], reverse=True),
+        },
+        "all_time": {"total": _r2(all_total), "tokens": all_tokens},
+    }
+
+
 @router.get("/agents", response_model=list[AgentDetailOut])
 async def contractor_get_agents(
     contractor: Contractor = Depends(_require_contractor),

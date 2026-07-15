@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from "react";
 import {
   contractorLogin,
   contractorGetAgents,
+  contractorGetBilling,
+  type ContractorBilling,
   contractorUpdateAgent,
   contractorGetAgentAccess,
   contractorAddAgentAccess,
@@ -81,6 +83,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [companyName, setCompanyName] = useState("");
 
   const [myAgents, setMyAgents] = useState<AgentFullOut[]>([]);
+  const [billing, setBilling] = useState<ContractorBilling | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<AgentFullOut | null>(null);
   const [editVisibility, setEditVisibility] = useState("public");
@@ -234,6 +237,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     try {
       const agents = await contractorGetAgents();
       setMyAgents(agents);
+      contractorGetBilling().then(setBilling).catch(() => setBilling(null));
     } catch {
       // API недоступен или токен протух
       setMyAgents([]);
@@ -997,6 +1001,53 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
             </div>
           ) : (
             <>
+              {/* ── Счёт и баланс ── */}
+              {billing && (
+                <div className="rounded-2xl px-4 py-4 mb-5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  <div className="flex items-end justify-between mb-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Баланс</p>
+                      <p className="text-2xl font-bold" style={{ color: billing.balance <= 0 ? "var(--danger)" : "var(--text-primary)" }}>
+                        {billing.balance.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} {billing.currency}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Расход за {billing.period_label}</p>
+                      <p className="text-lg font-semibold" style={{ color: "var(--accent)" }}>
+                        {billing.this_month.total.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} {billing.currency}
+                      </p>
+                    </div>
+                  </div>
+
+                  {billing.this_month.by_agent.length > 0 && (
+                    <div className="mb-1">
+                      <p className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--text-muted)" }}>По джиннам (этот месяц)</p>
+                      <div className="flex flex-col gap-1">
+                        {billing.this_month.by_agent.map((a) => (
+                          <div key={a.agent_id} className="flex items-center justify-between text-[12px]">
+                            <span className="truncate" style={{ color: "var(--text-secondary)" }}>{a.name}</span>
+                            <span className="shrink-0 ml-2" style={{ color: "var(--text-primary)" }}>
+                              {a.amount.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} {billing.currency}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 pt-3 flex items-center justify-between gap-2" style={{ borderTop: "1px solid var(--bg-glass-border)" }}>
+                    <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Всего за всё время: {billing.all_time.total.toLocaleString("ru-RU", { minimumFractionDigits: 2 })} {billing.currency}</span>
+                    <button
+                      onClick={() => alert(billing.bank_details ? `Пополнение по счёту.\nРеквизиты для оплаты:\n\n${billing.bank_details}\n\nПосле оплаты баланс пополнит администратор. Онлайн-оплата (ЮKassa) — скоро.` : "Для пополнения свяжитесь с администратором платформы. Онлайн-оплата (ЮKassa) — скоро.")}
+                      className="px-3 py-1.5 rounded-full text-[11px] font-semibold shrink-0 transition-all hover:opacity-90"
+                      style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
+                    >
+                      Пополнить
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <p className="text-[10px] uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
                 Ваши агенты ({myAgents.length})
               </p>

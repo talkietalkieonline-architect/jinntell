@@ -915,6 +915,24 @@ export function contractorGetAgents(): Promise<AgentFullOut[]> {
   return contractorFetch("/api/contractor/agents");
 }
 
+export interface ContractorBilling {
+  currency: string;
+  balance: number;
+  period_label: string;
+  bank_details: string;
+  company_name: string;
+  this_month: {
+    total: number; tokens: number; calls: number;
+    by_agent: { agent_id: number; name: string; amount: number; tokens: number; calls: number }[];
+    by_model: { model: string; amount: number; tokens: number; calls: number }[];
+  };
+  all_time: { total: number; tokens: number };
+}
+/** Контрагент: счёт и баланс */
+export function contractorGetBilling(): Promise<ContractorBilling> {
+  return contractorFetch("/api/contractor/billing");
+}
+
 /** Контрагент: обновить агента */
 export function contractorUpdateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {
   return contractorFetch(`/api/contractor/agents/${id}`, {
