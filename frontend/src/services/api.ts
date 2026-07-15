@@ -631,6 +631,12 @@ export interface SystemSettings {
   embedding_provider: string;
   jina_api_key: string;
   jina_api_key_set: boolean;
+  shader_bg_enabled: boolean;
+}
+
+export interface PublicConfig { shader_bg_enabled: boolean; }
+export function getPublicConfig(): Promise<PublicConfig> {
+  return apiFetch("/api/public/config");
 }
 
 export function adminGetSystemSettings(): Promise<SystemSettings> {

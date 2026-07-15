@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { MeshGradient } from "@paper-design/shaders-react";
+import { getPublicConfig } from "@/services/api";
 
 export interface BgPreset {
   id: string;
@@ -38,8 +39,8 @@ const SHADER_COLORS: Record<string, string[]> = {
 };
 
 export function backgroundsForTheme(theme: string): BgPreset[] {
-  if (theme === "custom") return BACKGROUNDS;
-  return BACKGROUNDS.filter((b) => b.theme === theme);
+  const list = theme === "custom" ? BACKGROUNDS : BACKGROUNDS.filter((b) => b.theme === theme);
+  return shaderEnabled() ? list : list.filter((b) => b.kind !== "shader");
 }
 export function defaultBgFor(theme: string): string {
   return DEFAULT_BG_FOR[theme] || "graphite";
@@ -51,6 +52,10 @@ function curTheme(): string {
 }
 function animEnabled(): boolean {
   try { return localStorage.getItem("jinntell_anim_off") !== "1"; } catch { return true; }
+}
+// Глобальный рубильник фон-шейдеров (из админки, кэш в localStorage)
+function shaderEnabled(): boolean {
+  try { return localStorage.getItem("jinntell_shader_off") !== "1"; } catch { return true; }
 }
 
 export default function AppBackground() {
@@ -71,9 +76,15 @@ export default function AppBackground() {
       const found = BACKGROUNDS.find((b) => b.id === id);
       // фон должен подходить теме (для custom — любой)
       if (!found || (t !== "custom" && found.theme !== t)) id = defaultBgFor(t);
+      // если шейдеры выключены глобально — откат на обычный фон
+      if (found && found.kind === "shader" && !shaderEnabled()) id = defaultBgFor(t);
       setBgId(id);
     };
     read();
+    // подтянуть глобальный рубильник шейдеров из админки и перечитать
+    getPublicConfig()
+      .then((c) => { try { localStorage.setItem("jinntell_shader_off", c.shader_bg_enabled ? "0" : "1"); } catch {} read(); })
+      .catch(() => {});
     window.addEventListener("jinntell_bg_change", read);
     window.addEventListener("jinntell_theme_change", read);
     window.addEventListener("jinntell_anim_change", read);

@@ -772,6 +772,7 @@ async def admin_get_system_settings(
     debug_mode = s.DEBUG
     embedding_provider = s.EMBEDDING_PROVIDER
     jina_api_key = s.JINA_API_KEY
+    shader_bg_enabled = True
 
     try:
         r = await _get_redis()
@@ -787,6 +788,7 @@ async def admin_get_system_settings(
             debug_mode = ss.get("debug_mode", debug_mode)
             embedding_provider = ss.get("embedding_provider", embedding_provider)
             jina_api_key = ss.get("jina_api_key", jina_api_key)
+            shader_bg_enabled = bool(ss.get("shader_bg_enabled", True))
     except Exception as e:
         print(f"[admin] Redis read error (system): {e}")
 
@@ -807,6 +809,7 @@ async def admin_get_system_settings(
         "embedding_provider": embedding_provider,
         "jina_api_key": mask(jina_api_key),
         "jina_api_key_set": bool(jina_api_key),
+        "shader_bg_enabled": shader_bg_enabled,
     }
 
 
@@ -822,7 +825,7 @@ async def admin_update_system_settings(
         existing_json = await r.get("system:settings")
         existing = json.loads(existing_json) if existing_json else {}
 
-        allowed_fields = ["sms_provider", "sms_ru_api_key", "smsc_login", "smsc_password", "debug_mode", "embedding_provider", "jina_api_key"]
+        allowed_fields = ["sms_provider", "sms_ru_api_key", "smsc_login", "smsc_password", "debug_mode", "embedding_provider", "jina_api_key", "shader_bg_enabled"]
         for field in allowed_fields:
             if field in body:
                 existing[field] = body[field]

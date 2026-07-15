@@ -117,6 +117,7 @@ export default function AdminPage() {
   const [smscLogin, setSmscLogin] = useState("");
   const [smscPassword, setSmscPassword] = useState("");
   const [debugMode, setDebugMode] = useState(true);
+  const [shaderBg, setShaderBg] = useState(true);
   const [systemSaving, setSystemSaving] = useState(false);
   const [embeddingProvider, setEmbeddingProvider] = useState("jina");
   const [jinaApiKey, setJinaApiKey] = useState("");
@@ -225,6 +226,7 @@ export default function AdminPage() {
       setSmsProvider(sysData.sms_provider);
       setSmscLogin(sysData.smsc_login);
       setDebugMode(sysData.debug_mode);
+      setShaderBg(sysData.shader_bg_enabled ?? true);
       setEmbeddingProvider(sysData.embedding_provider || "jina");
     } catch {}
   }, []);
@@ -347,6 +349,7 @@ export default function AdminPage() {
       const data: Record<string, unknown> = {
         sms_provider: smsProvider,
         debug_mode: debugMode,
+        shader_bg_enabled: shaderBg,
         smsc_login: smscLogin,
         embedding_provider: embeddingProvider,
       };
@@ -1280,6 +1283,17 @@ export default function AdminPage() {
                     </div>
                   </div>
 
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Фон-шейдеры «Аврора» (Paper Shaders)</label>
+                    <button onClick={() => setShaderBg(!shaderBg)}
+                      className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        shaderBg ? "bg-green-500/20 border-green-500 text-green-400" : "bg-red-500/20 border-red-500 text-red-400"
+                      } border`}>
+                      {shaderBg ? "ВКЛ — доступны пользователям" : "ВЫКЛ — скрыты, откат на обычный фон"}
+                    </button>
+                    <p className="text-[10px] text-gray-500 mt-1">Глобальный рубильник анимированных WebGL-фонов. Выключите, если библиотека Paper станет недоступна — пресеты «Аврора» исчезнут, текущие фоны откатятся автоматически.</p>
+                  </div>
+
                   {smsProvider === "sms_ru" && (
                     <div className="mb-4">
                       <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
@@ -1505,6 +1519,17 @@ export default function AdminPage() {
                         {debugMode ? "DEBUG ВКЛ (СМС не отправляются)" : "PRODUCTION (СМС реальные)"}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Фон-шейдеры «Аврора» (Paper Shaders)</label>
+                    <button onClick={() => setShaderBg(!shaderBg)}
+                      className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        shaderBg ? "bg-green-500/20 border-green-500 text-green-400" : "bg-red-500/20 border-red-500 text-red-400"
+                      } border`}>
+                      {shaderBg ? "ВКЛ — доступны пользователям" : "ВЫКЛ — скрыты, откат на обычный фон"}
+                    </button>
+                    <p className="text-[10px] text-gray-500 mt-1">Глобальный рубильник анимированных WebGL-фонов. Выключите, если библиотека Paper станет недоступна — пресеты «Аврора» исчезнут, текущие фоны откатятся автоматически.</p>
                   </div>
 
                   {smsProvider === "sms_ru" && (
