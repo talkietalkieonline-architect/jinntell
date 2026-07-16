@@ -423,7 +423,7 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
     from app.services.billing import resolve_payer, payer_balance
     _ptype, _pid = resolve_payer(agent, _uid)
     _blocked = bool(_ptype in ("contractor", "user") and _pid and await payer_balance(_ptype, _pid) <= 0)
-    reply_text = ((agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂") if _blocked else await get_agent_reply(
+    _agent_kwargs = dict(
         agent_name=agent.name,
         agent_profession=agent.profession,
         agent_description=agent.description or "",
@@ -443,7 +443,24 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         agent_id=agent.id,
         payer_type=_ptype,
         payer_id=_pid,
-    ))
+    )
+    if _blocked:
+        reply_text = agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂"
+    else:
+        reply_text = await get_agent_reply(**_agent_kwargs)
+        # Guardian: анти-галлюцинации для ответов с базой знаний (сверка + строгая перегенерация)
+        if rag_context:
+            try:
+                from app.services import guardian
+                if await guardian.enabled():
+                    _v = await guardian.verify(user_message, rag_context, reply_text)
+                    if not _v.get("ok"):
+                        print(f"[guardian] flagged agent {agent.id}: {_v.get('issue')}")
+                        _strict = dict(_agent_kwargs)
+                        _strict["system_prompt"] = (agent.system_prompt or "") + guardian.STRICT_SUFFIX
+                        reply_text = await get_agent_reply(**_strict)
+            except Exception as e:
+                print(f"[guardian] error: {e}")
 
     async with async_session() as db:
         agent_msg = Message(

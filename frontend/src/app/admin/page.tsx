@@ -119,6 +119,7 @@ export default function AdminPage() {
   const [debugMode, setDebugMode] = useState(true);
   const [shaderBg, setShaderBg] = useState(true);
   const [ragMinScore, setRagMinScore] = useState(0.6);
+  const [guardian, setGuardian] = useState(true);
   const [systemSaving, setSystemSaving] = useState(false);
   const [embeddingProvider, setEmbeddingProvider] = useState("jina");
   const [jinaApiKey, setJinaApiKey] = useState("");
@@ -229,6 +230,7 @@ export default function AdminPage() {
       setDebugMode(sysData.debug_mode);
       setShaderBg(sysData.shader_bg_enabled ?? true);
       setRagMinScore(sysData.rag_min_score ?? 0.6);
+      setGuardian(sysData.guardian_enabled ?? true);
       setEmbeddingProvider(sysData.embedding_provider || "jina");
     } catch {}
   }, []);
@@ -353,6 +355,7 @@ export default function AdminPage() {
         debug_mode: debugMode,
         shader_bg_enabled: shaderBg,
         rag_min_score: ragMinScore,
+        guardian_enabled: guardian,
         smsc_login: smscLogin,
         embedding_provider: embeddingProvider,
       };
@@ -1305,6 +1308,17 @@ export default function AdminPage() {
                     <p className="text-[10px] text-gray-500 mt-1">Чанки знаний со score ниже порога не подмешиваются в ответ джинна. Выше — строже (меньше шума, но можно потерять полезное); ниже — больше контекста. 0 — без фильтра. Рекомендуется 0.55–0.65.</p>
                   </div>
 
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Guardian — контроль галлюцинаций</label>
+                    <button onClick={() => setGuardian(!guardian)}
+                      className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        guardian ? "bg-green-500/20 border-green-500 text-green-400" : "bg-gray-500/20 border-gray-500 text-gray-400"
+                      } border`}>
+                      {guardian ? "ВКЛ — ответы с базой знаний проверяются" : "ВЫКЛ — без проверки"}
+                    </button>
+                    <p className="text-[10px] text-gray-500 mt-1">Агент Контента сверяет ответы джиннов (у кого есть база знаний) с фактами и перегенерирует при выдумке. Добавляет один быстрый запрос на ответ. Выключите для минимальной задержки.</p>
+                  </div>
+
                   {smsProvider === "sms_ru" && (
                     <div className="mb-4">
                       <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">
@@ -1549,6 +1563,17 @@ export default function AdminPage() {
                       onChange={(e) => setRagMinScore(parseFloat(e.target.value))}
                       className="w-full" style={{ accentColor: "#d4a843" }} />
                     <p className="text-[10px] text-gray-500 mt-1">Чанки знаний со score ниже порога не подмешиваются в ответ джинна. Выше — строже (меньше шума, но можно потерять полезное); ниже — больше контекста. 0 — без фильтра. Рекомендуется 0.55–0.65.</p>
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Guardian — контроль галлюцинаций</label>
+                    <button onClick={() => setGuardian(!guardian)}
+                      className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        guardian ? "bg-green-500/20 border-green-500 text-green-400" : "bg-gray-500/20 border-gray-500 text-gray-400"
+                      } border`}>
+                      {guardian ? "ВКЛ — ответы с базой знаний проверяются" : "ВЫКЛ — без проверки"}
+                    </button>
+                    <p className="text-[10px] text-gray-500 mt-1">Агент Контента сверяет ответы джиннов (у кого есть база знаний) с фактами и перегенерирует при выдумке. Добавляет один быстрый запрос на ответ. Выключите для минимальной задержки.</p>
                   </div>
 
                   {smsProvider === "sms_ru" && (
