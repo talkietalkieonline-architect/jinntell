@@ -2,6 +2,7 @@
 RAG Service — индексация и семантический поиск через Qdrant.
 Управляет коллекциями агентов, индексирует chunks, ищет релевантные фрагменты.
 """
+import re as _re
 import time as _time
 import uuid
 from typing import List, Optional
@@ -22,7 +23,7 @@ async def _get_min_score() -> float:
     c = _MIN_SCORE_CACHE
     if c["v"] is not None and now - c["t"] < 60:
         return c["v"]
-    val = float(getattr(settings, "RAG_MIN_SCORE", 0.6) or 0.6)
+    val = float(getattr(settings, "RAG_MIN_SCORE", 0.55) or 0.55)
     try:
         import json
         import redis.asyncio as aioredis
@@ -38,6 +39,37 @@ async def _get_min_score() -> float:
     c["v"] = val
     c["t"] = now
     return val
+
+
+# ── Лёгкий гибрид: лексический reranking поверх векторных кандидатов ──
+_LEX_WEIGHT = 0.30   # вклад лексического совпадения
+_CAND_FLOOR = 0.3    # минимальный dense-score кандидата до reranking
+_RU_STOP = {
+    "как", "что", "где", "для", "это", "при", "или", "под", "над", "без", "про",
+    "мне", "мой", "моя", "мои", "они", "она", "его", "нее", "них", "тебя", "меня",
+    "вас", "нас", "вам", "нам", "так", "вот", "же", "ли", "если", "чтобы", "когда",
+    "есть", "быть", "твой", "ваш", "наш", "приложении", "приложение", "нужно", "можно",
+}
+
+
+def _tokenize(text: str):
+    toks = _re.findall(r"[а-яёa-z0-9]+", (text or "").lower())
+    return [t for t in toks if len(t) >= 3 and t not in _RU_STOP]
+
+
+def _lex_overlap(q_tokens, c_tokens) -> float:
+    """Доля токенов запроса, нашедших совпадение в чанке (по префиксу >=4 симв. — грубый стемминг)."""
+    if not q_tokens:
+        return 0.0
+    cset = list(dict.fromkeys(c_tokens))
+    matched = 0
+    for qt in q_tokens:
+        for ct in cset:
+            n = min(len(qt), len(ct))
+            if n >= 4 and qt[:n] == ct[:n]:
+                matched += 1
+                break
+    return matched / len(q_tokens)
 
 
 @dataclass
@@ -193,14 +225,15 @@ async def search(
         }
 
     # Поиск в Qdrant
+    ms = min_score if min_score is not None else await _get_min_score()
+    top_n = max(top_k * 4, 12)
     search_body = {
         "vector": query_embedding,
-        "limit": top_k,
+        "limit": top_n,
         "with_payload": True,
     }
-    ms = min_score if min_score is not None else await _get_min_score()
     if ms and ms > 0:
-        search_body["score_threshold"] = ms
+        search_body["score_threshold"] = _CAND_FLOOR
     if search_filter:
         search_body["filter"] = search_filter
 
@@ -209,20 +242,25 @@ async def search(
     if result.get("status") == "error" or "result" not in result:
         return []
 
-    # Формируем результат
-    chunks = []
+    # Гибрид: dense-score + лексический вклад, затем отсечение по порогу ms
+    q_tokens = _tokenize(query)
+    scored = []
     for point in result["result"]:
         payload = point.get("payload", {})
-        chunks.append(RAGChunk(
-            text=payload.get("text", ""),
-            score=point.get("score", 0.0),
+        dense = float(point.get("score", 0.0) or 0.0)
+        text = payload.get("text", "")
+        combined = dense + _LEX_WEIGHT * _lex_overlap(q_tokens, _tokenize(text))
+        scored.append((combined, RAGChunk(
+            text=text,
+            score=round(combined, 4),
             article_number=payload.get("article_number"),
             layer=payload.get("layer", "law"),
             source_title=payload.get("source_title", ""),
             metadata={k: v for k, v in payload.items() if k not in ("text", "article_number", "layer", "source_title", "agent_id")},
-        ))
+        )))
 
-    return chunks
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [ch for (comb, ch) in scored if comb >= ms][:top_k]
 
 
 async def delete_chunks(agent_id: int, point_ids: List[str]) -> bool:

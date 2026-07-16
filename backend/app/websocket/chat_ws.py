@@ -330,6 +330,19 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
     # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
     # Мозг и промпт берём из карточки core-агента «Помощник Джим» (единый источник)
     asst = await _get_assistant_agent()
+    # База знаний помощника (справка о платформе) — тот же порог score, [] если коллекции нет
+    if asst:
+        try:
+            from app.services import rag as _rag
+            _kn = await _rag.search(agent_id=asst.id, query=user_message, top_k=3)
+            if _kn:
+                user_persona += (
+                    "\n\n=== СПРАВОЧНЫЕ ЗНАНИЯ О ПЛАТФОРМЕ ===\n"
+                    + "\n".join(f"- {c.text}" for c in _kn)
+                    + "\n=== КОНЕЦ СПРАВКИ ===\nОтвечай по этим фактам, не выдумывай функции, которых тут нет."
+                )
+        except Exception as e:
+            print(f"[ws] assistant knowledge error: {e}")
     reply_text = await get_llm_reply(
         user_message=user_message,
         system_prompt=(asst.system_prompt if asst and asst.system_prompt else None),

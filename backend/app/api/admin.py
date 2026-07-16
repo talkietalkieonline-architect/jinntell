@@ -773,7 +773,7 @@ async def admin_get_system_settings(
     embedding_provider = s.EMBEDDING_PROVIDER
     jina_api_key = s.JINA_API_KEY
     shader_bg_enabled = True
-    rag_min_score = float(getattr(s, "RAG_MIN_SCORE", 0.6) or 0.6)
+    rag_min_score = float(getattr(s, "RAG_MIN_SCORE", 0.55) or 0.55)
 
     try:
         r = await _get_redis()
