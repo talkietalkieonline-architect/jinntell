@@ -122,6 +122,10 @@ export default function MyAgentsModal({
     </button>
   );
 
+  // Сегментация избранного: корпоративные (скрытые/выданные) отдельно от специалистов
+  const favCorporate = favorites.filter((a) => a.visibility === "hidden");
+  const favOther = favorites.filter((a) => a.visibility !== "hidden");
+
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 100 }} onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
@@ -152,10 +156,18 @@ export default function MyAgentsModal({
               )}
             </Section>
 
-            {favorites.length > 0 && (
-              <Section title="Избранное">
+            {favCorporate.length > 0 && (
+              <Section title="Корпоративные">
                 <div className="flex flex-wrap gap-3">
-                  {favorites.map((a) => <Tile key={a.id} a={a} action={<button onClick={(e) => { e.stopPropagation(); removeFav(a); }} className="text-[9px]" style={{ color: "var(--text-muted)" }}>убрать</button>} />)}
+                  {favCorporate.map((a) => <Tile key={a.id} a={a} action={<button onClick={(e) => { e.stopPropagation(); removeFav(a); }} className="text-[9px]" style={{ color: "var(--text-muted)" }}>убрать</button>} />)}
+                </div>
+              </Section>
+            )}
+
+            {favOther.length > 0 && (
+              <Section title="Избранные специалисты">
+                <div className="flex flex-wrap gap-3">
+                  {favOther.map((a) => <Tile key={a.id} a={a} action={<button onClick={(e) => { e.stopPropagation(); removeFav(a); }} className="text-[9px]" style={{ color: "var(--text-muted)" }}>убрать</button>} />)}
                 </div>
               </Section>
             )}

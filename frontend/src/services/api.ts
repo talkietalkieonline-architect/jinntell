@@ -219,6 +219,7 @@ export interface AgentOut {
   profession: string;
   brand: string;
   agent_type: string;
+  visibility?: string;
   description: string;
   color: string;
   jinntell_link?: string;
