@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, type UserProfile, type AgentFullOut } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -28,6 +28,7 @@ const VOICES = [
 
 const SECTIONS = [
   "Настройки пользователя",
+  "Настройки действий",
   "Настройки Помощника",
   "Настройка интерфейса",
 ];
@@ -78,9 +79,9 @@ export default function SettingsModal({
   const [animOn, setAnimOn] = useState(
     typeof window === "undefined" || localStorage.getItem("jinntell_anim_off") !== "1"
   );
-  const [driveOn, setDriveOn] = useState(
-    typeof window !== "undefined" && localStorage.getItem("jinntell_drive") === "1"
-  );
+  const [actApproaches, setActApproaches] = useState("all");
+  const [actLocation, setActLocation] = useState(false);
+  const [actPromo, setActPromo] = useState(true);
   const [textScale, setTextScale] = useState(
     typeof window !== "undefined" ? localStorage.getItem("jinntell_text_scale") || "1" : "1"
   );
@@ -96,6 +97,7 @@ export default function SettingsModal({
   useEffect(() => {
     if (!isOpen) return;
     getMyJinn().then((a) => { if (a) { setMyJinn(a); setJName(a.name); setJDesc(a.description || ""); setJGreet(a.greeting || ""); } }).catch(() => {});
+    getActionSettings().then((s) => { setActApproaches(s.approaches); setActLocation(s.allow_location); setActPromo(s.allow_promo); }).catch(() => {});
   }, [isOpen]);
   const createJinn = async () => {
     setJinnSaving(true);
@@ -582,6 +584,54 @@ const _av = user.assistant_voice || "ermil";
           </div>
         )}
 
+        {activeSection === "Настройки действий" && (
+          <div className="animate-fade-in">
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>‹ Назад</button>
+            <p className="text-[12px] mb-5" style={{ color: "var(--text-muted)" }}>Вы решаете, что вам могут показывать джинны и система.</p>
+
+            <div className="mb-5">
+              <span className="text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Обращения от джиннов</span>
+              <div className="flex flex-col gap-1.5">
+                {[
+                  { id: "all", label: "Принимать сразу", desc: "Джинны могут обращаться и показывать предложения" },
+                  { id: "assistant", label: "Только через помощника", desc: "Обращения собирает помощник — покажет, когда спросите" },
+                  { id: "off", label: "Не беспокоить", desc: "Никаких обращений от джиннов" },
+                ].map((o) => (
+                  <button key={o.id} onClick={() => { setActApproaches(o.id); updateActionSettings({ approaches: o.id as "all" | "assistant" | "off" }).catch(() => {}); }}
+                    className="px-4 py-2.5 rounded-xl text-left transition-all"
+                    style={{ background: actApproaches === o.id ? "var(--accent)" : "var(--bg-glass)", border: `1px solid ${actApproaches === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                    <span className="text-sm block" style={{ color: actApproaches === o.id ? "var(--bg-deep)" : "var(--text-primary)" }}>{o.label}</span>
+                    <span className="text-[10px]" style={{ color: actApproaches === o.id ? "var(--bg-deep)" : "var(--text-muted)" }}>{o.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center justify-between cursor-pointer gap-3">
+                <span className="flex flex-col">
+                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Предложения рядом</span>
+                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Разрешить геолокацию — джинны рядом (кафе, магазины) смогут предложить акции. Выключено — вас не найдут по месту.</span>
+                </span>
+                <input type="checkbox" checked={actLocation} onChange={(e) => { const on = e.target.checked; setActLocation(on); updateActionSettings({ allow_location: on }).catch(() => {}); }} className="w-5 h-5 shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} />
+              </label>
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center justify-between cursor-pointer gap-3">
+                <span className="flex flex-col">
+                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Акции и купоны</span>
+                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Показывать купоны, флаеры и подарки от бизнес-джиннов.</span>
+                </span>
+                <input type="checkbox" checked={actPromo} onChange={(e) => { const on = e.target.checked; setActPromo(on); updateActionSettings({ allow_promo: on }).catch(() => {}); }} className="w-5 h-5 shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} />
+              </label>
+            </div>
+
+            <button onClick={() => { setSaved(true); setTimeout(() => onClose(), 600); }} className="w-full mt-6 py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Готово</button>
+            {saved && <p className="text-xs text-center mt-2" style={{ color: "#2ecc71" }}>Сохранено!</p>}
+          </div>
+        )}
+
         {/* === НАСТРОЙКА ИНТЕРФЕЙСА === */}
         {activeSection === "Настройка интерфейса" && (
           <div>
@@ -641,26 +691,6 @@ const _av = user.assistant_voice || "ermil";
                     setAnimOn(on);
                     localStorage.setItem("jinntell_anim_off", on ? "0" : "1");
                     window.dispatchEvent(new Event("jinntell_anim_change"));
-                  }}
-                  className="w-5 h-5 shrink-0 cursor-pointer"
-                  style={{ accentColor: "var(--accent)" }}
-                />
-              </label>
-            </div>
-            <div className="mt-4">
-              <label className="flex items-center justify-between cursor-pointer gap-3">
-                <span className="flex flex-col">
-                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Режим «За рулём»</span>
-                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Всегда озвучивать ответы голосом (hands-free)</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={driveOn}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setDriveOn(on);
-                    localStorage.setItem("jinntell_drive", on ? "1" : "0");
-                    window.dispatchEvent(new Event("jinntell_drive_change"));
                   }}
                   className="w-5 h-5 shrink-0 cursor-pointer"
                   style={{ accentColor: "var(--accent)" }}

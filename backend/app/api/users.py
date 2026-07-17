@@ -4,7 +4,7 @@ import re
 
 import os
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,51 @@ from app.models.user import User
 from app.schemas.user import UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+# Настройки действий: что джинны/система могут показывать пользователю
+DEFAULT_ACTION_SETTINGS = {
+    "approaches": "all",       # all = принимать сразу | assistant = только через помощника | off = не беспокоить
+    "allow_location": False,   # геотриггер (предложения рядом) — только с явного согласия
+    "allow_promo": True,       # акции, купоны, флаеры
+}
+
+
+def _read_action_settings(user) -> dict:
+    import json
+    data = dict(DEFAULT_ACTION_SETTINGS)
+    if getattr(user, "action_settings", None):
+        try:
+            data.update(json.loads(user.action_settings))
+        except Exception:
+            pass
+    return data
+
+
+@router.get("/action-settings")
+async def get_action_settings(user: User = Depends(get_current_user)):
+    """Текущие настройки действий пользователя."""
+    return _read_action_settings(user)
+
+
+@router.patch("/action-settings")
+async def update_action_settings(
+    body: dict = Body(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновить настройки действий (частично)."""
+    import json
+    cur = _read_action_settings(user)
+    if "approaches" in body and body["approaches"] in ("all", "assistant", "off"):
+        cur["approaches"] = body["approaches"]
+    if "allow_location" in body:
+        cur["allow_location"] = bool(body["allow_location"])
+    if "allow_promo" in body:
+        cur["allow_promo"] = bool(body["allow_promo"])
+    user.action_settings = json.dumps(cur)
+    db.add(user)
+    await db.commit()
+    return cur
 
 
 @router.get("/me", response_model=UserOut)

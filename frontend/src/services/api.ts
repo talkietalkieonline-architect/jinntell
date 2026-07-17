@@ -642,6 +642,14 @@ export function getPublicConfig(): Promise<PublicConfig> {
   return apiFetch("/api/public/config");
 }
 
+export interface ActionSettings { approaches: "all" | "assistant" | "off"; allow_location: boolean; allow_promo: boolean; }
+export function getActionSettings(): Promise<ActionSettings> {
+  return apiFetch("/api/users/action-settings");
+}
+export function updateActionSettings(data: Partial<ActionSettings>): Promise<ActionSettings> {
+  return apiFetch("/api/users/action-settings", { method: "PATCH", body: JSON.stringify(data) });
+}
+
 export interface TurnConfig { iceServers: RTCIceServer[]; ttl?: number; }
 /** Эфемерные TURN/STUN-креды для звонков */
 export function getTurnConfig(): Promise<TurnConfig> {
