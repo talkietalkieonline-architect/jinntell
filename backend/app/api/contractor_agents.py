@@ -82,6 +82,58 @@ async def _agent_rooms(agent_id: int, db: AsyncSession) -> list[str]:
     return list(rooms)
 
 
+class GeoTriggerIn(BaseModel):
+    lat: float
+    lng: float
+    radius_m: int = 200
+    title: str = ""
+    message: str = ""
+    media_url: Optional[str] = None
+    is_active: bool = True
+    cooldown_hours: int = 24
+
+
+def _geo_out(gt) -> dict:
+    return {
+        "agent_id": gt.agent_id, "lat": gt.lat, "lng": gt.lng, "radius_m": gt.radius_m,
+        "title": gt.title or "", "message": gt.message or "", "media_url": gt.media_url,
+        "is_active": gt.is_active, "cooldown_hours": gt.cooldown_hours,
+        "price_kopecks": gt.price_kopecks,
+    }
+
+
+@router.get("/agents/{agent_id}/geo-trigger")
+async def get_geo_trigger(agent_id: int, contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
+    """Геотриггер джинна контрагента (или null, если не настроен)."""
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    from app.models.geo_trigger import GeoTrigger
+    gt = (await db.execute(select(GeoTrigger).where(GeoTrigger.agent_id == agent.id))).scalar_one_or_none()
+    return _geo_out(gt) if gt else None
+
+
+@router.put("/agents/{agent_id}/geo-trigger")
+async def put_geo_trigger(agent_id: int, body: GeoTriggerIn, contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
+    """Создать/обновить геотриггер (гео-реклама у точки). Платная функция контрагента."""
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    from app.models.geo_trigger import GeoTrigger
+    gt = (await db.execute(select(GeoTrigger).where(GeoTrigger.agent_id == agent.id))).scalar_one_or_none()
+    if not gt:
+        gt = GeoTrigger(agent_id=agent.id)
+        db.add(gt)
+    gt.lat = float(body.lat)
+    gt.lng = float(body.lng)
+    gt.radius_m = max(20, min(5000, int(body.radius_m)))
+    gt.title = (body.title or "")[:200]
+    gt.message = body.message or ""
+    gt.media_url = body.media_url or None
+    gt.is_active = bool(body.is_active)
+    gt.cooldown_hours = max(1, int(body.cooldown_hours))
+    gt.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(gt)
+    return _geo_out(gt)
+
+
 @router.get("/billing")
 async def contractor_billing(
     contractor: Contractor = Depends(_require_contractor),
