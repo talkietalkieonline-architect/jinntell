@@ -650,6 +650,11 @@ export function updateActionSettings(data: Partial<ActionSettings>): Promise<Act
   return apiFetch("/api/users/action-settings", { method: "PATCH", body: JSON.stringify(data) });
 }
 
+export interface GeoDelivery { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; room: string; quiet: boolean; }
+export function geoCheck(lat: number, lng: number): Promise<{ deliveries: GeoDelivery[] }> {
+  return apiFetch("/api/geo/check", { method: "POST", body: JSON.stringify({ lat, lng }) });
+}
+
 export interface TurnConfig { iceServers: RTCIceServer[]; ttl?: number; }
 /** Эфемерные TURN/STUN-креды для звонков */
 export function getTurnConfig(): Promise<TurnConfig> {
@@ -948,6 +953,14 @@ export interface ContractorBilling {
 /** Контрагент: счёт и баланс */
 export function contractorGetBilling(): Promise<ContractorBilling> {
   return contractorFetch("/api/contractor/billing");
+}
+
+export interface GeoTriggerData { agent_id?: number; lat: number; lng: number; radius_m: number; title: string; message: string; media_url?: string | null; is_active: boolean; cooldown_hours: number; price_kopecks?: number; }
+export function contractorGetGeoTrigger(agentId: number): Promise<GeoTriggerData | null> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/geo-trigger`);
+}
+export function contractorPutGeoTrigger(agentId: number, data: Omit<GeoTriggerData, "agent_id" | "price_kopecks">): Promise<GeoTriggerData> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/geo-trigger`, { method: "PUT", body: JSON.stringify(data) });
 }
 
 /** Контрагент: обновить агента */

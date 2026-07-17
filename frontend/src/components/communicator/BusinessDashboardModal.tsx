@@ -33,6 +33,8 @@ import {
   type ContractorDialogMessage,
   type WardrobeItem,
   type StorageUsage,
+  contractorGetGeoTrigger,
+  contractorPutGeoTrigger,
 } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
@@ -66,7 +68,7 @@ const TEMPERAMENTS = [
   { id: "reserved", label: "Сдержанный" },
 ];
 
-type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "knowledge" | "voice" | "appearance" | "outfit" | "access";
+type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "knowledge" | "voice" | "appearance" | "outfit" | "access" | "geo";
 
 interface Props {
   isOpen: boolean;
@@ -93,6 +95,11 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [accessError, setAccessError] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [activeSection, setActiveSection] = useState<EditSection>("main");
+  const [geoLat, setGeoLat] = useState(""); const [geoLng, setGeoLng] = useState("");
+  const [geoRadius, setGeoRadius] = useState("200"); const [geoTitle, setGeoTitle] = useState("");
+  const [geoMsg, setGeoMsg] = useState(""); const [geoMedia, setGeoMedia] = useState("");
+  const [geoActive, setGeoActive] = useState(true); const [geoCooldown, setGeoCooldown] = useState("24");
+  const [geoSaved, setGeoSaved] = useState(false);
 
   // ── Редактируемые поля (все секции) ──
   const [editDesc, setEditDesc] = useState("");
@@ -325,6 +332,21 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     }
   }, [activeSection, selectedAgent]);
 
+  useEffect(() => {
+    if (activeSection === "geo" && selectedAgent) {
+      contractorGetGeoTrigger(selectedAgent.id).then((g) => {
+        if (g) { setGeoLat(String(g.lat)); setGeoLng(String(g.lng)); setGeoRadius(String(g.radius_m)); setGeoTitle(g.title || ""); setGeoMsg(g.message || ""); setGeoMedia(g.media_url || ""); setGeoActive(g.is_active); setGeoCooldown(String(g.cooldown_hours)); }
+      }).catch(() => {});
+    }
+  }, [activeSection, selectedAgent]);
+  const saveGeo = async () => {
+    if (!selectedAgent) return;
+    try {
+      await contractorPutGeoTrigger(selectedAgent.id, { lat: parseFloat(geoLat) || 0, lng: parseFloat(geoLng) || 0, radius_m: parseInt(geoRadius) || 200, title: geoTitle, message: geoMsg, media_url: geoMedia || null, is_active: geoActive, cooldown_hours: parseInt(geoCooldown) || 24 });
+      setGeoSaved(true); setTimeout(() => setGeoSaved(false), 1500);
+    } catch { /* noop */ }
+  };
+
   const handleAddAccess = async () => {
     if (!selectedAgent || !accessInput.trim()) return;
     setAccessBusy(true); setAccessError("");
@@ -527,6 +549,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "appearance" as const, label: "Внешность" },
                   { id: "outfit" as const, label: "Одежда" },
                   { id: "access" as const, label: "Доступ" },
+                  { id: "geo" as const, label: "Геотриггер" },
                 ]).map((tab) => (
                   <button
                     key={tab.id}
@@ -754,6 +777,28 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                       <span className="text-[12px] font-medium" style={{ color: mannerEmoji ? "var(--accent)" : "var(--text-muted)" }}>{mannerEmoji ? "ВКЛ" : "ВЫКЛ"}</span>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {activeSection === "geo" && (
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>Гео-реклама: когда пользователь рядом с точкой (и разрешил геолокацию), джинн «стучится» с вашим предложением. Платно — списывается за каждый показ.</p>
+                  <button onClick={() => setGeoActive(!geoActive)} className="flex items-center justify-between px-4 py-3 rounded-xl transition-all" style={{ background: "var(--bg-glass)", border: `1px solid ${geoActive ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                    <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>Активен</span>
+                    <span className="text-[12px] font-medium" style={{ color: geoActive ? "var(--accent)" : "var(--text-muted)" }}>{geoActive ? "ВКЛ" : "ВЫКЛ"}</span>
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Широта</label><input value={geoLat} onChange={(e) => setGeoLat(e.target.value)} placeholder="59.9386" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                    <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Долгота</label><input value={geoLng} onChange={(e) => setGeoLng(e.target.value)} placeholder="30.3141" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                  </div>
+                  <button onClick={() => { if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => { setGeoLat(p.coords.latitude.toFixed(6)); setGeoLng(p.coords.longitude.toFixed(6)); }); }} className="text-[11px] self-start" style={{ color: "var(--accent)" }}>📍 Взять мои координаты</button>
+                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Радиус действия, м</label><input value={geoRadius} onChange={(e) => setGeoRadius(e.target.value)} placeholder="200" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Заголовок призыва</label><input value={geoTitle} onChange={(e) => setGeoTitle(e.target.value)} placeholder="Вторая пицца в подарок!" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Текст-призыв</label><textarea value={geoMsg} onChange={(e) => setGeoMsg(e.target.value)} rows={2} placeholder="Заходи в Тесто до 20:00" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Флаер (ссылка на картинку)</label><input value={geoMedia} onChange={(e) => setGeoMedia(e.target.value)} placeholder="https://…/flyer.jpg" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Не чаще раза в (часов)</label><input value={geoCooldown} onChange={(e) => setGeoCooldown(e.target.value)} placeholder="24" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}} /></div>
+                  <button onClick={saveGeo} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Сохранить геотриггер</button>
+                  {geoSaved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
                 </div>
               )}
 

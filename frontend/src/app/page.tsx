@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, type ContactOut, type ChannelPost } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -538,6 +538,30 @@ export default function Home() {
   }, []);
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
+
+  // Геотриггер: опрос позиции при открытом приложении (если пользователь разрешил геолокацию)
+  const [geoKnock, setGeoKnock] = useState<GeoDelivery | null>(null);
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const tick = () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(async (p) => {
+        if (stop) return;
+        try {
+          const r = await geoCheck(p.coords.latitude, p.coords.longitude);
+          const d = (r.deliveries || []).find((x) => !x.quiet) || null;
+          if (d) setGeoKnock(d);
+        } catch { /* noop */ }
+      }, () => {}, { maximumAge: 60000, timeout: 10000 });
+    };
+    getActionSettings().then((s) => {
+      if (stop || !s.allow_location) return;
+      tick();
+      timer = setInterval(tick, 90000);
+    }).catch(() => {});
+    return () => { stop = true; if (timer) clearInterval(timer); };
+  }, []);
   useEffect(() => {
     if (!commandHint) return;
     const t = setTimeout(() => setCommandHint(""), 3500);
@@ -619,6 +643,18 @@ export default function Home() {
       {commandHint && (
         <div className="fixed left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm animate-fade-in" style={{ top: topBarH + 8, zIndex: 70, background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
           {commandHint}
+        </div>
+      )}
+
+      {geoKnock && (
+        <div
+          onClick={() => { openAgentChat(geoKnock.agent_id, { name: geoKnock.agent_name, color: geoKnock.color }); setGeoKnock(null); }}
+          className="fixed left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-sm animate-fade-in cursor-pointer flex items-center gap-2"
+          style={{ bottom: 96, zIndex: 80, background: "var(--panel-bg)", border: "1px solid var(--accent)", boxShadow: "0 6px 24px rgba(0,0,0,0.35)", maxWidth: "90%" }}
+        >
+          <span style={{ fontSize: 18 }}>🔔</span>
+          <span style={{ color: "var(--text-primary)" }}><b>{geoKnock.agent_name}</b> рядом: {geoKnock.title || geoKnock.message}</span>
+          <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); }} className="ml-1 text-[12px]" style={{ color: "var(--text-muted)" }}>✕</button>
         </div>
       )}
 
