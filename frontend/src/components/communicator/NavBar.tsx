@@ -32,7 +32,7 @@ export default function NavBar({
   assistantRoom: string;
   openChats: OpenChat[];
   activeRoom: string;
-  view: "feed" | "chat";
+  view: "feed" | "chat" | "flow";
   activeAgent: { name: string; profession: string; brand: string; color: string; photo_url?: string } | null;
   roomMembers: { id: number; name: string; color: string; photo_url?: string }[];
   onInviteJinn: () => void;

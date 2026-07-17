@@ -10,6 +10,7 @@ import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
 import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
 
@@ -72,7 +73,7 @@ export default function Home() {
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
-  const [view, setView] = useState<"feed" | "chat">("feed");
+  const [view, setView] = useState<"feed" | "chat" | "flow">("feed");
   const [drive, setDrive] = useState(false);
   const [topBarH, setTopBarH] = useState(120);
   const [bottomBarH, setBottomBarH] = useState(130);
@@ -358,6 +359,8 @@ export default function Home() {
       let t = text.trim();
       const esc = (assistantName || "Джим").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       t = t.replace(new RegExp("^" + esc + "[,\\s]+", "i"), "").trim(); // убрать обращение по имени помощника
+      // Экран «Поток» (hands-free)
+      if (/^(?:вкл\w*\s+|включи\s+|открой\s+|запусти\s+)?(?:поток|без рук|hands.?free)\.?$/i.test(t)) { setRoom(assistantRoom); setView("flow"); setCommandHint(""); return; }
       const uid = getUserId();
       let m: RegExpMatchArray | null;
       // отправь <кому> [сообщение] <текст>  /  напиши <кому>: <текст>
@@ -656,6 +659,16 @@ export default function Home() {
           <span style={{ color: "var(--text-primary)" }}><b>{geoKnock.agent_name}</b> рядом: {geoKnock.title || geoKnock.message}</span>
           <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); }} className="ml-1 text-[12px]" style={{ color: "var(--text-muted)" }}>✕</button>
         </div>
+      )}
+
+      {view === "flow" && (
+        <FlowScreen
+          onExit={() => setView("feed")}
+          onSend={(t) => handleSend(t)}
+          lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
+          assistantName={assistantName}
+          voiceId={user?.assistant_voice}
+        />
       )}
 
       {/* Индикатор подключения к серверу */}
