@@ -521,7 +521,6 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "rules" as const, label: "Правила" },
                   { id: "skills" as const, label: "Скилы" },
                   { id: "exclusions" as const, label: "Запреты" },
-                  { id: "modes" as const, label: "Режимы" },
                   { id: "manners" as const, label: "Манеры" },
                   { id: "knowledge" as const, label: "Знания" },
                   { id: "voice" as const, label: "Голос" },

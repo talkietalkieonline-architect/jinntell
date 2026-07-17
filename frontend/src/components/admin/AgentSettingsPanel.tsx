@@ -160,7 +160,6 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
     { id: "skills", label: "Скилы", icon: "🎯" },
     { id: "training", label: "Обучение", icon: "📚" },
     { id: "exclusions", label: "Запреты", icon: "🚫" },
-    { id: "modes", label: "Режимы", icon: "🔄" },
     { id: "persona", label: "Персонаж", icon: "🎭" },
     ...(isSpecialist ? [{ id: "parser" as const, label: "Парсер", icon: "🔍" }] : []),
     { id: "control", label: "Управление", icon: "⚙️" },

@@ -330,15 +330,17 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
     # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
     # Мозг и промпт берём из карточки core-агента «Помощник Джим» (единый источник)
     asst = await _get_assistant_agent()
+    _asst_knowledge = ""
     # База знаний помощника (справка о платформе) — тот же порог score, [] если коллекции нет
     if asst:
         try:
             from app.services import rag as _rag
             _kn = await _rag.search(agent_id=asst.id, query=user_message, top_k=3)
             if _kn:
+                _asst_knowledge = "\n".join(f"- {c.text}" for c in _kn)
                 user_persona += (
                     "\n\n=== СПРАВОЧНЫЕ ЗНАНИЯ О ПЛАТФОРМЕ ===\n"
-                    + "\n".join(f"- {c.text}" for c in _kn)
+                    + _asst_knowledge
                     + "\n=== КОНЕЦ СПРАВКИ ===\nОтвечай по этим фактам, не выдумывай функции, которых тут нет."
                 )
         except Exception as e:
@@ -353,6 +355,27 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         user_id=user_id,
         payer_type="free",
     )
+
+    # Guardian: сверка ответа помощника со справкой о платформе (анти-галлюцинации)
+    if _asst_knowledge:
+        try:
+            from app.services import guardian
+            if await guardian.enabled():
+                _gv = await guardian.verify(user_message, _asst_knowledge, reply_text)
+                if not _gv.get("ok"):
+                    print(f"[guardian] assistant flagged: {_gv.get('issue')}")
+                    reply_text = await get_llm_reply(
+                        user_message=user_message,
+                        system_prompt=((asst.system_prompt if asst and asst.system_prompt else "") + guardian.STRICT_SUFFIX),
+                        model=(asst.llm_model if asst else None),
+                        max_tokens=(asst.llm_max_tokens if asst else 1000),
+                        conversation_history=history,
+                        user_persona_suffix=user_persona,
+                        user_id=user_id,
+                        payer_type="free",
+                    )
+        except Exception as e:
+            print(f"[guardian] assistant error: {e}")
 
     # Сохраняем ответ помощника в БД
     async with async_session() as db:
