@@ -2,6 +2,7 @@
 RAG Service — индексация и семантический поиск через Qdrant.
 Управляет коллекциями агентов, индексирует chunks, ищет релевантные фрагменты.
 """
+import math
 import re as _re
 import time as _time
 import uuid
@@ -70,6 +71,59 @@ def _lex_overlap(q_tokens, c_tokens) -> float:
                 matched += 1
                 break
     return matched / len(q_tokens)
+
+
+# ── BM25-lite: IDF-взвешенная лексика по корпусу коллекции (кэш 5 мин) ──
+_DF_CACHE: dict = {}
+
+
+async def _get_df(agent_id: int) -> dict:
+    now = _time.time()
+    c = _DF_CACHE.get(agent_id)
+    if c and now - c["t"] < 300:
+        return c
+    name = _collection_name(agent_id)
+    df: dict = {}
+    total = 0
+    n_docs = 0
+    try:
+        res = await _qdrant_request("POST", f"/collections/{name}/points/scroll",
+                                    {"limit": 2000, "with_payload": True, "with_vector": False})
+        pts = (res.get("result") or {}).get("points") or []
+        for pt in pts:
+            toks = _tokenize((pt.get("payload") or {}).get("text", ""))
+            n_docs += 1
+            total += len(toks)
+            for t in set(toks):
+                df[t] = df.get(t, 0) + 1
+    except Exception as e:
+        print(f"[rag] df fetch error: {e}")
+    data = {"t": now, "N": max(n_docs, 1), "df": df, "avgdl": (total / n_docs if n_docs else 1.0)}
+    _DF_CACHE[agent_id] = data
+    return data
+
+
+def _idf(term: str, N: int, df: dict) -> float:
+    n = df.get(term, 0)
+    return math.log((N - n + 0.5) / (n + 0.5) + 1.0)
+
+
+def _lex_score(q_tokens, c_tokens, N: int, df: dict) -> float:
+    """IDF-взвешенная доля терминов запроса, найденных в чанке (по префиксу >=4 — морфология)."""
+    if not q_tokens:
+        return 0.0
+    cset = list(dict.fromkeys(c_tokens))
+    num = 0.0
+    den = 0.0
+    for qt in q_tokens:
+        w = _idf(qt, N, df)
+        den += w
+        for ct in cset:
+            k = min(len(qt), len(ct))
+            if k >= 4 and qt[:k] == ct[:k]:
+                num += w
+                break
+    return (num / den) if den > 0 else 0.0
 
 
 @dataclass
@@ -244,12 +298,13 @@ async def search(
 
     # Гибрид: dense-score + лексический вклад, затем отсечение по порогу ms
     q_tokens = _tokenize(query)
+    _corpus = await _get_df(agent_id)
     scored = []
     for point in result["result"]:
         payload = point.get("payload", {})
         dense = float(point.get("score", 0.0) or 0.0)
         text = payload.get("text", "")
-        combined = dense + _LEX_WEIGHT * _lex_overlap(q_tokens, _tokenize(text))
+        combined = dense + _LEX_WEIGHT * _lex_score(q_tokens, _tokenize(text), _corpus["N"], _corpus["df"])
         scored.append((combined, RAGChunk(
             text=text,
             score=round(combined, 4),
