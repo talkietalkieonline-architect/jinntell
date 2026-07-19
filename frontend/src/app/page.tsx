@@ -305,9 +305,16 @@ export default function Home() {
   /** Ввод к помощнику: перехват голосовых/текстовых команд */
   const summonJinn = useCallback(async (name: string): Promise<boolean> => {
     try {
+      const q = name.toLowerCase().trim();
+      const relevant = (ag: { name: string; profession?: string }) => {
+        const hay = (ag.name + " " + (ag.profession || "")).toLowerCase();
+        return q.split(/\s+/).some((w) => w.length >= 3 && hay.includes(w))
+          || hay.split(/\s+/).some((w) => w.length >= 3 && q.includes(w));
+      };
       const res = await getAgents({ search: name });
-      let a = res.agents.find((x) => x.name.toLowerCase() === name.toLowerCase()) || res.agents[0];
-      if (!a) { const d = await discoverAgents(name, 3); a = d[0]; }
+      let a = res.agents.find((x) => x.name.toLowerCase() === q)
+        || res.agents.find(relevant);
+      if (!a) { const d = await discoverAgents(name, 3); a = d.find(relevant); }
       if (a) { openAgentChat(a.id, { name: a.name, color: a.color }); setCommandHint(`Позвал джинна: ${a.name}`); return true; }
     } catch { /* noop */ }
     return false;

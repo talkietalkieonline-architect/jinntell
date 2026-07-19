@@ -183,7 +183,9 @@ class IntentRequest(BaseModel):
 @router.post("/intent")
 async def assistant_intent(body: IntentRequest, user: User = Depends(get_current_user)):
     """Классификация намерения (для умного помощника)."""
-    raw = await get_llm_reply(user_message=(body.text or "")[:500], system_prompt=_INTENT_PROMPT,
+    _aname = (user.assistant_name or "Джим").strip()
+    _prompt = _INTENT_PROMPT + f"\n\nВАЖНО: тебя-помощника зовут «{_aname}». Обращение к тебе по этому имени (например «{_aname}, привет», «эй {_aname}», «{_aname}?») — это НЕ команда, а action=chat с пустым target. Имя «{_aname}» НИКОГДА не является target."
+    raw = await get_llm_reply(user_message=(body.text or "")[:500], system_prompt=_prompt,
                               max_tokens=120, user_id=user.id, payer_type="free")
     import json as _j, re as _re
     data = {}
