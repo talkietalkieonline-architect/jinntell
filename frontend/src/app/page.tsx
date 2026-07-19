@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -124,6 +124,17 @@ export default function Home() {
 
   const assistantName = user?.assistant_name || "Джим";
   const assistantRoom = getJimRoom();
+  const onbKey = () => { const uid = getUserId(); return uid ? `jinntell_onboarded_${uid}` : "jinntell_onboarded"; };
+  const [onboarding, setOnboarding] = useState<null | "name">(null);
+  useEffect(() => {
+    if (!user) return;
+    try { if (localStorage.getItem(onbKey())) return; } catch { return; }
+    if (!user.display_name && !user.first_name) {
+      setOnboarding("name");
+      setTimeout(() => pushAssistant(`Привет! Я ваш помощник${assistantName ? ` ${assistantName}` : ""}. Как к вам обращаться?`), 500);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Загрузка открытых чатов из localStorage (на смену пользователя — перечитываем его список)
   useEffect(() => {
@@ -369,6 +380,15 @@ export default function Home() {
   }, [findContact, openDM, summonJinn, sendMessage, pushAssistant, room, assistantRoom]);
 
   const handleSend = useCallback((text: string) => {
+    if (onboarding === "name") {
+      const nm = text.trim().replace(/^(меня зовут|зовут меня|это|я)\s+/i, "").replace(/[.,!?]+$/, "").trim();
+      try { localStorage.setItem(onbKey(), "1"); } catch { /* noop */ }
+      setOnboarding(null);
+      if (!nm || /^(пропустить|позже|потом|не важно|skip)$/i.test(nm)) { pushAssistant("Хорошо! Имя всегда можно задать в настройках. Чем помочь?"); return; }
+      updateMe({ display_name: nm }).catch(() => {});
+      pushAssistant(`Приятно познакомиться, ${nm}! Чем могу помочь?`);
+      return;
+    }
     const inAssistant = view === "feed" || room === assistantRoom;
     if (inAssistant) {
       let t = text.trim();
@@ -410,7 +430,7 @@ export default function Home() {
       return;
     }
     sendMessage(text);
-  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct]);
+  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct, onboarding, pushAssistant]);
 
   const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
     const payload = JSON.stringify({ signal, to, ...(extra || {}) });
