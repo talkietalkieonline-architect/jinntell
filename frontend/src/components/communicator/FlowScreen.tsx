@@ -72,7 +72,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, assistantName, v
   const mm = now ? now.getMinutes().toString().padStart(2, "0") : "--";
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center animate-fade-in" style={{ zIndex: 90, background: "var(--bg-deep)" }}>
+    <div className="fixed inset-0 flex flex-col items-center justify-center animate-fade-in" style={{ zIndex: 90, background: "rgba(8,10,16,0.66)", backdropFilter: "blur(2px)" }}>
       <button onClick={onExit} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
       <div className="text-6xl font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3 }}>{hh}:{mm}</div>
       <div className="text-[12px] mb-12 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>

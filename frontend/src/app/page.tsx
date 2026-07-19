@@ -696,6 +696,17 @@ export default function Home() {
         </div>
       )}
 
+      {view !== "flow" && (
+        <button
+          onClick={() => { setRoom(assistantRoom); setView("flow"); }}
+          title="Голосовой режим «Поток»"
+          className="fixed flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold transition-all hover:opacity-90 animate-fade-in"
+          style={{ top: 38, right: 10, zIndex: 75, background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)", backdropFilter: "blur(8px)" }}
+        >
+          🌀 Поток
+        </button>
+      )}
+
       {view === "flow" && (
         <FlowScreen
           onExit={() => setView("feed")}
