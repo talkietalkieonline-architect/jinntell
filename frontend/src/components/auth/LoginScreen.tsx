@@ -309,7 +309,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             JinnTell
           </span>
           <span className="text-xs uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>
-            AI-First
+            Город джиннов
           </span>
         </div>
 

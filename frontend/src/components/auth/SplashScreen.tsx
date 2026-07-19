@@ -70,7 +70,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
           className="text-sm uppercase tracking-[0.4em]"
           style={{ color: "var(--text-muted, rgba(245,240,232,0.4))" }}
         >
-          AI-First
+          Город джиннов
         </span>
       </div>
     </div>

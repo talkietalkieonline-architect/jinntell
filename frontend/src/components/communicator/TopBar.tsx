@@ -42,7 +42,7 @@ export default function TopBar({
           className="text-2xl font-bold tracking-tight"
           style={{ color: "var(--text-primary)" }}
         >
-          AI-First
+          Город джиннов
         </h1>
       </div>
 
