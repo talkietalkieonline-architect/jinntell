@@ -345,9 +345,16 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
                 )
         except Exception as e:
             print(f"[ws] assistant knowledge error: {e}")
+    _asst_sys = (asst.system_prompt if asst and asst.system_prompt else None)
+    try:
+        from app.services import guardian as _guard_in2
+        if not _guard_in2.check_input(user_message)["ok"]:
+            _asst_sys = (_asst_sys or "") + _guard_in2.INPUT_GUARD_SUFFIX
+    except Exception:
+        pass
     reply_text = await get_llm_reply(
         user_message=user_message,
-        system_prompt=(asst.system_prompt if asst and asst.system_prompt else None),
+        system_prompt=_asst_sys,
         model=(asst.llm_model if asst else None),
         max_tokens=(asst.llm_max_tokens if asst else 1000),
         conversation_history=history,
@@ -467,6 +474,12 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         payer_type=_ptype,
         payer_id=_pid,
     )
+    try:
+        from app.services import guardian as _guard_in
+        if not _guard_in.check_input(user_message)["ok"]:
+            _agent_kwargs["system_prompt"] = (agent.system_prompt or "") + _guard_in.INPUT_GUARD_SUFFIX
+    except Exception:
+        pass
     if _blocked:
         reply_text = agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂"
     else:
