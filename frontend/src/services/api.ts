@@ -731,6 +731,16 @@ export function adminGetSystemInfo(): Promise<SystemInfo> {
   return apiFetch("/api/admin/system-info");
 }
 
+export interface MonitorData {
+  agents: { total: number; by_type: Record<string, number>; top_active: { name: string; msgs_24h: number }[] };
+  activity: { messages_24h: number; messages_7d: number; active_users_24h: number; online_users: number; total_users: number };
+  llm_24h: { calls: number; tokens: number };
+  contractors: number;
+}
+export function adminGetMonitor(): Promise<MonitorData> {
+  return apiFetch("/api/admin/monitor");
+}
+
 // ═══════════════════════════════════════════════
 //  ADMIN: ASSISTANT SETTINGS
 // ═══════════════════════════════════════════════

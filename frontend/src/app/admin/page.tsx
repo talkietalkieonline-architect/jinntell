@@ -20,6 +20,7 @@ import {
   type IntegrationItem,
   type EmbeddingConfigItem,
   adminGetSystemInfo,
+  adminGetMonitor,
   adminGetContractors,
   adminCreateContractor,
   adminUpdateContractor,
@@ -33,6 +34,7 @@ import {
   type LLMStatus,
   type SystemSettings,
   type SystemInfo,
+  type MonitorData,
   type ContractorOut,
   type ContractorCreateData,
   getAllCities,
@@ -131,6 +133,7 @@ export default function AdminPage() {
 
   // System info
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [monitor, setMonitor] = useState<MonitorData | null>(null);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [intDraft, setIntDraft] = useState<Record<string, string>>({});
   const [embConfig, setEmbConfig] = useState<EmbeddingConfigItem[]>([]);
@@ -206,10 +209,12 @@ export default function AdminPage() {
 
   const loadSystemInfo = useCallback(async () => {
     try {
-      const [sysInfo] = await Promise.all([
+      const [sysInfo, mon] = await Promise.all([
         adminGetSystemInfo(),
+        adminGetMonitor().catch(() => null),
       ]);
       setSystemInfo(sysInfo);
+      setMonitor(mon);
     } catch {}
   }, []);
 
@@ -1164,6 +1169,44 @@ export default function AdminPage() {
           {tab === "system" && (
             <div>
               <h2 className="text-lg font-semibold mb-6">Система</h2>
+
+              {monitor && (
+                <div className="mb-8">
+                  <h3 className="text-md font-semibold mb-4">Мониторинг (Агент Админ)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wider">Агентов</p>
+                      <p className="text-2xl font-bold text-white">{monitor.agents.total}</p>
+                      <p className="text-[10px] text-gray-500 mt-1">{Object.entries(monitor.agents.by_type).map(([t, c]) => `${t}: ${c}`).join(" · ")}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wider">Сообщений 24ч</p>
+                      <p className="text-2xl font-bold text-white">{monitor.activity.messages_24h}</p>
+                      <p className="text-[10px] text-gray-500 mt-1">за 7 дней: {monitor.activity.messages_7d}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wider">Пользователи</p>
+                      <p className="text-2xl font-bold text-white">{monitor.activity.total_users}</p>
+                      <p className="text-[10px] text-gray-500 mt-1">онлайн: {monitor.activity.online_users} · актив 24ч: {monitor.activity.active_users_24h}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wider">LLM за 24ч</p>
+                      <p className="text-2xl font-bold text-white">{monitor.llm_24h.calls}</p>
+                      <p className="text-[10px] text-gray-500 mt-1">токенов: {monitor.llm_24h.tokens.toLocaleString("ru-RU")} · контрагентов: {monitor.contractors}</p>
+                    </div>
+                  </div>
+                  {monitor.agents.top_active.length > 0 && (
+                    <div className="mt-3 bg-gray-900 border border-gray-800 rounded-xl p-4">
+                      <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2">Активные джинны (24ч)</p>
+                      <div className="flex flex-wrap gap-2">
+                        {monitor.agents.top_active.map((a) => (
+                          <span key={a.name} className="text-[12px] text-gray-300 bg-gray-800 rounded-lg px-2 py-1">{a.name} · {a.msgs_24h}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Сервисы */}
               <h3 className="text-md font-semibold mb-4">Сервисы</h3>

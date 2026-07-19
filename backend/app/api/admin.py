@@ -758,6 +758,55 @@ async def admin_system_info(
 # ═══════════════════════════════════════════════
 
 
+@router.get("/monitor")
+async def admin_monitor(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Мониторинг платформы (Агент Админ): агенты, активность, пользователи, нагрузка LLM за 24ч."""
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import func, select as _sel
+    from app.models.message import Message
+    from app.models.agent import Agent
+    from app.models.user import User as _U
+    from app.models.contractor import Contractor
+    from app.models.llm_usage import LlmUsage
+
+    now = datetime.now(timezone.utc)
+    d1 = now - timedelta(days=1)
+    d7 = now - timedelta(days=7)
+
+    total_agents = (await db.execute(_sel(func.count(Agent.id)).where(Agent.is_active == True))).scalar() or 0
+    by_type = {t: int(c) for t, c in (await db.execute(
+        _sel(Agent.agent_type, func.count(Agent.id)).where(Agent.is_active == True).group_by(Agent.agent_type))).all()}
+
+    msgs_24h = (await db.execute(_sel(func.count(Message.id)).where(Message.created_at >= d1))).scalar() or 0
+    msgs_7d = (await db.execute(_sel(func.count(Message.id)).where(Message.created_at >= d7))).scalar() or 0
+
+    top_rows = (await db.execute(
+        _sel(Message.sender_agent_id, func.count(Message.id).label("c"))
+        .where(Message.created_at >= d1, Message.sender_type == "agent", Message.sender_agent_id.isnot(None))
+        .group_by(Message.sender_agent_id).order_by(func.count(Message.id).desc()).limit(5))).all()
+    top_active = []
+    for aid, c in top_rows:
+        ag = await db.get(Agent, aid)
+        top_active.append({"name": ag.name if ag else f"#{aid}", "msgs_24h": int(c)})
+
+    total_users = (await db.execute(_sel(func.count(_U.id)))).scalar() or 0
+    online_users = (await db.execute(_sel(func.count(_U.id)).where(_U.is_online == True))).scalar() or 0
+    active_24h = (await db.execute(_sel(func.count(_U.id)).where(_U.last_seen >= d1))).scalar() or 0
+
+    tok = func.coalesce(func.sum(LlmUsage.prompt_tokens + LlmUsage.completion_tokens), 0)
+    llm_calls = (await db.execute(_sel(func.count(LlmUsage.id)).where(LlmUsage.created_at >= d1))).scalar() or 0
+    llm_tokens = (await db.execute(_sel(tok).where(LlmUsage.created_at >= d1))).scalar() or 0
+    total_contractors = (await db.execute(_sel(func.count(Contractor.id)))).scalar() or 0
+
+    return {
+        "agents": {"total": int(total_agents), "by_type": by_type, "top_active": top_active},
+        "activity": {"messages_24h": int(msgs_24h), "messages_7d": int(msgs_7d),
+                     "active_users_24h": int(active_24h), "online_users": int(online_users), "total_users": int(total_users)},
+        "llm_24h": {"calls": int(llm_calls), "tokens": int(llm_tokens)},
+        "contractors": int(total_contractors),
+    }
+
+
 @router.get("/system-settings")
 async def admin_get_system_settings(
     admin: User = Depends(get_admin_user),
