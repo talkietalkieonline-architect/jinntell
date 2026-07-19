@@ -50,6 +50,12 @@ function openChatsKey(): string {
   return uid ? `jinntell_open_chats_${uid}` : "jinntell_open_chats";
 }
 
+/** Убрать дубли открытых чатов по комнате + исключить помощника */
+function dedupeOpen(list: OpenChat[], assistantRoom: string): OpenChat[] {
+  const seen = new Set<string>();
+  return (list || []).filter((c) => c && c.room && c.room !== assistantRoom && !seen.has(c.room) && (seen.add(c.room), true));
+}
+
 /** Ключ хранения закрытых (архивных) чатов — персональный */
 function archivedKey(): string {
   const uid = getUserId();
@@ -103,6 +109,8 @@ export default function Home() {
   const viewRef = useRef(view);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { viewRef.current = view; }, [view]);
+  const openChatsRef = useRef(openChats);
+  useEffect(() => { openChatsRef.current = openChats; }, [openChats]);
   useEffect(() => {
     const m = room.match(/^agent-(\d+)/);
     if (!m) { setChannelPosts([]); return; }
@@ -121,7 +129,7 @@ export default function Home() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(openChatsKey());
-      setOpenChats(raw ? JSON.parse(raw) : []);
+      setOpenChats(raw ? dedupeOpen(JSON.parse(raw), assistantRoom) : []);
       const ar = localStorage.getItem(archivedKey());
       setArchivedChats(ar ? JSON.parse(ar) : []);
     } catch {
@@ -153,7 +161,7 @@ export default function Home() {
             const srv = chats.find((x) => x.room === c.room);
             return srv ? { ...c, online: srv.online, name: srv.name, photo: srv.photo || c.photo } : c;
           });
-          return additions.length ? [...additions, ...updated] : updated;
+          return dedupeOpen(additions.length ? [...additions, ...updated] : updated, assistantRoom);
         });
       }).catch(() => {});
     };
@@ -337,7 +345,7 @@ export default function Home() {
       const ok = await summonJinn(target); if (!ok) pushAssistant(`Не нашёл «${target}».`); return;
     }
     if (a === "close_chat") {
-      if (target) { const c = findContact(target); if (c && uid) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } pushAssistant(`Не нашёл чат «${target}».`); return; }
+      if (target) { const _oc = openChatsRef.current.find((cc) => { const nm = (cc.name || "").toLowerCase(); const w = target.toLowerCase(); return nm === w || nm.includes(w) || w.includes(nm); }); if (_oc) { closeChatRef.current(_oc.room); setCommandHint(`Закрыл: ${_oc.name}`); return; } const c = findContact(target); if (c && uid) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } pushAssistant(`Не нашёл чат «${target}».`); return; }
       if (room !== assistantRoom) { closeChatRef.current(room); setCommandHint("Закрыл чат"); return; }
       pushAssistant("Какой чат закрыть?"); return;
     }
@@ -379,7 +387,7 @@ export default function Home() {
       // закрой [чат] [с <кем>]
       if ((m = t.match(/^закр\w+(?:\s+чат)?(?:\s+с)?\s*(.*)$/i))) {
         const who = m[1].trim();
-        if (who && uid) { const c = findContact(who); if (c) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } setCommandHint(`Не нашёл «${who}»`); return; }
+        if (who) { const _oc = openChatsRef.current.find((cc) => { const nm = (cc.name || "").toLowerCase(); const w = who.toLowerCase(); return nm === w || nm.includes(w) || w.includes(nm); }); if (_oc) { closeChatRef.current(_oc.room); setCommandHint(`Закрыл: ${_oc.name}`); return; } if (uid) { const c = findContact(who); if (c) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } } setCommandHint(`Не нашёл «${who}»`); return; }
         if (!who && room !== assistantRoom) { closeChatRef.current(room); setCommandHint("Закрыл чат"); return; }
       }
       // открой чат / позови / пригласи <кого> (контакт или джинн из Города)
