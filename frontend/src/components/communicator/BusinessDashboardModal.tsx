@@ -36,6 +36,7 @@ import {
   type StorageUsage,
   contractorGetGeoTrigger,
   contractorPutGeoTrigger,
+  contractorUploadGeoFlyer,
 } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
@@ -800,7 +801,20 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Радиус действия, м</label><input value={geoRadius} onChange={(e) => setGeoRadius(e.target.value)} placeholder="200" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Заголовок призыва</label><input value={geoTitle} onChange={(e) => setGeoTitle(e.target.value)} placeholder="Вторая пицца в подарок!" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Текст-призыв</label><textarea value={geoMsg} onChange={(e) => setGeoMsg(e.target.value)} rows={2} placeholder="Заходи в Тесто до 20:00" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
-                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Флаер (ссылка на картинку)</label><input value={geoMedia} onChange={(e) => setGeoMedia(e.target.value)} placeholder="https://…/flyer.jpg" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Флаер / QR-код (картинка)</label>
+                    {geoMedia ? (
+                      <div className="flex items-center gap-3">
+                        <img src={geoMedia.startsWith("/") || geoMedia.startsWith("http") ? mediaUrl(geoMedia) : geoMedia} alt="флаер" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 10, border: "1px solid var(--bg-glass-border)" }} />
+                        <button onClick={() => setGeoMedia("")} className="text-[12px]" style={{ color: "var(--danger)" }}>убрать</button>
+                      </div>
+                    ) : (
+                      <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] cursor-pointer transition-all hover:opacity-90" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>
+                        📎 Загрузить картинку
+                        <input type="file" accept="image/*" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (!f || !selectedAgent) return; try { const r = await contractorUploadGeoFlyer(selectedAgent.id, f); setGeoMedia(r.url); } catch { /* noop */ } }} />
+                      </label>
+                    )}
+                  </div>
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Не чаще раза в (часов)</label><input value={geoCooldown} onChange={(e) => setGeoCooldown(e.target.value)} placeholder="24" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
                   <button onClick={saveGeo} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Сохранить геотриггер</button>
                   {geoSaved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}

@@ -962,6 +962,15 @@ export function contractorGetGeoTrigger(agentId: number): Promise<GeoTriggerData
 export function contractorPutGeoTrigger(agentId: number, data: Omit<GeoTriggerData, "agent_id" | "price_kopecks">): Promise<GeoTriggerData> {
   return contractorFetch(`/api/contractor/agents/${agentId}/geo-trigger`, { method: "PUT", body: JSON.stringify(data) });
 }
+export async function contractorUploadGeoFlyer(agentId: number, file: File): Promise<{ url: string }> {
+  const fd = new FormData(); fd.append("file", file);
+  const token = getContractorToken();
+  const res = await fetch(`${API_BASE}/api/contractor/agents/${agentId}/geo-trigger/flyer`, {
+    method: "POST", body: fd, headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) { const b = await res.json().catch(() => ({ detail: res.statusText })); throw new ApiError(res.status, b.detail || "Ошибка загрузки"); }
+  return res.json();
+}
 
 /** Контрагент: обновить агента */
 export function contractorUpdateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {

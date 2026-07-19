@@ -134,6 +134,33 @@ async def put_geo_trigger(agent_id: int, body: GeoTriggerIn, contractor: Contrac
     return _geo_out(gt)
 
 
+@router.post("/agents/{agent_id}/geo-trigger/flyer")
+async def upload_geo_flyer(
+    agent_id: int,
+    file: UploadFile = File(...),
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузка флаера/QR (картинка) для геотриггера. Возвращает короткий URL для media_url."""
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    ct = (file.content_type or "").split(";")[0].strip().lower()
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}.get(ct)
+    if not ext:
+        if ct.startswith("image/"):
+            ext = "jpg"
+        else:
+            raise HTTPException(400, "Только изображение (флаер или QR-код)")
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(400, "Картинка больше 8 МБ")
+    d = os.path.join(_agent_dir(contractor.id, agent.id), "geo")
+    os.makedirs(d, exist_ok=True)
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    with open(os.path.join(d, fname), "wb") as f:
+        f.write(data)
+    return {"url": f"/api/storage/contractors/{contractor.id}/agents/{agent.id}/geo/{fname}"}
+
+
 @router.get("/billing")
 async def contractor_billing(
     contractor: Contractor = Depends(_require_contractor),
