@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useEffect } from "react";
 import type { AgentRoomInfo } from "@/hooks/useChat";
+import JTLogo from "@/components/brand/JTLogo";
 
 /** Верхняя панель — лого + ЭФИР / заголовок агента */
 export default function TopBar({
@@ -31,7 +32,8 @@ export default function TopBar({
       style={{ zIndex: 40, background: "var(--bar-bg)" }}
     >
       {/* Лого */}
-      <div className="flex items-baseline gap-3 mb-1">
+      <div className="flex items-center gap-2 mb-1">
+        <JTLogo size={20} />
         <span
           className="text-[10px] uppercase tracking-[0.3em]"
           style={{ color: "var(--text-muted)" }}

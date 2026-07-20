@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
+import JTLogo from "@/components/brand/JTLogo";
 
 /** Заставка при загрузке — лого JinnTell с анимацией */
 export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
@@ -60,6 +61,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
 
       {/* Логотип */}
       <div className="relative flex flex-col items-center">
+        <JTLogo size={92} style={{ marginBottom: 18 }} />
         <span
           className="text-5xl font-bold tracking-tight mb-2"
           style={{ color: "var(--accent-bright, #f0c95c)" }}

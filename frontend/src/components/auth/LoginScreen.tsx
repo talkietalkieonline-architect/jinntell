@@ -10,6 +10,7 @@ import {
   getOAuthYandexUrl,
   type UserProfile,
 } from "@/services/api";
+import JTLogo from "@/components/brand/JTLogo";
 
 type AuthStep = "login" | "register" | "forgot" | "reset_code";
 
@@ -305,6 +306,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
       <div className="relative w-full max-w-sm">
         {/* Логотип */}
         <div className="flex flex-col items-center mb-8">
+          <JTLogo size={72} style={{ marginBottom: 14 }} />
           <span className="text-4xl font-bold tracking-tight mb-1" style={{ color: "var(--accent-bright)" }}>
             JinnTell
           </span>
