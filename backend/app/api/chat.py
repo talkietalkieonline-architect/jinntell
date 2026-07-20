@@ -198,6 +198,11 @@ async def assistant_intent(body: IntentRequest, user: User = Depends(get_current
     valid = {"open_chat", "close_chat", "send_message", "summon_jinn", "call",
              "clear_history", "favorite", "web_search", "send_media", "clarify", "chat"}
     action = data.get("action") if data.get("action") in valid else "chat"
+    if action != "chat":
+        from app.services.activity import log as _log
+        await _log("assistant.command", user_id=user.id, actor="assistant",
+                   target_name=(data.get("target") or "").strip() or None,
+                   result=action, detail=(body.text or "")[:500])
     return {
         "action": action,
         "target": (data.get("target") or "").strip(),

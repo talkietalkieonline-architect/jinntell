@@ -142,6 +142,9 @@ async def add_favorite(agent_id: int, user: User = Depends(get_current_user), db
     if not exists.scalar_one_or_none():
         db.add(UserFavorite(user_id=user.id, agent_id=agent_id))
         await db.commit()
+        from app.services.activity import log as _log
+        await _log("favorite.add", user_id=user.id, target_type="agent",
+                   target_id=agent.id, target_name=agent.name, result="ok")
     return {"ok": True}
 
 
@@ -155,6 +158,9 @@ async def remove_favorite(agent_id: int, user: User = Depends(get_current_user),
     if f:
         await db.delete(f)
         await db.commit()
+        from app.services.activity import log as _log
+        await _log("favorite.remove", user_id=user.id, target_type="agent",
+                   target_id=agent_id, result="ok")
     return {"ok": True}
 
 
