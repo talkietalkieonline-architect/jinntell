@@ -17,7 +17,7 @@ export default function VideoNoteRecorder({ onClose, onDone, autoStart }: { onCl
   useEffect(() => {
     let alive = true;
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "user" }, audio: true })
+      .getUserMedia({ video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 480 } }, audio: true })
       .then((s) => {
         if (!alive) { s.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = s;
@@ -45,7 +45,12 @@ export default function VideoNoteRecorder({ onClose, onDone, autoStart }: { onCl
     if (!streamRef.current) return;
     chunksRef.current = [];
     let mr: MediaRecorder;
-    try { mr = new MediaRecorder(streamRef.current); } catch { setError("Запись не поддерживается в этом браузере"); return; }
+    const _opts: MediaRecorderOptions = { videoBitsPerSecond: 800000 };
+    for (const _t of ["video/mp4", "video/webm;codecs=vp9", "video/webm"]) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(_t)) { _opts.mimeType = _t; break; }
+    }
+    try { mr = new MediaRecorder(streamRef.current, _opts); }
+    catch { try { mr = new MediaRecorder(streamRef.current); } catch { setError("Запись не поддерживается в этом браузере"); return; } }
     mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     mr.onstop = () => {
       const type = mr.mimeType || "video/webm";

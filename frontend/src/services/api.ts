@@ -1074,7 +1074,39 @@ export interface StorageUsage {
 export function mediaUrl(path: string): string {
   return path ? `${API_BASE}${path}` : "";
 }
-export function contractorUploadPhoto(agentId: number, file: File): Promise<{ photo_url: string }> {
+/** Ужать изображение до аватарного размера перед загрузкой — экономит хранилище и трафик. При любой ошибке возвращает исходный файл. */
+async function compressImage(file: File, maxDim = 512, quality = 0.85): Promise<File> {
+  if (typeof document === "undefined") return file;
+  if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
+  try {
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result as string);
+      fr.onerror = () => reject(new Error("read"));
+      fr.readAsDataURL(file);
+    });
+    const img: HTMLImageElement = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error("decode"));
+      i.src = dataUrl;
+    });
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(img, 0, 0, w, h);
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch { return file; }
+}
+
+export async function contractorUploadPhoto(agentId: number, file: File): Promise<{ photo_url: string }> {
+  file = await compressImage(file);
   const f = new FormData(); f.append("file", file);
   return contractorUpload(`/api/contractor/agents/${agentId}/photo`, f);
 }
@@ -1279,6 +1311,7 @@ export function getMe(): Promise<UserProfile> {
   return apiFetch("/api/users/me");
 }
 export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: string }> {
+  file = await compressImage(file);
   const token = getToken();
   const f = new FormData();
   f.append("file", file);
@@ -1290,6 +1323,7 @@ export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: str
   return res.json();
 }
 export async function uploadUserAvatar(file: File): Promise<{ avatar_url: string }> {
+  file = await compressImage(file);
   const token = getToken();
   const f = new FormData();
   f.append("file", file);
@@ -1304,6 +1338,7 @@ export function deleteUserAvatar(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/avatar", { method: "DELETE" });
 }
 export async function uploadChatMedia(file: File): Promise<{ url: string; type: string }> {
+  file = await compressImage(file, 1280, 0.82);
   const token = getToken();
   const f = new FormData();
   f.append("file", file);
