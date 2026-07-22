@@ -1419,3 +1419,39 @@ export function connectChat(room: string, onMessage: (msg: any) => void): WebSoc
 export function healthCheck(): Promise<{ status: string; service: string; version: string }> {
   return apiFetch("/api/health");
 }
+
+// ═══════════════════════════════════════════════
+//  ЖУРНАЛ ДЕЙСТВИЙ
+// ═══════════════════════════════════════════════
+
+export interface ActivityItem {
+  id: number;
+  user_id: number | null;
+  actor: string;
+  action: string;
+  target_type: string | null;
+  target_id: number | null;
+  target_name: string | null;
+  room: string | null;
+  result: string | null;
+  detail: string | null;
+  created_at: string;
+}
+
+/** Отправить UI-событие в журнал. Тихо: журнал не должен мешать работе. */
+export function reportActivity(ev: {
+  action: string; target_type?: string; target_id?: number;
+  target_name?: string; room?: string; result?: string; detail?: string;
+}): void {
+  apiFetch("/api/activity", { method: "POST", body: JSON.stringify(ev) }).catch(() => { /* noop */ });
+}
+
+export function getActivityLog(params: { user_id?: number; action?: string; actor?: string; hours?: number; limit?: number } = {}): Promise<{ total: number; items: ActivityItem[] }> {
+  const q = new URLSearchParams();
+  if (params.user_id) q.set("user_id", String(params.user_id));
+  if (params.action) q.set("action", params.action);
+  if (params.actor) q.set("actor", params.actor);
+  q.set("hours", String(params.hours ?? 24));
+  q.set("limit", String(params.limit ?? 200));
+  return apiFetch(`/api/activity/admin?${q.toString()}`);
+}

@@ -47,6 +47,8 @@ import {
   adminAddUserBalance,
   type UsageSummary,
   type ModelInfo,
+  getActivityLog,
+  type ActivityItem,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
 
@@ -55,7 +57,7 @@ import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
    Управление агентами, пользователями, статистика
    ══════════════════════════════════════════════════════════════ */
 
-type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities";
+type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities" | "activity";
 
 const AGENT_TYPES = [
   { id: "", label: "Все" },
@@ -134,6 +136,9 @@ export default function AdminPage() {
   // System info
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [monitor, setMonitor] = useState<MonitorData | null>(null);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activityActor, setActivityActor] = useState<string>("");
+  const [activityHours, setActivityHours] = useState<number>(24);
   const [integrations, setIntegrations] = useState<IntegrationItem[]>([]);
   const [intDraft, setIntDraft] = useState<Record<string, string>>({});
   const [embConfig, setEmbConfig] = useState<EmbeddingConfigItem[]>([]);
@@ -244,6 +249,13 @@ export default function AdminPage() {
     try { setCitiesList(await getAllCities()); } catch {}
   }, []);
 
+  const loadActivity = useCallback(async () => {
+    try {
+      const res = await getActivityLog({ actor: activityActor || undefined, hours: activityHours, limit: 300 });
+      setActivity(res.items);
+    } catch {}
+  }, [activityActor, activityHours]);
+
   const loadIntegrations = useCallback(async () => {
     try { setIntegrations(await adminGetIntegrations()); } catch {}
     try { setEmbConfig(await adminGetEmbeddingConfig()); } catch {}
@@ -260,6 +272,7 @@ export default function AdminPage() {
       if (tab === "stats") await loadStats();
       if (tab === "integrations") { await loadIntegrations(); await loadModels(); }
       if (tab === "cities") await loadCities();
+      if (tab === "activity") await loadActivity();
     };
     load();
   }, [tab, isAdmin, loadAgents, loadCoreAgents, loadContractors, loadUsers, loadSystemInfo, loadStats, loadIntegrations]);
@@ -419,6 +432,7 @@ export default function AdminPage() {
             { id: "system" as Tab, label: "Система", icon: "🖥️" },
             { id: "stats" as Tab, label: "Статистика", icon: "📊" },
             { id: "cities" as Tab, label: "Города", icon: "📍" },
+            { id: "activity" as Tab, label: "Журнал", icon: "📜" },
             { id: "integrations" as Tab, label: "Интеграции", icon: "🔌" },
           ]).map((item) => (
             <button
@@ -1401,6 +1415,60 @@ export default function AdminPage() {
           )}
 
           {/* ═══ STATS TAB ═══ */}
+          {tab === "activity" && (
+            <div>
+              <h2 className="text-lg font-semibold mb-1">Журнал действий</h2>
+              <p className="text-xs text-gray-500 mb-4">Что делали пользователи и помощник: команды, открытие/закрытие чатов, избранное, звонки.</p>
+              <div className="flex items-center gap-2 mb-4">
+                {[{ v: "", l: "Все" }, { v: "user", l: "Пользователь" }, { v: "assistant", l: "Помощник" }, { v: "agent", l: "Джинн" }].map((f) => (
+                  <button key={f.v} onClick={() => setActivityActor(f.v)}
+                    className={`px-3 py-1.5 rounded-lg text-xs transition-all ${activityActor === f.v ? "bg-gray-700 text-white" : "bg-gray-900 text-gray-400 hover:text-white"}`}>{f.l}</button>
+                ))}
+                <select value={activityHours} onChange={(e) => setActivityHours(Number(e.target.value))}
+                  className="bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-xs text-gray-300 ml-2">
+                  <option value={24}>24 часа</option>
+                  <option value={168}>7 дней</option>
+                  <option value={720}>30 дней</option>
+                </select>
+                <button onClick={() => loadActivity()} className="px-3 py-1.5 rounded-lg text-xs bg-gray-800 text-gray-300 hover:text-white ml-auto">Обновить</button>
+              </div>
+              <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 text-xs border-b border-gray-800">
+                      <th className="px-3 py-2 font-medium">Время</th>
+                      <th className="px-3 py-2 font-medium">Кто</th>
+                      <th className="px-3 py-2 font-medium">Действие</th>
+                      <th className="px-3 py-2 font-medium">Цель</th>
+                      <th className="px-3 py-2 font-medium">Итог</th>
+                      <th className="px-3 py-2 font-medium">Детали</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activity.length === 0 && (
+                      <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-600 text-xs">Записей нет</td></tr>
+                    )}
+                    {activity.map((a) => (
+                      <tr key={a.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{new Date(a.created_at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${a.actor === "assistant" ? "bg-indigo-900/50 text-indigo-300" : a.actor === "agent" ? "bg-emerald-900/50 text-emerald-300" : a.actor === "system" ? "bg-gray-700 text-gray-300" : "bg-blue-900/50 text-blue-300"}`}>{a.actor}</span>
+                          {a.user_id ? <span className="text-gray-600 text-xs ml-1">#{a.user_id}</span> : null}
+                        </td>
+                        <td className="px-3 py-2 text-gray-300 font-mono text-xs whitespace-nowrap">{a.action}</td>
+                        <td className="px-3 py-2 text-gray-400 text-xs">{a.target_name || (a.target_id ? `${a.target_type} #${a.target_id}` : "—")}</td>
+                        <td className="px-3 py-2 text-xs">
+                          {a.result ? <span className={a.result === "ok" ? "text-emerald-400" : a.result === "chat" ? "text-gray-500" : "text-amber-400"}>{a.result}</span> : <span className="text-gray-600">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 text-xs max-w-xs truncate" title={a.detail || ""}>{a.detail || ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {tab === "cities" && (
             <div>
               <h2 className="text-lg font-semibold mb-6">Города</h2>
