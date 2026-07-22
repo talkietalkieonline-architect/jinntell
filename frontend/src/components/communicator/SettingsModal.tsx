@@ -296,6 +296,7 @@ const _av = user.assistant_voice || "ermil";
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
               ‹ Назад
             </button>
+            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
 
             <div className="flex flex-col gap-3">
               <div className="flex flex-col items-center gap-2 mb-1">
@@ -374,8 +375,8 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>О себе</label>
-                <textarea value={aboutField} onChange={(e) => setAboutField(e.target.value)} placeholder="Расскажите немного о себе..." rows={3} className="w-full px-3 py-2.5 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Статус</label>
+                <textarea value={aboutField} onChange={(e) => setAboutField(e.target.value)} placeholder="Ваш статус — коротко о себе или настроение" rows={3} className="w-full px-3 py-2.5 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
               </div>
 
               <div>
@@ -451,6 +452,7 @@ const _av = user.assistant_voice || "ermil";
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
               ‹ Назад
             </button>
+            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
 
             <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
               Настройте вашего персонального помощника — он будет общаться с вами в стиле, который вам подходит.
@@ -587,6 +589,7 @@ const _av = user.assistant_voice || "ermil";
         {activeSection === "Настройки действий" && (
           <div className="animate-fade-in">
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>‹ Назад</button>
+            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
             <p className="text-[12px] mb-5" style={{ color: "var(--text-muted)" }}>Вы решаете, что вам могут показывать джинны и система.</p>
 
             <div className="mb-5">
@@ -638,6 +641,7 @@ const _av = user.assistant_voice || "ermil";
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
               ‹ Назад
             </button>
+            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
             <h3 className="text-sm font-medium mb-4" style={{ color: "var(--text-primary)" }}>Тема оформления</h3>
             <div className="flex flex-col gap-2">
               {THEMES.map((theme) => (
@@ -708,6 +712,7 @@ const _av = user.assistant_voice || "ermil";
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
               ‹ Назад
             </button>
+            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               {activeSection} — в разработке
             </p>
