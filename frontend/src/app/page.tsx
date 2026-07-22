@@ -80,6 +80,7 @@ export default function Home() {
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
   const [view, setView] = useState<"feed" | "chat" | "flow">("feed");
+  const flowReturnRef = useRef<{ view: "feed" | "chat" | "flow"; room: string }>({ view: "feed", room: "" });
   const [drive, setDrive] = useState(false);
   const [topBarH, setTopBarH] = useState(120);
   const [bottomBarH, setBottomBarH] = useState(130);
@@ -395,7 +396,7 @@ export default function Home() {
       const esc = (assistantName || "Джим").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       t = t.replace(new RegExp("^" + esc + "[,\\s]+", "i"), "").trim(); // убрать обращение по имени помощника
       // Экран «Поток» (hands-free)
-      if (/^(?:вкл\w*\s+|включи\s+|открой\s+|запусти\s+)?(?:поток|без рук|hands.?free)\.?$/i.test(t)) { setRoom(assistantRoom); setView("flow"); setCommandHint(""); return; }
+      if (/^(?:вкл\w*\s+|включи\s+|открой\s+|запусти\s+)?(?:поток|без рук|hands.?free)\.?$/i.test(t)) { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); setCommandHint(""); return; }
       const uid = getUserId();
       let m: RegExpMatchArray | null;
       // отправь <кому> [сообщение] <текст>  /  напиши <кому>: <текст>
@@ -698,7 +699,7 @@ export default function Home() {
 
       {view !== "flow" && (
         <button
-          onClick={() => { setRoom(assistantRoom); setView("flow"); }}
+          onClick={() => { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); }}
           title="Голосовой режим «Поток»"
           className="fixed flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold transition-all hover:opacity-90 animate-fade-in"
           style={{ top: 38, right: 10, zIndex: 75, background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)", backdropFilter: "blur(8px)" }}
@@ -709,7 +710,7 @@ export default function Home() {
 
       {view === "flow" && (
         <FlowScreen
-          onExit={() => setView("feed")}
+          onExit={() => { const r = flowReturnRef.current; setRoom(r.room || assistantRoom); setView(r.view === "flow" ? "feed" : r.view); }}
           onSend={(t) => handleSend(t)}
           lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
           assistantName={assistantName}
