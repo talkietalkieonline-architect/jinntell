@@ -1302,6 +1302,7 @@ export interface UserProfile {
   interests?: string;
   avatar_url?: string;
   assistant_photo?: string;
+  assistant_age?: number;
   user_age?: number;
   balance_kopecks?: number;
 }

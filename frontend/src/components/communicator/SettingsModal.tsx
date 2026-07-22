@@ -72,7 +72,7 @@ export default function SettingsModal({
   const [assistantVoice, setAssistantVoice] = useState("male_low");
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [userAge, setUserAge] = useState("");
+  const [assistantAge, setAssistantAge] = useState("");
   const [wakeEnabled, setWakeEnabled] = useState(
     typeof window !== "undefined" && localStorage.getItem("jinntell_wake_enabled") === "1"
   );
@@ -133,7 +133,7 @@ export default function SettingsModal({
 const _av = user.assistant_voice || "ermil";
       setAssistantVoice(_av);
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
-      setUserAge(user.user_age ? String(user.user_age) : "");
+      setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
     }
   }, [user, isOpen]);
 
@@ -201,7 +201,7 @@ const _av = user.assistant_voice || "ermil";
         assistant_name: assistantName || "Джим",
         assistant_gender: assistantGender,
         assistant_voice: assistantVoice,
-        user_age: userAge ? parseInt(userAge) : undefined,
+        assistant_age: assistantAge ? parseInt(assistantAge) : undefined,
       } as Partial<UserProfile>);
       localStorage.setItem("jinntell_assistant_voice", assistantVoice);
       setSaved(true);
@@ -535,15 +535,15 @@ const _av = user.assistant_voice || "ermil";
                 </div>
               </div>
 
-              {/* Ваш возраст */}
+              {/* Возраст помощника */}
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ваш возраст</label>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Возраст помощника</label>
                 <input
-                  type="number" value={userAge} onChange={(e) => setUserAge(e.target.value)}
+                  type="number" value={assistantAge} onChange={(e) => setAssistantAge(e.target.value)}
                   placeholder="25" min="10" max="120"
                   className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle}
                 />
-                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Помощник адаптирует стиль общения под ваш возраст</p>
+                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Возраст влияет на манеру общения помощника</p>
               </div>
 
               {/* Голос помощника */}
