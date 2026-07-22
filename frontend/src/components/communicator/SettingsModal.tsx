@@ -299,18 +299,7 @@ const _av = user.assistant_voice || "ermil";
             <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
 
             <div className="flex flex-col gap-3">
-              <div className="flex flex-col items-center gap-2 mb-1">
-                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                  {avatarUrl ? <img src={avatarUrl.startsWith("data:") ? avatarUrl : mediaUrl(avatarUrl)} alt="Аватар" className="w-full h-full object-cover" /> : <span className="text-3xl" style={{ color: "var(--text-muted)" }}>{(displayName || firstName || "?")[0]}</span>}
-                </div>
-                <div className="flex gap-2">
-                  <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
-                    {avatarUploading ? "Загрузка..." : "Загрузить аватар"}
-                    <input type="file" accept="image/*" className="hidden" disabled={avatarUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
-                  </label>
-                  {avatarUrl && <button onClick={handleAvatarDelete} className="px-3 py-1.5 rounded-lg text-[11px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>Удалить</button>}
-                </div>
-              </div>
+              <div className="text-[11px] uppercase tracking-widest font-semibold mb-2" style={{ color: "var(--accent)" }}>Официальные данные</div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Имя</label>
@@ -320,38 +309,6 @@ const _av = user.assistant_voice || "ermil";
                   <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Фамилия</label>
                   <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Фамилия" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
                 </div>
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ник · так вас видят собеседники</label>
-                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Кем хотите быть (хоть Дарт Вейдер)" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>@username · чтобы вас находили</label>
-                <input type="text" value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase())} placeholder="username" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Образ · как к вам обращаться</label>
-                <div className="flex gap-2">
-                  {[{ id: "", label: "Не указывать" }, { id: "male", label: "Муж." }, { id: "female", label: "Жен." }, { id: "neutral", label: "Нейтр." }].map((g) => (
-                    <button key={g.id || "none"} onClick={() => setPersonaGender(g.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: personaGender === g.id ? "var(--accent)" : "var(--bg-glass)", color: personaGender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${personaGender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
-                  ))}
-                </div>
-                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Публичный образ — может отличаться от реального пола.</p>
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Телефон (логин)</label>
-                <input type="tel" value={phone} readOnly className="w-full px-3 py-2.5 rounded-xl outline-none text-sm opacity-60 cursor-not-allowed" style={inputStyle} />
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>
-                  Email <span className="normal-case tracking-normal ml-1" style={{ color: "var(--text-muted)", fontSize: "10px" }}>(для восстановления пароля)</span>
-                </label>
-                <input type="email" value={emailField} onChange={(e) => setEmailField(e.target.value)} placeholder="email@example.com" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -372,6 +329,52 @@ const _av = user.assistant_voice || "ermil";
                     <button key={g.id} onClick={() => setGender(g.id)} className="flex-1 py-2 rounded-xl text-sm font-medium transition-all" style={{ background: gender === g.id ? "var(--accent)" : "var(--bg-glass)", color: gender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${gender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Телефон (логин)</label>
+                <input type="tel" value={phone} readOnly className="w-full px-3 py-2.5 rounded-xl outline-none text-sm opacity-60 cursor-not-allowed" style={inputStyle} />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>
+                  Email <span className="normal-case tracking-normal ml-1" style={{ color: "var(--text-muted)", fontSize: "10px" }}>(для восстановления пароля)</span>
+                </label>
+                <input type="email" value={emailField} onChange={(e) => setEmailField(e.target.value)} placeholder="email@example.com" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+              </div>
+
+
+              <div className="text-[11px] uppercase tracking-widest font-semibold mb-2 mt-3 pt-3" style={{ color: "var(--accent)", borderTop: "1px solid var(--bg-glass-border)" }}>Профиль · ваш образ</div>
+              <div className="flex flex-col items-center gap-2 mb-1">
+                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  {avatarUrl ? <img src={avatarUrl.startsWith("data:") ? avatarUrl : mediaUrl(avatarUrl)} alt="Аватар" className="w-full h-full object-cover" /> : <span className="text-3xl" style={{ color: "var(--text-muted)" }}>{(displayName || firstName || "?")[0]}</span>}
+                </div>
+                <div className="flex gap-2">
+                  <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                    {avatarUploading ? "Загрузка..." : "Загрузить аватар"}
+                    <input type="file" accept="image/*" className="hidden" disabled={avatarUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }} />
+                  </label>
+                  {avatarUrl && <button onClick={handleAvatarDelete} className="px-3 py-1.5 rounded-lg text-[11px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>Удалить</button>}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Ник · так вас видят собеседники</label>
+                <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Кем хотите быть (хоть Дарт Вейдер)" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>@username · чтобы вас находили</label>
+                <input type="text" value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase())} placeholder="username" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Образ · как к вам обращаться</label>
+                <div className="flex gap-2">
+                  {[{ id: "", label: "Не указывать" }, { id: "male", label: "Муж." }, { id: "female", label: "Жен." }, { id: "neutral", label: "Нейтр." }].map((g) => (
+                    <button key={g.id || "none"} onClick={() => setPersonaGender(g.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: personaGender === g.id ? "var(--accent)" : "var(--bg-glass)", color: personaGender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${personaGender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
+                  ))}
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Публичный образ — может отличаться от реального пола.</p>
               </div>
 
               <div>
