@@ -58,6 +58,14 @@ async function playServerTTS(text: string, voice: string = "ermil", emotion: str
   audio.play().catch(() => done());
 }
 
+/** Остановить любую озвучку: серверный TTS + веб-синтез. Генерацию текста НЕ трогает. */
+function stopAllTTS() {
+  try { _ttsAudio?.pause(); } catch {}
+  _ttsAudio = null;
+  try { window.speechSynthesis?.cancel(); } catch {}
+  window.dispatchEvent(new Event("jinntell_tts_end"));
+}
+
 /** Голосовой пузырь в стиле Telegram — волновая дорожка + play */
 function VoiceBubble({ text, accent }: { text: string; accent?: boolean }) {
   const [playing, setPlaying] = useState(false);
@@ -445,6 +453,20 @@ export default function ChatArea({
   const userScrolledUp = useRef(false);
   const lastMsgCount = useRef(0);
   const prevMsgCountRef = useRef(messages.length);
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => {
+    const on = () => setSpeaking(true);
+    const off = () => setSpeaking(false);
+    const stop = () => stopAllTTS();
+    window.addEventListener("jinntell_tts_start", on);
+    window.addEventListener("jinntell_tts_end", off);
+    window.addEventListener("jinntell_stop", stop);
+    return () => {
+      window.removeEventListener("jinntell_tts_start", on);
+      window.removeEventListener("jinntell_tts_end", off);
+      window.removeEventListener("jinntell_stop", stop);
+    };
+  }, []);
   const programmaticScrollRef = useRef(false);
 
   // Автоскролл — только когда пользователь сам отправил сообщение
@@ -528,6 +550,11 @@ export default function ChatArea({
 
   return (
     <>
+    {speaking && (
+      <button onClick={() => stopAllTTS()} title="Остановить озвучку" className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold animate-fade-in" style={{ bottom: bottomPad + 8, zIndex: 60, background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 4px 20px rgba(0,0,0,0.35)" }}>
+        <span style={{ fontSize: 13 }}>⏹</span> Стоп
+      </button>
+    )}
     {searchOpen && (
       <div className="absolute left-0 right-0 flex justify-center px-4" style={{ top: topPad + 6, zIndex: 30 }}>
         <div className="flex items-center gap-2 rounded-xl px-3 py-2 w-full max-w-[620px]" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)" }}>
