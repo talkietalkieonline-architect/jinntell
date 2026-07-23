@@ -1304,6 +1304,7 @@ export interface UserProfile {
   assistant_photo?: string;
   assistant_age?: number;
   has_password?: boolean;
+  assistant_traits?: string;
   user_age?: number;
   balance_kopecks?: number;
 }

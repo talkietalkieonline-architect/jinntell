@@ -129,6 +129,8 @@ async def update_me(
         user.assistant_photo = body.assistant_photo
     if body.assistant_age is not None:
         user.assistant_age = body.assistant_age
+    if body.assistant_traits is not None:
+        user.assistant_traits = body.assistant_traits
     await db.flush()
     return UserOut.from_user(user)
 

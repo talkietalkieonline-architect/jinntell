@@ -33,6 +33,7 @@ class User(Base):
     assistant_voice: Mapped[str] = mapped_column(String(50), default="male_low")
     assistant_photo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # base64 data URL
     assistant_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # возраст образа помощника
+    assistant_traits: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: характеристики общения (тон/длина/юмор/эмодзи)
     action_settings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: настройки действий (обращения/гео/акции)
     user_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # legacy, не используется
 

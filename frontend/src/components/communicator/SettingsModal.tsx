@@ -33,7 +33,7 @@ const SECTIONS = [
   "Настройка интерфейса",
 ];
 
-const INTEREST_TOPICS = ["Космос", "Технологии", "Спорт", "Кино", "Музыка", "Игры", "Бизнес", "Здоровье", "Путешествия", "Мода", "Наука", "Авто", "Кулинария", "Искусство", "Финансы", "Психология"];
+const INTEREST_TOPICS = ["Космос", "Технологии", "Спорт", "Кино", "Музыка", "Игры", "Бизнес", "Здоровье", "Путешествия", "Мода", "Наука", "Авто", "Кулинария", "Искусство", "Финансы", "Психология", "Образование", "Литература", "История", "Природа", "Животные", "Фотография", "Саморазвитие", "Дизайн", "Стартапы", "Дом и уют", "Дети", "Театр", "Языки", "Юмор", "Новости", "Недвижимость"];
 
 export default function SettingsModal({
   isOpen,
@@ -73,6 +73,10 @@ export default function SettingsModal({
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [assistantAge, setAssistantAge] = useState("");
+  const [trTone, setTrTone] = useState("");
+  const [trLength, setTrLength] = useState("");
+  const [trHumor, setTrHumor] = useState(false);
+  const [trEmoji, setTrEmoji] = useState(true);
   const [wakeEnabled, setWakeEnabled] = useState(
     typeof window !== "undefined" && localStorage.getItem("jinntell_wake_enabled") === "1"
   );
@@ -139,6 +143,7 @@ const _av = user.assistant_voice || "ermil";
       setAssistantVoice(_av);
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
       setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
+      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); } catch { /* noop */ }
     }
   }, [user, isOpen]);
 
@@ -220,6 +225,7 @@ const _av = user.assistant_voice || "ermil";
         assistant_name: assistantName || "Джим",
         assistant_gender: assistantGender,
         assistant_voice: assistantVoice,
+        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji }),
         assistant_age: assistantAge ? parseInt(assistantAge) : undefined,
       } as Partial<UserProfile>);
       localStorage.setItem("jinntell_assistant_voice", assistantVoice);
@@ -577,6 +583,27 @@ const _av = user.assistant_voice || "ermil";
                   className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle}
                 />
                 <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Возраст влияет на манеру общения помощника</p>
+              </div>
+
+              {/* Характеристики общения (п.8) */}
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Характеристики общения</label>
+                <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>Тон</p>
+                <div className="flex gap-2 mb-3">
+                  {[{ id: "friendly", label: "Дружелюбный" }, { id: "neutral", label: "Нейтральный" }, { id: "business", label: "Деловой" }].map((o) => (
+                    <button key={o.id} onClick={() => setTrTone(trTone === o.id ? "" : o.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trTone === o.id ? "var(--accent)" : "var(--bg-glass)", color: trTone === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trTone === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                  ))}
+                </div>
+                <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>Длина ответов</p>
+                <div className="flex gap-2 mb-3">
+                  {[{ id: "short", label: "Коротко" }, { id: "medium", label: "Средне" }, { id: "long", label: "Подробно" }].map((o) => (
+                    <button key={o.id} onClick={() => setTrLength(trLength === o.id ? "" : o.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trLength === o.id ? "var(--accent)" : "var(--bg-glass)", color: trLength === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trLength === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setTrHumor(!trHumor)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trHumor ? "var(--accent)" : "var(--bg-glass)", color: trHumor ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trHumor ? "var(--accent)" : "var(--bg-glass-border)"}` }}>😄 С юмором</button>
+                  <button onClick={() => setTrEmoji(!trEmoji)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trEmoji ? "var(--accent)" : "var(--bg-glass)", color: trEmoji ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trEmoji ? "var(--accent)" : "var(--bg-glass-border)"}` }}>✨ Эмодзи</button>
+                </div>
               </div>
 
               {/* Голос помощника */}

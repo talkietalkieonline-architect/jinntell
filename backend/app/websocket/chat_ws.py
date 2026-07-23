@@ -238,17 +238,26 @@ async def _get_user_assistant_settings(user_id: int) -> dict:
         "gender": "male",
         "voice": "male_low",
         "manner": None,  # None = использовать дефолт из промпта
+        "traits": {},
     }
     try:
         async with async_session() as db:
             result = await db.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
             if user:
+                import json as _json
+                _traits = {}
+                try:
+                    if user.assistant_traits:
+                        _traits = _json.loads(user.assistant_traits) or {}
+                except Exception:
+                    _traits = {}
                 return {
                     "name": user.assistant_name or DEFAULT_ASSISTANT_NAME,
                     "gender": user.assistant_gender or "male",
                     "voice": user.assistant_voice or "male_low",
                     "manner": None,
+                    "traits": _traits,
                 }
     except Exception:
         pass
@@ -272,6 +281,14 @@ def _build_user_persona_injection(settings: dict) -> str:
         "neutral": "Избегай гендерных форм о себе.",
     }.get(gender, "Говори о себе в мужском роде.")
 
+    traits = settings.get("traits") or {}
+    _tone = {"friendly": "Тон дружелюбный, тёплый.", "neutral": "Тон нейтральный.", "business": "Тон деловой, по существу."}.get(traits.get("tone"), "")
+    _len = {"short": "Отвечай коротко, 1-2 предложения.", "medium": "Отвечай средней длины.", "long": "Отвечай подробно, разворачивай мысль."}.get(traits.get("length"), "")
+    _humor = "Допускай лёгкий уместный юмор." if traits.get("humor") else ""
+    _emoji = "Используй эмодзи умеренно." if traits.get("emoji") else ("Не используй эмодзи." if traits.get("emoji") is False else "")
+    _style = " ".join(x for x in [_tone, _len, _humor, _emoji] if x)
+    traits_text = ("\n\n=== СТИЛЬ ОБЩЕНИЯ ===\n" + _style + "\n=== КОНЕЦ СТИЛЯ ===") if _style else ""
+
     return f"""
 
 === ТВОЯ ЛИЧНОСТЬ (ВЫСШИЙ ПРИОРИТЕТ, ВАЖНЕЕ ИСТОРИИ ПЕРЕПИСКИ) ===
@@ -279,7 +296,7 @@ def _build_user_persona_injection(settings: dict) -> str:
 ВАЖНО: в истории переписки ты мог РАНЬШЕ называть себя другим именем (например «Джим») — это УСТАРЕЛО, полностью ИГНОРИРУЙ это.
 Всегда представляйся ТОЛЬКО как «{name}». Никогда не называй себя «Джим» или любым другим именем.
 На вопрос «как тебя зовут?» отвечай: «{name}».
-=== КОНЕЦ ==="""
+=== КОНЕЦ ==={traits_text}"""
 
 
 async def _assistant_reply(room: str, user_message: str, assistant_name: str = DEFAULT_ASSISTANT_NAME, user_id: int = 0):

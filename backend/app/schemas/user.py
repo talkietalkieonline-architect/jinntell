@@ -34,6 +34,7 @@ class UserOut(BaseModel):
     assistant_voice: str = "male_low"
     assistant_photo: Optional[str] = None
     assistant_age: Optional[int] = None
+    assistant_traits: Optional[str] = None
     # OAuth привязки
     vk_linked: bool = False
     telegram_linked: bool = False
@@ -73,6 +74,7 @@ class UserOut(BaseModel):
             assistant_voice=user.assistant_voice or "male_low",
             assistant_photo=user.assistant_photo,
             assistant_age=getattr(user, "assistant_age", None),
+            assistant_traits=getattr(user, "assistant_traits", None),
             balance_kopecks=getattr(user, "balance_kopecks", 0) or 0,
             vk_linked=bool(user.vk_id),
             telegram_linked=bool(user.telegram_id),
@@ -105,3 +107,4 @@ class UserUpdate(BaseModel):
     assistant_voice: Optional[str] = None
     assistant_photo: Optional[str] = None
     assistant_age: Optional[int] = None
+    assistant_traits: Optional[str] = None
