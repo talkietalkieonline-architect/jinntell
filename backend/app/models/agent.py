@@ -35,7 +35,7 @@ class Agent(Base):
 
     # AI / LLM
     system_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    llm_model: Mapped[str] = mapped_column(String(100), default="deepseek-chat")
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
     llm_max_tokens: Mapped[int] = mapped_column(Integer, default=1000)
     greeting: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
