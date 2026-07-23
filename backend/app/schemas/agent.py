@@ -34,7 +34,7 @@ class AgentOut(BaseModel):
 
 class AgentDetailOut(AgentOut):
     system_prompt: Optional[str] = None
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "deepseek-chat"
     llm_max_tokens: int = 1000
     is_active: bool = True
     created_at: Optional[Any] = None
@@ -139,7 +139,7 @@ class AgentCreate(BaseModel):
     color: str = Field("#d4a843", max_length=20)
     agent_type: str = Field("business")
     system_prompt: Optional[str] = Field(None, max_length=5000)
-    llm_model: str = Field("gpt-4o-mini")
+    llm_model: str = Field("deepseek-chat")
     greeting: Optional[str] = Field(None, max_length=500)
 
 
