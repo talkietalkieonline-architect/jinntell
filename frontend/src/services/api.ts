@@ -1303,6 +1303,7 @@ export interface UserProfile {
   avatar_url?: string;
   assistant_photo?: string;
   assistant_age?: number;
+  has_password?: boolean;
   user_age?: number;
   balance_kopecks?: number;
 }
@@ -1349,6 +1350,9 @@ export async function uploadChatMedia(file: File): Promise<{ url: string; type: 
     throw new ApiError(res.status, b.detail || "Ошибка загрузки");
   }
   return res.json();
+}
+export function changePassword(current_password: string, new_password: string): Promise<{ ok: boolean; had_password: boolean }> {
+  return apiFetch("/api/users/me/password", { method: "POST", body: JSON.stringify({ current_password, new_password }) });
 }
 export function deleteAssistantPhoto(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/assistant-photo", { method: "DELETE" });

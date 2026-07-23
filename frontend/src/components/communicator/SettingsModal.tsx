@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -88,6 +88,11 @@ export default function SettingsModal({
 
   // Состояние сохранения
   const [saving, setSaving] = useState(false);
+  const [curPw, setCurPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [newPw2, setNewPw2] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [myJinn, setMyJinn] = useState<AgentFullOut | null>(null);
   const [jName, setJName] = useState("");
   const [jDesc, setJDesc] = useState("");
@@ -182,6 +187,20 @@ const _av = user.assistant_voice || "ermil";
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally { setSaving(false); }
+  };
+
+  const handleChangePassword = async () => {
+    setPwMsg(null);
+    if (newPw.length < 6) { setPwMsg({ ok: false, text: "Пароль не менее 6 символов" }); return; }
+    if (newPw !== newPw2) { setPwMsg({ ok: false, text: "Пароли не совпадают" }); return; }
+    setPwSaving(true);
+    try {
+      await changePassword(curPw, newPw);
+      setPwMsg({ ok: true, text: "Пароль изменён" });
+      setCurPw(""); setNewPw(""); setNewPw2("");
+    } catch (e: unknown) {
+      setPwMsg({ ok: false, text: e instanceof Error ? e.message : "Не удалось сменить пароль" });
+    } finally { setPwSaving(false); }
   };
 
   const handlePhotoUpload = async (file: File) => {
@@ -343,6 +362,17 @@ const _av = user.assistant_voice || "ermil";
                 <input type="email" value={emailField} onChange={(e) => setEmailField(e.target.value)} placeholder="email@example.com" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
               </div>
 
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>{user?.has_password ? "Смена пароля" : "Задать пароль"}</label>
+                {user?.has_password && (
+                  <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="Текущий пароль" autoComplete="current-password" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm mb-2" style={inputStyle} />
+                )}
+                <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="Новый пароль (мин. 6)" autoComplete="new-password" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm mb-2" style={inputStyle} />
+                <input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} placeholder="Повтор нового" autoComplete="new-password" className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle} />
+                {pwMsg && <p className="text-[11px] mt-1" style={{ color: pwMsg.ok ? "#2ecc71" : "var(--danger)" }}>{pwMsg.text}</p>}
+                <button onClick={handleChangePassword} disabled={pwSaving || !newPw} className="mt-2 w-full py-2 rounded-xl text-[13px] font-medium transition-all hover:opacity-90 disabled:opacity-50" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)" }}>{pwSaving ? "Сохранение…" : (user?.has_password ? "Сменить пароль" : "Задать пароль")}</button>
+              </div>
 
               <div className="text-[11px] uppercase tracking-widest font-semibold mb-2 mt-3 pt-3" style={{ color: "var(--accent)", borderTop: "1px solid var(--bg-glass-border)" }}>Профиль · ваш образ</div>
               <div className="flex flex-col items-center gap-2 mb-1">

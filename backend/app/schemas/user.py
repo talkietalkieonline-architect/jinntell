@@ -15,6 +15,7 @@ class UserOut(BaseModel):
     custom_accent: str
     is_online: bool
     is_admin: bool = False
+    has_password: bool = False
     # Персональные данные
     email: Optional[str] = None
     first_name: Optional[str] = None
@@ -47,6 +48,7 @@ class UserOut(BaseModel):
         return cls(
             id=user.id,
             phone=user.phone,
+            has_password=bool(getattr(user, "password_hash", "")),
             display_name=user.display_name,
             jinntell_link=user.jinntell_link,
             theme=user.theme,

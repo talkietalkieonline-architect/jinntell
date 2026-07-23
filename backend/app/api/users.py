@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.security import create_access_token
+from pydantic import BaseModel
+
+from app.core.security import create_access_token, hash_password, verify_password
 from app.models.contractor import Contractor
 from app.models.user import User
 from app.schemas.user import UserOut, UserUpdate
@@ -162,6 +164,28 @@ async def my_business_token(
         raise HTTPException(404, "Бизнес-аккаунт не найден или не привязан к вам")
     token = create_access_token(c.id, token_type="contractor")
     return {"access_token": token, "company_name": c.company_name, "contractor_id": c.id}
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = ""
+    new_password: str
+
+
+@router.post("/me/password")
+async def change_password(
+    body: PasswordChangeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сменить или задать пароль (для залогиненного). Если пароль уже есть — нужен текущий."""
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "Пароль должен быть не менее 6 символов")
+    has_pw = bool(user.password_hash)
+    if has_pw and not verify_password(body.current_password or "", user.password_hash):
+        raise HTTPException(400, "Текущий пароль неверный")
+    user.password_hash = hash_password(body.new_password)
+    await db.flush()
+    return {"ok": True, "had_password": has_pw}
 
 
 _STORAGE_ROOT = "/app/storage"
