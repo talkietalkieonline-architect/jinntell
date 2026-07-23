@@ -735,8 +735,8 @@ const _av = user.assistant_voice || "ermil";
             <div className="mt-4">
               <span className="text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Размер текста</span>
               <div className="flex gap-2">
-                {[{ id: "0.9", label: "Мелкий" }, { id: "1", label: "Обычный" }, { id: "1.2", label: "Крупный" }].map((o) => (
-                  <button key={o.id} onClick={() => { setTextScale(o.id); localStorage.setItem("jinntell_text_scale", o.id); document.documentElement.style.setProperty("--chat-text-scale", o.id); }} className="flex-1 py-2 rounded-xl text-sm font-medium transition-all" style={{ background: textScale === o.id ? "var(--accent)" : "var(--bg-glass)", color: textScale === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${textScale === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                {[{ id: "0.9", label: "Мелкий" }, { id: "1", label: "Обычный" }, { id: "1.2", label: "Крупный" }, { id: "1.5", label: "Очень крупный" }].map((o) => (
+                  <button key={o.id} onClick={() => { setTextScale(o.id); localStorage.setItem("jinntell_text_scale", o.id); document.documentElement.style.fontSize = (parseFloat(o.id) * 16) + "px"; }} className="flex-1 py-2 rounded-xl text-sm font-medium transition-all" style={{ background: textScale === o.id ? "var(--accent)" : "var(--bg-glass)", color: textScale === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${textScale === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
                 ))}
               </div>
             </div>

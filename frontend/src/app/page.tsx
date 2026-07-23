@@ -573,7 +573,7 @@ export default function Home() {
     const a = localStorage.getItem("jinntell_accent");
     if (a) document.documentElement.style.setProperty("--custom-accent", a);
     const ts = localStorage.getItem("jinntell_text_scale");
-    if (ts) document.documentElement.style.setProperty("--chat-text-scale", ts);
+    if (ts) document.documentElement.style.fontSize = (parseFloat(ts) * 16) + "px";
   }, []);
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
