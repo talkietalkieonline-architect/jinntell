@@ -7,7 +7,7 @@ export interface BgPreset {
   id: string;
   name: string;
   theme: "light" | "dark";
-  kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust" | "shader";
+  kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust" | "shader" | "image";
   shader?: "mesh" | "waves" | "dots";
   css?: string;
   preview: string;
@@ -108,7 +108,10 @@ export default function AppBackground() {
     };
   }, []);
 
-  const bg = BACKGROUNDS.find((b) => b.id === bgId) || BACKGROUNDS.find((b) => b.id === defaultBgFor(theme)) || BACKGROUNDS[0];
+  const customBg = typeof window !== "undefined" ? (localStorage.getItem("jinntell_custom_bg") || "") : "";
+  const bg: BgPreset = (bgId === "custom-image" && customBg)
+    ? ({ id: "custom-image", name: "Свой фон", theme, kind: "image", preview: "" } as BgPreset)
+    : (BACKGROUNDS.find((b) => b.id === bgId) || BACKGROUNDS.find((b) => b.id === defaultBgFor(theme)) || BACKGROUNDS[0]);
 
   useEffect(() => {
     if (bg.kind !== "stars" && bg.kind !== "dust") return;
@@ -180,6 +183,12 @@ export default function AppBackground() {
           animation: bg.kind === "anim-gradient" && anim ? "bgShift 22s ease infinite" : undefined,
         }}
       />
+      {bg.kind === "image" && (
+        <>
+          <div className="absolute inset-0" style={{ backgroundImage: `url(${customBg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+          <div className="absolute inset-0" style={{ background: theme === "dark" ? "rgba(8,10,20,0.34)" : "rgba(246,243,233,0.20)" }} />
+        </>
+      )}
       {bg.kind === "shader" && mounted && (
         <>
           {bg.shader === "waves" ? (

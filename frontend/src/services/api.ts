@@ -1305,6 +1305,7 @@ export interface UserProfile {
   assistant_age?: number;
   has_password?: boolean;
   assistant_traits?: string;
+  custom_bg_url?: string;
   user_age?: number;
   balance_kopecks?: number;
 }
@@ -1324,6 +1325,18 @@ export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: str
     throw new ApiError(res.status, b.detail || "Ошибка загрузки");
   }
   return res.json();
+}
+export async function uploadBackgroundImage(file: File): Promise<{ bg_url: string }> {
+  const token = getToken();
+  file = await compressImage(file, 1600, 0.85);
+  const f = new FormData();
+  f.append("file", file);
+  const res = await fetch(`${API_BASE}/api/users/me/background-image`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: f });
+  if (!res.ok) { const b = await res.json().catch(() => ({ detail: res.statusText })); throw new ApiError(res.status, b.detail || "Ошибка загрузки"); }
+  return res.json();
+}
+export function deleteBackgroundImage(): Promise<{ ok: boolean }> {
+  return apiFetch("/api/users/me/background-image", { method: "DELETE" });
 }
 export async function uploadUserAvatar(file: File): Promise<{ avatar_url: string }> {
   file = await compressImage(file);

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, uploadBackgroundImage, deleteBackgroundImage, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 
 const THEMES = [
@@ -49,6 +49,8 @@ export default function SettingsModal({
   const [currentTheme, setCurrentTheme] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_theme") || "light" : "light"));
   const [customAccent, setCustomAccent] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_accent") || "#6c7bff" : "#6c7bff"));
   const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
+  const [customBg, setCustomBg] = useState("");
+  const [bgUploading, setBgUploading] = useState(false);
 
   // Персональные данные
   const [firstName, setFirstName] = useState("");
@@ -144,6 +146,7 @@ const _av = user.assistant_voice || "ermil";
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
       setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
       try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); } catch { /* noop */ }
+      setCustomBg(user.custom_bg_url || "");
     }
   }, [user, isOpen]);
 
@@ -192,6 +195,24 @@ const _av = user.assistant_voice || "ermil";
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally { setSaving(false); }
+  };
+
+  const handleBgUpload = async (file: File) => {
+    setBgUploading(true);
+    try {
+      const r = await uploadBackgroundImage(file);
+      setCustomBg(r.bg_url);
+      localStorage.setItem("jinntell_custom_bg", r.bg_url);
+      setBgId("custom-image"); localStorage.setItem("jinntell_bg", "custom-image");
+      window.dispatchEvent(new Event("jinntell_bg_change"));
+      updateMe({ background: "custom-image" } as Partial<UserProfile>).catch(() => {});
+    } catch { /* noop */ } finally { setBgUploading(false); }
+  };
+  const handleBgDelete = async () => {
+    try { await deleteBackgroundImage(); } catch { /* noop */ }
+    setCustomBg("");
+    localStorage.removeItem("jinntell_custom_bg");
+    if (bgId === "custom-image") { const d = defaultBgFor(currentTheme); setBgId(d); localStorage.setItem("jinntell_bg", d); window.dispatchEvent(new Event("jinntell_bg_change")); updateMe({ background: d } as Partial<UserProfile>).catch(() => {}); }
   };
 
   const handleChangePassword = async () => {
@@ -716,8 +737,33 @@ const _av = user.assistant_voice || "ermil";
             </div>
 
             <h3 className="text-sm font-medium mb-3 mt-6" style={{ color: "var(--text-primary)" }}>Фон</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                {bgUploading ? "Загрузка..." : "🖼 Свой фон"}
+                <input type="file" accept="image/*" className="hidden" disabled={bgUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBgUpload(f); e.target.value = ""; }} />
+              </label>
+              {customBg && (
+                <>
+                  <button onClick={() => { setBgId("custom-image"); localStorage.setItem("jinntell_bg", "custom-image"); window.dispatchEvent(new Event("jinntell_bg_change")); updateMe({ background: "custom-image" } as Partial<UserProfile>).catch(() => {}); }} className="rounded-lg overflow-hidden" style={{ border: bgId === "custom-image" ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)", width: 52, height: 34 }}>
+                    <div className="w-full h-full" style={{ backgroundImage: `url(${customBg.startsWith("data:") ? customBg : mediaUrl(customBg)})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                  </button>
+                  <button onClick={handleBgDelete} className="text-[11px]" style={{ color: "var(--text-muted)" }}>Удалить</button>
+                </>
+              )}
+            </div>
+            <p className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Стандартные</p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {backgroundsForTheme(currentTheme).filter((b) => b.kind === "gradient").map((b) => (
+                <button key={b.id} onClick={() => { setBgId(b.id); localStorage.setItem("jinntell_bg", b.id); window.dispatchEvent(new Event("jinntell_bg_change")); updateMe({ background: b.id } as Partial<UserProfile>).catch(() => {}); }}
+                  className="rounded-xl overflow-hidden transition-all" style={{ border: bgId === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
+                  <div className="h-12 w-full" style={{ background: b.preview }} />
+                  <div className="text-[10px] py-1 text-center" style={{ color: bgId === b.id ? "var(--accent)" : "var(--text-muted)" }}>{b.name}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Анимированные</p>
             <div className="grid grid-cols-3 gap-2">
-              {backgroundsForTheme(currentTheme).map((b) => (
+              {backgroundsForTheme(currentTheme).filter((b) => b.kind !== "gradient").map((b) => (
                 <button key={b.id} onClick={() => { setBgId(b.id); localStorage.setItem("jinntell_bg", b.id); window.dispatchEvent(new Event("jinntell_bg_change")); updateMe({ background: b.id } as Partial<UserProfile>).catch(() => {}); }}
                   className="rounded-xl overflow-hidden transition-all" style={{ border: bgId === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
                   <div className="h-12 w-full" style={{ background: b.preview }} />

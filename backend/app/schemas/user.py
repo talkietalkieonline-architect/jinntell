@@ -12,6 +12,7 @@ class UserOut(BaseModel):
     theme: str
     avatar_color: str
     background: str
+    custom_bg_url: Optional[str] = None
     custom_accent: str
     is_online: bool
     is_admin: bool = False
@@ -55,6 +56,7 @@ class UserOut(BaseModel):
             theme=user.theme,
             avatar_color=user.avatar_color,
             background=user.background,
+            custom_bg_url=getattr(user, "custom_bg_url", None),
             custom_accent=user.custom_accent,
             is_online=user.is_online,
             is_admin=user.is_admin,

@@ -194,6 +194,53 @@ _STORAGE_ROOT = "/app/storage"
 _ALLOWED_IMG = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
 
 
+@router.post("/me/background-image")
+async def upload_background_image(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить свой фон приложения."""
+    ext = _ALLOWED_IMG.get(file.content_type or "")
+    if not ext:
+        raise HTTPException(400, "Только изображения: jpg, png, webp, gif")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(400, "Файл больше 20 МБ")
+    d = os.path.join(_STORAGE_ROOT, "users", str(user.id))
+    os.makedirs(d, exist_ok=True)
+    for fn in os.listdir(d):
+        if fn.startswith("bg."):
+            try:
+                os.remove(os.path.join(d, fn))
+            except OSError:
+                pass
+    fname = f"bg.{ext}"
+    with open(os.path.join(d, fname), "wb") as f:
+        f.write(data)
+    url = f"/api/storage/users/{user.id}/{fname}"
+    user.custom_bg_url = url
+    await db.flush()
+    return {"bg_url": url}
+
+
+@router.delete("/me/background-image")
+async def delete_background_image(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить свой фон."""
+    if user.custom_bg_url and user.custom_bg_url.startswith("/api/storage/"):
+        rel = user.custom_bg_url.replace("/api/storage/", "", 1)
+        try:
+            os.remove(os.path.join(_STORAGE_ROOT, rel))
+        except OSError:
+            pass
+    user.custom_bg_url = None
+    await db.flush()
+    return {"ok": True}
+
+
 @router.post("/me/assistant-photo")
 async def upload_assistant_photo(
     file: UploadFile = File(...),

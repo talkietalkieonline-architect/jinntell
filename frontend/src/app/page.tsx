@@ -577,6 +577,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
+  useEffect(() => { if (user?.custom_bg_url) { try { localStorage.setItem("jinntell_custom_bg", user.custom_bg_url); } catch { /* noop */ } } }, [user?.custom_bg_url]);
 
   // Геотриггер: опрос позиции при открытом приложении (если пользователь разрешил геолокацию)
   const [geoKnock, setGeoKnock] = useState<GeoDelivery | null>(null);
