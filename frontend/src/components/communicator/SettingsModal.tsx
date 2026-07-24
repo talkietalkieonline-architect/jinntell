@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, uploadBackgroundImage, deleteBackgroundImage, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
+import { AVATAR_FRAMES, FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
 
 const THEMES = [
   { id: "light", name: "Светлая", desc: "Белый фон, тёмный текст" },
@@ -50,6 +51,7 @@ export default function SettingsModal({
   const [customAccent, setCustomAccent] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_accent") || "#6c7bff" : "#6c7bff"));
   const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
   const [customBg, setCustomBg] = useState("");
+  const [avatarFrame, setAvatarFrame] = useState("");
   const [bgUploading, setBgUploading] = useState(false);
 
   // Персональные данные
@@ -149,6 +151,7 @@ const _av = user.assistant_voice || "ermil";
       setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
       try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); } catch { /* noop */ }
       setCustomBg(user.custom_bg_url || "");
+      setAvatarFrame(user.avatar_frame || "");
     }
   }, [user, isOpen]);
 
@@ -405,8 +408,11 @@ const _av = user.assistant_voice || "ermil";
 
               <div className="text-[11px] uppercase tracking-widest font-semibold mb-2 mt-3 pt-3" style={{ color: "var(--accent)", borderTop: "1px solid var(--bg-glass-border)" }}>Профиль · ваш образ</div>
               <div className="flex flex-col items-center gap-2 mb-1">
-                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                  {avatarUrl ? <img src={avatarUrl.startsWith("data:") ? avatarUrl : mediaUrl(avatarUrl)} alt="Аватар" className="w-full h-full object-cover" /> : <span className="text-3xl" style={{ color: "var(--text-muted)" }}>{(displayName || firstName || "?")[0]}</span>}
+                <div style={{ position: "relative", width: 96, height: 96 }}>
+                  <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", boxShadow: frameRing(avatarFrame) }}>
+                    {avatarUrl ? <img src={avatarUrl.startsWith("data:") ? avatarUrl : mediaUrl(avatarUrl)} alt="Аватар" className="w-full h-full object-cover" /> : <span className="text-3xl" style={{ color: "var(--text-muted)" }}>{(displayName || firstName || "?")[0]}</span>}
+                  </div>
+                  <FrameDeco frame={avatarFrame} size={96} />
                 </div>
                 <div className="flex gap-2">
                   <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
@@ -434,6 +440,15 @@ const _av = user.assistant_voice || "ermil";
                   ))}
                 </div>
                 <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Публичный образ — может отличаться от реального пола.</p>
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Рамка аватара · видят другие</label>
+                <div className="flex flex-wrap gap-2">
+                  {AVATAR_FRAMES.map((fr) => (
+                    <button key={fr.id || "none"} onClick={() => { setAvatarFrame(fr.id); updateMe({ avatar_frame: fr.id } as Partial<UserProfile>).catch(() => {}); }} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass)", color: avatarFrame === fr.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{fr.label}</button>
+                  ))}
+                </div>
               </div>
 
               <div>

@@ -464,6 +464,7 @@ export interface ContactOut {
   jinntell_link?: string | null;
   avatar_color?: string | null;
   avatar_url?: string | null;
+  avatar_frame?: string | null;
   is_online: boolean;
 }
 export function getContacts(): Promise<ContactOut[]> {
@@ -1306,6 +1307,7 @@ export interface UserProfile {
   has_password?: boolean;
   assistant_traits?: string;
   custom_bg_url?: string;
+  avatar_frame?: string;
   user_age?: number;
   balance_kopecks?: number;
 }

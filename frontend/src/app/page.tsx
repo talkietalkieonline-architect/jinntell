@@ -299,11 +299,11 @@ export default function Home() {
     return me === a ? b : me === b ? a : null;
   };
 
-  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean }) => {
+  const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean; avatar_frame?: string | null }) => {
     const uid = getUserId();
     if (!uid) return;
     const r = dmRoom(uid, c.id);
-    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null, online: c.is_online }]));
+    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null, online: c.is_online, frame: c.avatar_frame || null }]));
     setRoom(r);
     setView("chat");
     setAgentsOpen(false);

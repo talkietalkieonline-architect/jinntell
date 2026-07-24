@@ -2,7 +2,8 @@
 import { useRef, useEffect, useState } from "react";
 import { mediaUrl } from "@/services/api";
 
-export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean };
+import { FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
+export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean; frame?: string | null };
 
 /** Верхняя панель + горизонтальная лента открытых чатов (вместо боковых створок). */
 export default function NavBar({
@@ -138,6 +139,7 @@ export default function NavBar({
               name={c.name}
               color={c.color}
               photo={c.photo}
+              frame={c.frame}
               count={c.count}
               online={c.online}
               muted={mutedRooms?.includes(c.room)}
@@ -268,6 +270,7 @@ function ChatAvatar({
   name,
   color,
   photo,
+  frame,
   onClick,
   onClose,
   count,
@@ -278,6 +281,7 @@ function ChatAvatar({
   name: string;
   color: string;
   photo?: string | null;
+  frame?: string | null;
   onClick: () => void;
   onClose?: () => void;
   count?: number;
@@ -287,27 +291,31 @@ function ChatAvatar({
   const size = active ? 54 : 42;
   return (
     <div className="flex flex-col items-center gap-1 shrink-0 relative" style={{ width: 62 }}>
-      <button
-        onClick={onClick}
-        className="rounded-full flex items-center justify-center font-bold transition-all overflow-hidden"
-        style={{
-          width: size,
-          height: size,
-          background: photo ? "transparent" : "var(--bg-glass)",
-          border: active ? `2px solid ${color}` : "1.5px solid var(--bg-glass-border)",
-          color,
-        }}
-      >
-        {photo ? (
-          <img
-            src={photo.startsWith("data:") ? photo : mediaUrl(photo)}
-            alt=""
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          name[0]
-        )}
-      </button>
+      <div style={{ position: "relative", width: size, height: size }}>
+        <button
+          onClick={onClick}
+          className="rounded-full flex items-center justify-center font-bold transition-all overflow-hidden"
+          style={{
+            width: size,
+            height: size,
+            background: photo ? "transparent" : "var(--bg-glass)",
+            border: active ? `2px solid ${color}` : "1.5px solid var(--bg-glass-border)",
+            color,
+            boxShadow: frameRing(frame),
+          }}
+        >
+          {photo ? (
+            <img
+              src={photo.startsWith("data:") ? photo : mediaUrl(photo)}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            name[0]
+          )}
+        </button>
+        <FrameDeco frame={frame} size={size} />
+      </div>
       {onClose && active && (
         <button
           onClick={(e) => {

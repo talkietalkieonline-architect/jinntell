@@ -22,6 +22,7 @@ class ContactOut(BaseModel):
     jinntell_link: Optional[str] = None
     avatar_color: Optional[str] = None
     avatar_url: Optional[str] = None
+    avatar_frame: Optional[str] = None
     is_online: bool = False
 
     class Config:

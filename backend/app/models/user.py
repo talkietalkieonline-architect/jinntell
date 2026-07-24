@@ -59,6 +59,7 @@ class User(Base):
     persona_gender: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # образ (публично)
     interests: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    avatar_frame: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # рамка/декор аватара (виден другим)
     background: Mapped[str] = mapped_column(String(50), default="soft")
     custom_accent: Mapped[str] = mapped_column(String(20), default="#6c7bff")
 

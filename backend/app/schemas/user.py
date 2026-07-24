@@ -13,6 +13,7 @@ class UserOut(BaseModel):
     avatar_color: str
     background: str
     custom_bg_url: Optional[str] = None
+    avatar_frame: Optional[str] = None
     custom_accent: str
     is_online: bool
     is_admin: bool = False
@@ -57,6 +58,7 @@ class UserOut(BaseModel):
             avatar_color=user.avatar_color,
             background=user.background,
             custom_bg_url=getattr(user, "custom_bg_url", None),
+            avatar_frame=getattr(user, "avatar_frame", None),
             custom_accent=user.custom_accent,
             is_online=user.is_online,
             is_admin=user.is_admin,
@@ -90,6 +92,7 @@ class UserUpdate(BaseModel):
     theme: Optional[str] = None
     avatar_color: Optional[str] = None
     background: Optional[str] = None
+    avatar_frame: Optional[str] = None
     custom_accent: Optional[str] = None
     bio: Optional[str] = None
     # Персональные данные
