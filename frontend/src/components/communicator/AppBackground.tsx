@@ -51,6 +51,13 @@ const SH = {
   },
 };
 
+const PALETTES: Record<string, typeof SH.light> = {
+  gold: { mesh: ["#f6f2e8", "#e7e1cf", "#e9d29a", "#d9a534", "#b8860b"], wavesFront: "#d9a534", wavesBack: "#f4eede", dots: ["#d9a534", "#c08a1e", "#e9d29a"], dotsBack: "#faf6ee" },
+  emerald: { mesh: ["#06231c", "#0a1726", "#0d3226", "#1d5e54", "#08121a"], wavesFront: "#1d5e54", wavesBack: "#06231c", dots: ["#1d5e54", "#0d3226", "#2a7d6e"], dotsBack: "#06120e" },
+  indigo: { mesh: ["#0e1430", "#1a1140", "#2a124e", "#3a1d6e", "#0a0e18"], wavesFront: "#3a1d6e", wavesBack: "#0a0e18", dots: ["#3a1d6e", "#2a124e", "#4a2d8e"], dotsBack: "#0a0e18" },
+  rose: { mesh: ["#2a0f1e", "#3e1330", "#5e1d4a", "#8e2d6a", "#160a12"], wavesFront: "#8e2d6a", wavesBack: "#2a0f1e", dots: ["#8e2d6a", "#5e1d4a", "#b84d8a"], dotsBack: "#1a0a12" },
+};
+
 export function backgroundsForTheme(theme: string): BgPreset[] {
   const list = theme === "custom" ? BACKGROUNDS : BACKGROUNDS.filter((b) => b.theme === theme);
   return shaderEnabled() ? list : list.filter((b) => b.kind !== "shader");
@@ -75,6 +82,8 @@ export default function AppBackground() {
   const [bgId, setBgId] = useState("soft");
   const [theme, setTheme] = useState("light");
   const [anim, setAnim] = useState(true);
+  const [animSpeed, setAnimSpeed] = useState(1);
+  const [animPalette, setAnimPalette] = useState("");
   const [mounted, setMounted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -84,11 +93,13 @@ export default function AppBackground() {
       const t = curTheme();
       setTheme(t);
       setAnim(animEnabled());
+      try { const sp = parseFloat(localStorage.getItem("jinntell_anim_speed") || "1"); setAnimSpeed(isNaN(sp) ? 1 : sp); } catch { setAnimSpeed(1); }
+      try { setAnimPalette(localStorage.getItem("jinntell_anim_palette") || ""); } catch { setAnimPalette(""); }
       let id = "";
       try { id = localStorage.getItem("jinntell_bg") || ""; } catch { id = ""; }
       const found = BACKGROUNDS.find((b) => b.id === id);
       // фон должен подходить теме (для custom — любой)
-      if (!found || (t !== "custom" && found.theme !== t)) id = defaultBgFor(t);
+      if (id !== "custom-image" && (!found || (t !== "custom" && found.theme !== t))) id = defaultBgFor(t);
       // если шейдеры выключены глобально — откат на обычный фон
       if (found && found.kind === "shader" && !shaderEnabled()) id = defaultBgFor(t);
       setBgId(id);
@@ -133,7 +144,7 @@ export default function AppBackground() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const p of pts) {
         if (move) {
-          p.x += p.vx; p.y += p.vy; p.tw += 0.03;
+          p.x += p.vx * animSpeed; p.y += p.vy * animSpeed; p.tw += 0.03 * animSpeed;
           if (p.x < 0) p.x = canvas.width;
           if (p.x > canvas.width) p.x = 0;
           if (p.y < 0) p.y = canvas.height;
@@ -157,7 +168,7 @@ export default function AppBackground() {
     };
     raf = requestAnimationFrame(loop);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
-  }, [bg.kind, anim]);
+  }, [bg.kind, anim, animSpeed]);
 
   const baseStyle = bg.kind === "stars"
     ? "radial-gradient(circle at 50% 30%,#0b1020,#05060c)"
@@ -170,7 +181,7 @@ export default function AppBackground() {
           : bg.css;
 
   const st = bg.theme === "dark" ? "dark" : "light";
-  const pal = SH[st];
+  const pal = (animPalette && PALETTES[animPalette]) ? PALETTES[animPalette] : SH[st];
   const shaderStyle = { position: "absolute" as const, inset: 0, width: "100%", height: "100%" };
 
   return (
@@ -180,7 +191,7 @@ export default function AppBackground() {
         style={{
           background: baseStyle,
           backgroundSize: bg.kind === "anim-gradient" ? "300% 300%" : "cover",
-          animation: bg.kind === "anim-gradient" && anim ? "bgShift 22s ease infinite" : undefined,
+          animation: bg.kind === "anim-gradient" && anim ? `bgShift ${22 / (animSpeed || 1)}s ease infinite` : undefined,
         }}
       />
       {bg.kind === "image" && (
@@ -196,7 +207,7 @@ export default function AppBackground() {
           ) : bg.shader === "dots" ? (
             <DotOrbit style={shaderStyle} colors={pal.dots} colorBack={pal.dotsBack} size={0.5} sizeRange={0.5} spreading={0.6} stepsPerColor={2} />
           ) : (
-            <MeshGradient style={shaderStyle} colors={pal.mesh} speed={anim ? 0.16 : 0} distortion={0.85} swirl={0.55} />
+            <MeshGradient style={shaderStyle} colors={pal.mesh} speed={anim ? 0.16 * animSpeed : 0} distortion={0.85} swirl={0.55} />
           )}
           {/* мягкий скрим — чтобы стеклянные панели и текст читались */}
           <div

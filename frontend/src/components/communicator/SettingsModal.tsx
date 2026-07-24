@@ -85,6 +85,8 @@ export default function SettingsModal({
   const [animOn, setAnimOn] = useState(
     typeof window === "undefined" || localStorage.getItem("jinntell_anim_off") !== "1"
   );
+  const [animSpeed, setAnimSpeed] = useState(() => { try { return parseFloat(localStorage.getItem("jinntell_anim_speed") || "1") || 1; } catch { return 1; } });
+  const [animPalette, setAnimPalette] = useState(() => { try { return localStorage.getItem("jinntell_anim_palette") || ""; } catch { return ""; } });
   const [actApproaches, setActApproaches] = useState("all");
   const [actLocation, setActLocation] = useState(false);
   const [actPromo, setActPromo] = useState(true);
@@ -807,6 +809,19 @@ const _av = user.assistant_voice || "ermil";
                 />
               </label>
             </div>
+            {animOn && (
+              <div className="mt-4">
+                <span className="text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Скорость анимации</span>
+                <input type="range" min="0.2" max="2" step="0.1" value={animSpeed} onChange={(e) => { const v = parseFloat(e.target.value); setAnimSpeed(v); localStorage.setItem("jinntell_anim_speed", String(v)); window.dispatchEvent(new Event("jinntell_anim_change")); }} className="w-full" style={{ accentColor: "var(--accent)" }} />
+                <span className="text-[11px] uppercase tracking-wider block mb-2 mt-3" style={{ color: "var(--text-muted)" }}>Палитра анимации</span>
+                <div className="flex gap-2">
+                  {[{ id: "", label: "Тема", c: "linear-gradient(135deg,var(--accent),var(--bg-glass))" }, { id: "gold", label: "Золото", c: "linear-gradient(135deg,#e9d29a,#d9a534)" }, { id: "emerald", label: "Изумруд", c: "linear-gradient(135deg,#0d3226,#1d5e54)" }, { id: "indigo", label: "Индиго", c: "linear-gradient(135deg,#1a1140,#3a1d6e)" }, { id: "rose", label: "Роза", c: "linear-gradient(135deg,#3e1330,#8e2d6a)" }].map((pl) => (
+                    <button key={pl.id || "theme"} onClick={() => { setAnimPalette(pl.id); localStorage.setItem("jinntell_anim_palette", pl.id); window.dispatchEvent(new Event("jinntell_anim_change")); }} title={pl.label} className="flex-1 h-8 rounded-lg transition-all" style={{ background: pl.c, border: animPalette === pl.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }} />
+                  ))}
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Палитра влияет на фоны-шейдеры (Аврора/Волны/Точки).</p>
+              </div>
+            )}
             <button onClick={() => { setSaved(true); setTimeout(() => onClose(), 600); }} className="w-full mt-6 py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Готово</button>
             {saved && <p className="text-xs text-center mt-2" style={{ color: "#2ecc71" }}>Сохранено!</p>}
           </div>
