@@ -45,6 +45,7 @@ async def update_news_channel() -> int:
     if not items:
         return 0
     added = 0
+    new_items = []
     async with async_session() as db:
         for it in items:
             ex = (await db.execute(select(ChannelPost).where(
@@ -53,9 +54,27 @@ async def update_news_channel() -> int:
             if ex:
                 continue
             db.add(ChannelPost(agent_id=NEWS_AGENT_ID, title=it["title"], body=it["body"], url=it["url"], guid=it["guid"]))
+            new_items.append(it)
             added += 1
         if added:
             await db.commit()
+    # Память канала: те же новости кладём в RAG агента (с датой), чтобы он МОГ ОТВЕЧАТЬ, а не только постить
+    if new_items:
+        try:
+            from datetime import datetime, timezone
+            from app.services import rag as _rag
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            chunks = [{
+                "text": f"[{today}] {it['title']}. {it['body']}".strip(),
+                "article_number": "",
+                "layer": "news",
+                "source_title": "Новости СПб",
+                "metadata": {"url": it["url"], "guid": it["guid"], "date": today},
+            } for it in new_items]
+            await _rag.index_chunks(NEWS_AGENT_ID, chunks)
+            print(f"[news] indexed {len(chunks)} news chunks into RAG")
+        except Exception as e:
+            print(f"[news] RAG index failed: {e}")
     print(f"[news] added {added} posts")
     return added
 
