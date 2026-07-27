@@ -241,6 +241,32 @@ async def assistant_web_search(body: IntentRequest, user: User = Depends(get_cur
     return {"ok": True, "text": answer, "sources": sources}
 
 
+@router.post("/assistant-act")
+async def assistant_act(body: IntentRequest, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Помощник на tool-calling: модель сама выбирает инструменты. Возвращает {reply, directives, steps}.
+    Директивы (open_chat/close_chat/call/send_message) выполняет фронт. Экспериментальный путь рядом с классификатором."""
+    from app.services.assistant_agent import run
+    result = await run(user_id=user.id, text=(body.text or ""), assistant_name=(user.assistant_name or "Джим"))
+    # след в истории помощника (jim-{uid}) — чинит «помощник пропал»
+    try:
+        room = f"jim-{user.id}"
+        if body.text:
+            db.add(Message(room=room, sender_type="user", sender_user_id=user.id, sender_name=user.display_name, text=body.text))
+        if result.get("reply"):
+            db.add(Message(room=room, sender_type="assistant", sender_name=(user.assistant_name or "Джим"), text=result["reply"]))
+        await db.commit()
+    except Exception:
+        pass
+    try:
+        from app.services.activity import log as _log
+        await _log("assistant.act", user_id=user.id, actor="assistant",
+                   detail=(body.text or "")[:500],
+                   result=("+".join(s.get("tool", "") for s in result.get("steps", [])) or "reply"))
+    except Exception:
+        pass
+    return result
+
+
 class ForwardRequest(BaseModel):
     room: str
     text: str = ""
