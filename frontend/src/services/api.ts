@@ -229,6 +229,7 @@ export interface AgentOut {
   owner_id?: number;
   scope?: string;
   city?: string | null;
+  is_paid?: boolean;
 }
 
 export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }

@@ -498,7 +498,10 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
     except Exception:
         pass
     if _blocked:
-        reply_text = agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂"
+        if _ptype == "user" and getattr(agent, "is_paid", False):
+            reply_text = "🔒 Это платный джинн, а на балансе недостаточно средств. Пополните баланс, чтобы продолжить общение."
+        else:
+            reply_text = agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂"
     else:
         reply_text = await get_agent_reply(**_agent_kwargs)
         # Guardian: анти-галлюцинации для ответов с базой знаний (сверка + строгая перегенерация)

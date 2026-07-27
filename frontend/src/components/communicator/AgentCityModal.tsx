@@ -54,6 +54,7 @@ export default function AgentCityModal({
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
   const [semantic, setSemantic] = useState<AgentOut[] | null>(null);
+  const [paidConfirm, setPaidConfirm] = useState<{ id: number; name: string } | null>(null);
   const [searching, setSearching] = useState(false);
   const { user } = useAuth();
   const [cities, setCities] = useState<CityOut[]>([]);
@@ -150,6 +151,22 @@ export default function AgentCityModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {paidConfirm && (
+          <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 120 }} onClick={() => setPaidConfirm(null)}>
+            <div className="absolute inset-0 bg-black/70" />
+            <div className="relative w-full max-w-xs rounded-2xl p-5 text-center" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)" }} onClick={(e) => e.stopPropagation()}>
+              <div className="text-3xl mb-2">🔒</div>
+              <div className="text-base font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{paidConfirm.name} — платный джинн</div>
+              <p className="text-[13px] mb-3" style={{ color: "var(--text-secondary)" }}>Общение списывается с вашего баланса по мере разговора.</p>
+              <div className="text-sm mb-3" style={{ color: "var(--text-muted)" }}>Баланс: <b style={{ color: (user?.balance_kopecks ?? 0) > 0 ? "var(--accent)" : "var(--danger)" }}>{(((user?.balance_kopecks ?? 0)) / 100).toLocaleString("ru")} ₽</b></div>
+              {(user?.balance_kopecks ?? 0) <= 0 && <p className="text-[11px] mb-3" style={{ color: "var(--danger)" }}>Баланс пуст — пополните, иначе джинн не ответит.</p>}
+              <div className="flex gap-2">
+                <button onClick={() => setPaidConfirm(null)} className="flex-1 py-2 rounded-xl text-sm" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>Отмена</button>
+                <button onClick={() => { const id = paidConfirm.id; setPaidConfirm(null); setSelectedAgent(null); onStartChat?.(id); }} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Продолжить</button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Шапка */}
         <div className="px-6 pt-5 pb-3">
           <div className="flex items-center justify-between mb-4">
@@ -409,8 +426,8 @@ export default function AgentCityModal({
                           toggleAdd(agentDetails.id);
                         }
                         if (action === "Начать чат") {
-                          setSelectedAgent(null);
-                          onStartChat?.(agentDetails.id);
+                          if (agentDetails.is_paid) { setPaidConfirm({ id: agentDetails.id, name: agentDetails.name }); }
+                          else { setSelectedAgent(null); onStartChat?.(agentDetails.id); }
                         }
                       }}
                     >
