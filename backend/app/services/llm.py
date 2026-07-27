@@ -170,6 +170,26 @@ async def _call_deepseek(messages: list, model: str, api_key: str, max_tokens: i
         return text
 
 
+async def deepseek_tools(messages: list, tools: list, model: str = None, max_tokens: int = 800) -> dict:
+    """DeepSeek с function calling. Возвращает assistant-сообщение: {"content": str, "tool_calls": list}."""
+    api_key = settings.DEEPSEEK_API_KEY
+    m = model or settings.DEEPSEEK_MODEL or "deepseek-chat"
+    if not api_key:
+        return {"content": "", "tool_calls": []}
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            "https://api.deepseek.com/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": m, "messages": messages, "tools": tools, "tool_choice": "auto",
+                  "max_tokens": max_tokens, "temperature": 0.2},
+        )
+        if r.status_code != 200:
+            print(f"[llm] DeepSeek tools error: {r.status_code} {r.text[:300]}")
+            return {"content": "", "tool_calls": []}
+        msg = r.json()["choices"][0]["message"]
+        return {"content": msg.get("content") or "", "tool_calls": msg.get("tool_calls") or []}
+
+
 async def _call_openai(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
