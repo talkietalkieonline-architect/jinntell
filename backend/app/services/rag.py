@@ -45,6 +45,23 @@ async def _get_min_score() -> float:
 # ── Лёгкий гибрид: лексический reranking поверх векторных кандидатов ──
 _LEX_WEIGHT = 0.30   # вклад лексического совпадения
 _CAND_FLOOR = 0.3    # минимальный dense-score кандидата до reranking
+_RECENCY_WEIGHT = 0.15  # бонус за новизну для датированного контента (новости/каналы)
+_RECENCY_DAYS = 30      # за сколько дней бонус убывает до 0
+
+
+def _recency_bonus(date_str) -> float:
+    """Бонус за свежесть для чанков с датой YYYY-MM-DD. Недатированные (законы/ПДД) → 0."""
+    if not date_str:
+        return 0.0
+    try:
+        from datetime import datetime, timezone
+        d = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - d).days
+        if age_days < 0:
+            age_days = 0
+        return _RECENCY_WEIGHT * max(0.0, 1.0 - age_days / _RECENCY_DAYS)
+    except Exception:
+        return 0.0
 _RU_STOP = {
     "как", "что", "где", "для", "это", "при", "или", "под", "над", "без", "про",
     "мне", "мой", "моя", "мои", "они", "она", "его", "нее", "них", "тебя", "меня",
@@ -305,6 +322,7 @@ async def search(
         dense = float(point.get("score", 0.0) or 0.0)
         text = payload.get("text", "")
         combined = dense + _LEX_WEIGHT * _lex_score(q_tokens, _tokenize(text), _corpus["N"], _corpus["df"])
+        combined += _recency_bonus(payload.get("date"))
         scored.append((combined, RAGChunk(
             text=text,
             score=round(combined, 4),
