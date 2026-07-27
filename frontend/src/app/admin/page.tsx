@@ -1146,7 +1146,7 @@ export default function AdminPage() {
               </div>
 
               <div className="bg-gray-900 border border-amber-800/40 rounded-lg p-4 space-y-3">
-                <p className="text-sm text-amber-400 font-medium">Эмбеддинги (семантика / RAG)</p>
+                <p className="text-sm text-amber-400 font-medium">Провайдеры (RAG · веб-поиск)</p>
                 {embConfig.map((c) => (
                   <div key={c.key} className="flex items-center gap-2">
                     <span className="text-sm text-gray-300 w-2/5">{c.label}</span>

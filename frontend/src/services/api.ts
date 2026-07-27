@@ -458,6 +458,10 @@ export function classifyIntent(text: string): Promise<IntentResult> {
   return apiFetch("/api/chat/intent", { method: "POST", body: JSON.stringify({ text }) });
 }
 
+export function webSearch(query: string): Promise<{ ok: boolean; text: string; sources?: { title: string; url: string }[] }> {
+  return apiFetch("/api/chat/web-search", { method: "POST", body: JSON.stringify({ text: query }) });
+}
+
 export interface ContactOut {
   id: number;
   display_name: string;

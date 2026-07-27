@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -348,7 +348,7 @@ export default function Home() {
     const uid = getUserId();
     if (a === "chat") { sendMessage(t); return; }
     if (a === "clarify") { pushAssistant(intent.text || "Уточни, что именно сделать?"); return; }
-    if (a === "web_search") { pushAssistant(`🔎 «${intent.query || t}» — веб-поиск скоро подключим.`); return; }
+    if (a === "web_search") { const _q = intent.query || t; setCommandHint(`🔎 Ищу «${_q}»…`); webSearch(_q).then((r) => { let _m = r.text || "Ничего не нашлось."; if (r.sources && r.sources.length) _m += "\n\n" + r.sources.map((sr) => `• ${sr.title} — ${sr.url}`).join("\n"); pushAssistant(_m); }).catch(() => pushAssistant("Поиск не удался.")); return; }
     if (a === "send_media") { pushAssistant("Прикрепи фото через 📎 и скажи, кому переслать."); return; }
     if (a === "open_chat" || a === "summon_jinn") {
       const c = target ? findContact(target) : undefined;

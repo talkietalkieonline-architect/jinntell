@@ -1109,11 +1109,14 @@ INTEGRATION_KEYS = [
     {"key": "GEMINI_API_KEY", "label": "Gemini — API-ключ (нужен прокси из РФ)"},
     {"key": "OPENAI_API_KEY", "label": "OpenAI — API-ключ"},
     {"key": "JINA_API_KEY", "label": "Jina — API-ключ"},
+    {"key": "TAVILY_API_KEY", "label": "Веб-поиск: Tavily — API-ключ (бесплатный тариф ~1000/мес)"},
+    {"key": "BRAVE_API_KEY", "label": "Веб-поиск: Brave Search — API-ключ (альтернатива Tavily)"},
 ]
 
 EMBEDDING_CONFIG = [
     {"key": "EMBEDDING_PROVIDER", "label": "Провайдер эмбеддингов", "options": ["yandex", "gemini", "openai", "jina"]},
     {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (для Gemini/OpenAI/Jina из РФ)", "options": None},
+    {"key": "WEB_SEARCH_PROVIDER", "label": "Провайдер веб-поиска помощника", "options": ["off", "tavily", "brave"]},
 ]
 
 

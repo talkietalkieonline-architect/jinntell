@@ -211,6 +211,36 @@ async def assistant_intent(body: IntentRequest, user: User = Depends(get_current
     }
 
 
+@router.post("/web-search")
+async def assistant_web_search(body: IntentRequest, user: User = Depends(get_current_user)):
+    """Веб-поиск помощника. Провайдер/ключ — из админки. Возвращает готовый ответ + источники."""
+    from app.services import websearch
+    q = (body.text or "").strip()
+    if not q:
+        return {"ok": False, "text": "Что искать?"}
+    res = await websearch.search(q, max_results=5)
+    if not res.get("ok"):
+        reason = res.get("reason", "")
+        if reason == "off":
+            return {"ok": False, "text": "Веб-поиск не подключён. Включите провайдера в админке → Интеграции."}
+        if reason == "no_key":
+            return {"ok": False, "text": f"Веб-поиск ({res.get('provider')}) без ключа — добавьте ключ в админке."}
+        return {"ok": False, "text": "Не удалось выполнить поиск сейчас."}
+    results = res.get("results") or []
+    answer = res.get("answer") or ""
+    if not answer and not results:
+        return {"ok": True, "text": "По запросу ничего не нашлось.", "sources": []}
+    if not answer and results:
+        ctx = "\n".join(f"- {r['title']}: {r['snippet']} ({r['url']})" for r in results[:5])
+        answer = await get_llm_reply(
+            user_message=f"Вопрос: {q}\n\nРезультаты веба:\n{ctx}\n\nКоротко ответь по существу на русском, опираясь на результаты.",
+            system_prompt="Ты помощник, кратко отвечаешь по веб-результатам, без выдумок.",
+            max_tokens=300, user_id=user.id, payer_type="free",
+        )
+    sources = [{"title": r["title"], "url": r["url"]} for r in results[:5]]
+    return {"ok": True, "text": answer, "sources": sources}
+
+
 class ForwardRequest(BaseModel):
     room: str
     text: str = ""
