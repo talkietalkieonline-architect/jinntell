@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -103,7 +103,7 @@ export default function Home() {
   // Чат — через хук (WebSocket + offline fallback)
   const {
     messages, isTyping, typingName, isConnected,
-    sendMessage, attachMedia, pushAssistant, room, setRoom, agentInfo, roomMembers,
+    sendMessage, attachMedia, pushAssistant, pushUser, room, setRoom, agentInfo, roomMembers,
   } = useChat(getJimRoom());
 
   const roomRef = useRef(room);
@@ -340,6 +340,25 @@ export default function Home() {
     return false;
   }, [openAgentChat]);
 
+  const runDirectives = useCallback(async (directives: { action: string; name?: string; to?: string; text?: string }[]) => {
+    const uid = getUserId();
+    for (const d of directives) {
+      const nm = (d.name || d.to || "").trim();
+      if (d.action === "open_chat") {
+        const c = nm ? findContact(nm) : undefined;
+        if (c) openDM(c); else await summonJinn(nm);
+      } else if (d.action === "close_chat") {
+        const oc = openChatsRef.current.find((cc) => { const n = (cc.name || "").toLowerCase(); const w = nm.toLowerCase(); return n === w || n.includes(w) || w.includes(n); });
+        if (oc) closeChatRef.current(oc.room);
+        else if (uid) { const c = findContact(nm); if (c) closeChatRef.current(dmRoom(uid, c.id)); }
+      } else if (d.action === "call") {
+        const c = nm ? findContact(nm) : undefined; if (c) openDM(c);
+      } else if (d.action === "send_message") {
+        const c = nm ? findContact(nm) : undefined; if (c && d.text) dmSend(c.id, d.text);
+      }
+    }
+  }, [findContact, openDM, summonJinn]);
+
   const classifyAndAct = useCallback(async (t: string) => {
     let intent;
     try { intent = await classifyIntent(t); } catch { intent = { action: "chat", target: "", text: "", query: "" }; }
@@ -397,37 +416,15 @@ export default function Home() {
       t = t.replace(new RegExp("^" + esc + "[,\\s]+", "i"), "").trim(); // убрать обращение по имени помощника
       // Экран «Поток» (hands-free)
       if (/^(?:вкл\w*\s+|включи\s+|открой\s+|запусти\s+)?(?:поток|без рук|hands.?free)\.?$/i.test(t)) { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); setCommandHint(""); return; }
-      const uid = getUserId();
-      let m: RegExpMatchArray | null;
-      // отправь <кому> [сообщение] <текст>  /  напиши <кому>: <текст>
-      if (uid && (m = t.match(/^(?:отправ\w*|напиши(?:те)?|передай(?:те)?)\s+(?:сообщени\w*\s+)?(?:для\s+|к\s+)?([\wёа-я@_-]+)[\s:,-]+(.+)$/i))) {
-        const c = findContact(m[1]);
-        if (c) { const body = m[2].trim(); dmSend(c.id, body).then(() => setCommandHint(`Отправил ${c.display_name}: «${body}»`)).catch(() => setCommandHint("Не удалось отправить")); return; }
-        setCommandHint(`Не нашёл контакт «${m[1].trim()}»`); return;
-      }
-      // закрой [чат] [с <кем>]
-      if ((m = t.match(/^закр\w+(?:\s+чат)?(?:\s+с)?\s*(.*)$/i))) {
-        const who = m[1].trim();
-        if (who) { const _oc = openChatsRef.current.find((cc) => { const nm = (cc.name || "").toLowerCase(); const w = who.toLowerCase(); return nm === w || nm.includes(w) || w.includes(nm); }); if (_oc) { closeChatRef.current(_oc.room); setCommandHint(`Закрыл: ${_oc.name}`); return; } if (uid) { const c = findContact(who); if (c) { closeChatRef.current(dmRoom(uid, c.id)); setCommandHint(`Закрыл чат с ${c.display_name}`); return; } } setCommandHint(`Не нашёл «${who}»`); return; }
-        if (!who && room !== assistantRoom) { closeChatRef.current(room); setCommandHint("Закрыл чат"); return; }
-      }
-      // открой чат / позови / пригласи <кого> (контакт или джинн из Города)
-      if ((m = t.match(/^(?:открой(?:те)?(?:\s+чат)?(?:\s+с)?|позови(?:те)?|пригласи(?:те)?|призови(?:те)?)\s+(?:джинна\s+|контакт\s+)?(.+)$/i))) {
-        const name = m[1].trim();
-        const c = findContact(name);
-        if (c) { openDM(c); setCommandHint(`Открыл чат с ${c.display_name}`); return; }
-        setCommandHint(`Ищу джинна «${name}»…`);
-        summonJinn(name).then((ok) => { if (!ok) setCommandHint(`Не нашёл «${name}»`); });
-        return;
-      }
-      // отправь <кому> (без текста) — открыть диалог и ждать
-      if ((m = t.match(/^(?:отправ\w*\s+сообщени\w*|напиши(?:те)?)\s+(?:для\s+|к\s+)?(.+)$/i))) {
-        const c = findContact(m[1]);
-        if (c) { openDM(c); setCommandHint(`Диктуйте сообщение для ${c.display_name}`); return; }
-      }
-      // Уровень 2: не распознали шаблоном — понимаем смысл
+      // Помощник на инструментах (tool-calling): модель сама выбирает действия и компонует их
       if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
-      classifyAndAct(t);
+      pushUser(t);
+      setCommandHint("💭 думаю…");
+      assistantAct(t).then((r) => {
+        setCommandHint("");
+        if (r.reply) pushAssistant(r.reply);
+        if (r.directives && r.directives.length) runDirectives(r.directives);
+      }).catch(() => { setCommandHint(""); sendMessage(t); });
       return;
     }
     sendMessage(text);

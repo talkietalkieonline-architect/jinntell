@@ -462,6 +462,11 @@ export function webSearch(query: string): Promise<{ ok: boolean; text: string; s
   return apiFetch("/api/chat/web-search", { method: "POST", body: JSON.stringify({ text: query }) });
 }
 
+export interface AssistantDirective { action: string; name?: string; to?: string; text?: string }
+export function assistantAct(text: string): Promise<{ reply: string; directives: AssistantDirective[]; steps: { tool: string }[] }> {
+  return apiFetch("/api/chat/assistant-act", { method: "POST", body: JSON.stringify({ text }) });
+}
+
 export interface ContactOut {
   id: number;
   display_name: string;
