@@ -113,22 +113,24 @@ export default function BottomBar({
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       if (ttsSpeakingRef.current || window.speechSynthesis?.speaking) return;
-      let full = "";
       let interim = "";
-      for (let i = 0; i < event.results.length; i++) {
+      // Только НОВЫЕ результаты (resultIndex) — в continuous-режиме список копится всю сессию.
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const r = event.results[i];
-        if (r.isFinal) full += r[0].transcript;
-        else interim += r[0].transcript;
+        if (r.isFinal) {
+          const seg = r[0].transcript.trim();
+          if (seg) voiceFullRef.current = (voiceFullRef.current ? voiceFullRef.current + " " : "") + seg;
+        } else {
+          interim += r[0].transcript;
+        }
       }
-      setVoiceText(interim);
-      voiceFullRef.current = full;
-      // Дебаунс: отправляем законченную фразу целиком после паузы (гасит фрагментацию/дубли)
+      setVoiceText((voiceFullRef.current + " " + interim).trim());
+      // Дебаунс: после паузы отправляем накопленную фразу ЦЕЛИКОМ и очищаем буфер (без дублей).
       if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
       voiceTimerRef.current = setTimeout(() => {
-        const f = voiceFullRef.current.trim();
-        const sent = voiceSentRef.current;
-        const delta = f.startsWith(sent) ? f.slice(sent.length).trim() : f;
-        if (delta) { voiceSentRef.current = f; setVoiceText(""); sendVoice(delta); }
+        const phrase = voiceFullRef.current.trim();
+        voiceFullRef.current = "";
+        if (phrase) { setVoiceText(""); sendVoice(phrase); }
       }, 900);
     };
 
