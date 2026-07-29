@@ -1,9 +1,9 @@
-"""Агент-луп помощника на tool-calling. Модель сама решает, какие инструменты вызвать.
-Backend-инструменты исполняются здесь; клиентские (навигация) возвращаются директивами фронту.
-Живой классификатор (page.tsx) не трогается — это параллельный путь."""
+"""Агент-луп помощника на tool-calling с ЛИЧНОСТЬЮ, ПАМЯТЬЮ и ЗНАНИЯМИ.
+Модель сама решает, какие инструменты вызвать. Backend-инструменты исполняются здесь;
+клиентские (навигация) возвращаются директивами фронту."""
 import json
 
-from sqlalchemy import select, or_
+from sqlalchemy import select
 
 from app.core.database import async_session
 from app.models.agent import Agent
@@ -41,13 +41,72 @@ TOOLS = [
 
 CLIENT_TOOLS = {"open_chat", "close_chat", "call", "send_message"}
 
-_SYS = (
-    "Ты — {name}, персональный помощник пользователя в приложении JinnTell (город AI-джиннов). "
-    "Помогаешь общаться с людьми и джиннами. У тебя есть инструменты — вызывай подходящие. "
-    "Если человека/джинна нет или он не в сети — честно скажи об этом через reply и предложи, что делать "
-    "(например, оставить сообщение). Не выдумывай людей. Когда действие выполнено — коротко подтверди через reply. "
-    "Отвечай по-русски, дружелюбно и кратко."
+_BASE = (
+    "Ты — {name}, персональный помощник пользователя в JinnTell (город AI-джиннов). "
+    "Общайся тепло, живо и естественно, как хороший внимательный собеседник, а не бот. Коротко, по делу, с эмпатией. "
+    "У тебя есть инструменты — вызывай их, когда нужно ДЕЙСТВИЕ (найти, открыть/закрыть чат, отправить, избранное, поиск в сети). "
+    "Если человека/джинна нет или он не в сети — честно скажи и предложи вариант (например, оставить сообщение). "
+    "Не выдумывай людей и факты. Отвечай по-русски."
 )
+
+
+async def _build_context(user_id: int, text: str) -> str:
+    """Персона помощника + память о пользователе + знания о платформе."""
+    name = "Джим"
+    parts = []
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if u:
+        name = u.assistant_name or "Джим"
+        gmap = {"male": "Ты мужчина, говори о себе в мужском роде (рад, готов).",
+                "female": "Ты женщина, говори о себе в женском роде (рада, готова).",
+                "neutral": "Избегай гендерных форм о себе.",
+                "animal": "Ты необычный персонаж."}
+        parts.append(gmap.get(u.assistant_gender or "male", ""))
+        if getattr(u, "assistant_age", None):
+            parts.append(f"Твой образ — возраст около {u.assistant_age}.")
+        try:
+            tr = json.loads(u.assistant_traits or "{}")
+        except Exception:
+            tr = {}
+        style = []
+        tone = {"friendly": "тон дружелюбный и тёплый", "neutral": "тон нейтральный", "business": "тон деловой, по существу"}
+        if tr.get("tone") in tone:
+            style.append(tone[tr["tone"]])
+        ln = {"short": "отвечай коротко (1-2 предложения)", "medium": "средней длины", "long": "можно подробно"}
+        if tr.get("length") in ln:
+            style.append(ln[tr["length"]])
+        if tr.get("humor"):
+            style.append("допускай лёгкий уместный юмор")
+        if tr.get("emoji") is False:
+            style.append("без эмодзи")
+        elif tr.get("emoji"):
+            style.append("умеренно используй эмодзи")
+        if style:
+            parts.append("Стиль общения: " + ", ".join(style) + ".")
+    # память о пользователе
+    try:
+        from app.services.memory import recall
+        facts = await recall(user_id, text, k=5)
+        if facts:
+            parts.append("Что ты помнишь о пользователе: " + "; ".join(facts) + ". Используй это естественно.")
+    except Exception:
+        pass
+    # знания о платформе (RAG core-агента «Джим»)
+    try:
+        from app.services import rag as _rag
+        async with async_session() as db:
+            jim = (await db.execute(select(Agent).where(Agent.jinntell_link == "jim"))).scalar_one_or_none()
+        if jim:
+            kn = await _rag.search(agent_id=jim.id, query=text, top_k=3)
+            if kn:
+                parts.append("Справка о платформе (отвечай по ней, не выдумывай функции): " + " | ".join(c.text for c in kn))
+    except Exception:
+        pass
+    sys = _BASE.format(name=name)
+    if parts:
+        sys += "\n\n" + "\n".join(p for p in parts if p)
+    return sys
 
 
 async def _find_person(user_id: int, name: str) -> str:
@@ -57,24 +116,20 @@ async def _find_person(user_id: int, name: str) -> str:
     pat = f"%{n}%"
     parts = []
     async with async_session() as db:
-        # контакты пользователя (люди)
         rows = (await db.execute(
             select(User).join(Contact, Contact.contact_user_id == User.id)
             .where(Contact.owner_user_id == user_id, User.display_name.ilike(pat)).limit(5)
         )).scalars().all()
         for u in rows:
             parts.append(f"Контакт: {u.display_name} — {'в сети' if u.is_online else 'не в сети'}")
-        # избранные джинны
         favs = (await db.execute(
             select(Agent).join(UserFavorite, UserFavorite.agent_id == Agent.id)
             .where(UserFavorite.user_id == user_id, Agent.name.ilike(pat), Agent.is_active == True).limit(5)
         )).scalars().all()
         for a in favs:
             parts.append(f"Джинн (в избранном): {a.name} — {a.profession}")
-        # джинны Города
         city = (await db.execute(
-            select(Agent).where(Agent.name.ilike(pat), Agent.is_active == True,
-                                Agent.visibility == "public").limit(5)
+            select(Agent).where(Agent.name.ilike(pat), Agent.is_active == True, Agent.visibility == "public").limit(5)
         )).scalars().all()
         seen = {a.name for a in favs}
         for a in city:
@@ -114,15 +169,16 @@ async def _web_search(query: str) -> str:
 
 
 async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4) -> dict:
+    system = await _build_context(user_id, text or "")
     messages = [
-        {"role": "system", "content": _SYS.format(name=assistant_name)},
+        {"role": "system", "content": system},
         {"role": "user", "content": (text or "")[:1000]},
     ]
     directives = []
     steps = []
     final = ""
     for _ in range(max_iters):
-        res = await deepseek_tools(messages, TOOLS)
+        res = await deepseek_tools(messages, TOOLS, temperature=0.6, frequency_penalty=0.3)
         calls = res.get("tool_calls") or []
         if not calls:
             final = (res.get("content") or "").strip()

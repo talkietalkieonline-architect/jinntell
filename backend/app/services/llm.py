@@ -170,7 +170,8 @@ async def _call_deepseek(messages: list, model: str, api_key: str, max_tokens: i
         return text
 
 
-async def deepseek_tools(messages: list, tools: list, model: str = None, max_tokens: int = 800) -> dict:
+async def deepseek_tools(messages: list, tools: list, model: str = None, max_tokens: int = 800,
+                         temperature: float = 0.4, frequency_penalty: float = 0.0) -> dict:
     """DeepSeek с function calling. Возвращает assistant-сообщение: {"content": str, "tool_calls": list}."""
     api_key = settings.DEEPSEEK_API_KEY
     m = model or settings.DEEPSEEK_MODEL or "deepseek-chat"
@@ -181,7 +182,7 @@ async def deepseek_tools(messages: list, tools: list, model: str = None, max_tok
             "https://api.deepseek.com/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": m, "messages": messages, "tools": tools, "tool_choice": "auto",
-                  "max_tokens": max_tokens, "temperature": 0.2},
+                  "max_tokens": max_tokens, "temperature": temperature, "frequency_penalty": frequency_penalty},
         )
         if r.status_code != 200:
             print(f"[llm] DeepSeek tools error: {r.status_code} {r.text[:300]}")
