@@ -41,6 +41,9 @@ TOOLS = [
         "name": "forget_interest", "description": "Убрать интерес пользователя, если тема больше не актуальна.",
         "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
     {"type": "function", "function": {
+        "name": "confirm_interest", "description": "Пользователь подтвердил, что интерес всё ещё актуален — обновить его свежесть.",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
+    {"type": "function", "function": {
         "name": "list_interests", "description": "Показать известные интересы пользователя.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {
@@ -120,11 +123,14 @@ async def _build_context(user_id: int, text: str) -> str:
         }
         parts.append(_imap.get(_init, _imap["reactive"]))
         try:
-            _ints = json.loads(u.assistant_interests or "[]")
+            _items = _norm_interests(json.loads(u.assistant_interests or "[]"))
         except Exception:
-            _ints = []
-        if _ints:
-            parts.append("Известные интересы пользователя: " + ", ".join(_ints) + ". Учитывай их и предлагай релевантное.")
+            _items = []
+        if _items:
+            parts.append("Известные интересы пользователя: " + ", ".join(x["topic"] for x in _items) + ". Учитывай их и предлагай релевантное.")
+            _stale = [x["topic"] for x in _items if _age_days(x["ts"]) > 21]
+            if _stale:
+                parts.append("Залежавшиеся интересы (давно не подтверждались): " + ", ".join(_stale) + ". Если ты в проактивном режиме и разговор без конкретной задачи (напр. приветствие/болтовня) — МЯГКО спроси, актуален ли ещё ОДИН из них (по одному за раз, не списком). «Уже не нужно» → forget_interest; «да, актуально» → confirm_interest.")
     # память о пользователе
     try:
         from app.services.memory import recall
@@ -150,52 +156,86 @@ async def _build_context(user_id: int, text: str) -> str:
     return sys
 
 
-async def _get_interests(user_id: int) -> list:
+def _age_days(ts) -> int:
+    from datetime import datetime, timezone
+    try:
+        d = datetime.fromisoformat(str(ts))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - d).days
+    except Exception:
+        return 999
+
+
+def _norm_interests(raw) -> list:
+    """Нормализовать хранилище в список {topic, ts}. Совместимо со старым форматом (строки)."""
+    out = []
+    for x in raw or []:
+        if isinstance(x, str) and x.strip():
+            out.append({"topic": x.strip(), "ts": "2000-01-01"})
+        elif isinstance(x, dict) and x.get("topic"):
+            out.append({"topic": x["topic"], "ts": x.get("ts", "2000-01-01")})
+    return out
+
+
+async def _load_interests(user_id: int) -> list:
     async with async_session() as db:
         u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not u or not getattr(u, "assistant_interests", None):
         return []
     try:
-        return json.loads(u.assistant_interests) or []
+        return _norm_interests(json.loads(u.assistant_interests))
     except Exception:
         return []
 
 
+async def _get_interests(user_id: int) -> list:
+    """Только темы (строки) — для таргетинга и контекста."""
+    return [i["topic"] for i in await _load_interests(user_id)]
+
+
+async def _stale_interests(user_id: int, days: int = 21) -> list:
+    return [i["topic"] for i in await _load_interests(user_id) if _age_days(i["ts"]) > days]
+
+
+async def _save_interests(items: list, user_id: int) -> None:
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if u:
+            u.assistant_interests = json.dumps(items, ensure_ascii=False)
+            await db.commit()
+
+
 async def _add_interest(user_id: int, topic: str) -> str:
+    from datetime import datetime, timezone
     t = (topic or "").strip()
     if not t:
         return "Тема не указана."
-    async with async_session() as db:
-        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-        if not u:
-            return "Не удалось сохранить."
-        try:
-            cur = json.loads(u.assistant_interests or "[]")
-        except Exception:
-            cur = []
-        if t.lower() not in [x.lower() for x in cur]:
-            cur.append(t)
-            u.assistant_interests = json.dumps(cur, ensure_ascii=False)
-            await db.commit()
-        return f"Запомнил интерес: {t}."
+    items = await _load_interests(user_id)
+    now = datetime.now(timezone.utc).isoformat()
+    for it in items:
+        if it["topic"].lower() == t.lower():
+            it["ts"] = now
+            await _save_interests(items, user_id)
+            return f"Обновил интерес: {t}."
+    items.append({"topic": t, "ts": now})
+    await _save_interests(items, user_id)
+    return f"Запомнил интерес: {t}."
+
+
+async def _confirm_interest(user_id: int, topic: str) -> str:
+    """Пользователь подтвердил актуальность интереса — обновить дату."""
+    return await _add_interest(user_id, topic)
 
 
 async def _remove_interest(user_id: int, topic: str) -> str:
     t = (topic or "").strip().lower()
     if not t:
         return "Тема не указана."
-    async with async_session() as db:
-        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-        if not u:
-            return "Не удалось."
-        try:
-            cur = json.loads(u.assistant_interests or "[]")
-        except Exception:
-            cur = []
-        new = [x for x in cur if t not in x.lower()]
-        u.assistant_interests = json.dumps(new, ensure_ascii=False)
-        await db.commit()
-        return "Убрал." if len(new) < len(cur) else "Такого интереса не нашёл."
+    items = await _load_interests(user_id)
+    new = [it for it in items if t not in it["topic"].lower()]
+    await _save_interests(new, user_id)
+    return "Убрал." if len(new) < len(items) else "Такого интереса не нашёл."
 
 
 async def _find_person(user_id: int, name: str) -> str:
@@ -313,6 +353,8 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _add_interest(user_id, args.get("topic", ""))
             elif name == "forget_interest":
                 result = await _remove_interest(user_id, args.get("topic", ""))
+            elif name == "confirm_interest":
+                result = await _confirm_interest(user_id, args.get("topic", ""))
             elif name == "list_interests":
                 _ii = await _get_interests(user_id)
                 result = ("Интересы пользователя: " + ", ".join(_ii)) if _ii else "Интересов пока не записано."
