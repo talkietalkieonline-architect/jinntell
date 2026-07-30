@@ -42,8 +42,43 @@ async def create_feed_event(db: AsyncSession, user_id: int, title: str, *, kind:
     return ev
 
 
+_LAST_MATCH: dict = {}
+
+
+async def _deliver_interests(db: AsyncSession, user: User) -> None:
+    """Fan-out-on-read: матчим посты джиннов под интересы пользователя и материализуем в Ленту.
+    Троттлинг (не чаще раза в 5 мин на юзера) + дедуп по заголовку. Барьер — внутри match_for_user."""
+    import time
+    now = time.time()
+    if now - _LAST_MATCH.get(user.id, 0) < 300:
+        return
+    _LAST_MATCH[user.id] = now
+    from app.services.targeting import match_for_user
+    r = await match_for_user(user.id, top_k=5)
+    if not (r.get("ok") and r.get("posts")):
+        return
+    existing = set((await db.execute(
+        select(FeedEvent.title).where(FeedEvent.user_id == user.id, FeedEvent.kind == "interest")
+    )).scalars().all())
+    created = 0
+    for pst in r["posts"]:
+        if created >= 3:
+            break
+        if pst["title"] in existing:
+            continue
+        await create_feed_event(
+            db, user.id, pst["title"], kind="interest", icon="\u2728",
+            body=(pst.get("body") or "")[:160] or None, agent_id=pst.get("agent_id"),
+        )
+        created += 1
+
+
 @router.get("", response_model=list[FeedEventOut])
 async def list_feed(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        await _deliver_interests(db, user)
+    except Exception as _e:
+        print(f"[feed] interest delivery failed: {_e}")
     res = await db.execute(
         select(FeedEvent).where(FeedEvent.user_id == user.id).order_by(desc(FeedEvent.created_at)).limit(50)
     )
