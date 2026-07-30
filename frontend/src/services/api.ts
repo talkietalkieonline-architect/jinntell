@@ -1316,6 +1316,7 @@ export interface UserProfile {
   assistant_age?: number;
   has_password?: boolean;
   assistant_traits?: string;
+  assistant_initiative?: string;
   custom_bg_url?: string;
   avatar_frame?: string;
   user_age?: number;

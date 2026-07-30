@@ -81,6 +81,11 @@ export default function SettingsModal({
   const [trLength, setTrLength] = useState("");
   const [trHumor, setTrHumor] = useState(false);
   const [trEmoji, setTrEmoji] = useState(true);
+  const [trHumorLvl, setTrHumorLvl] = useState(50);
+  const [trWarmth, setTrWarmth] = useState(60);
+  const [trDirect, setTrDirect] = useState(50);
+  const [trFormal, setTrFormal] = useState(40);
+  const [trInit, setTrInit] = useState("reactive");
   const [wakeEnabled, setWakeEnabled] = useState(
     typeof window !== "undefined" && localStorage.getItem("jinntell_wake_enabled") === "1"
   );
@@ -149,7 +154,7 @@ const _av = user.assistant_voice || "ermil";
       setAssistantVoice(_av);
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
       setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
-      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); } catch { /* noop */ }
+      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); if (_t.humor_level != null) setTrHumorLvl(_t.humor_level); if (_t.warmth != null) setTrWarmth(_t.warmth); if (_t.directness != null) setTrDirect(_t.directness); if (_t.formality != null) setTrFormal(_t.formality); } catch { /* noop */ } setTrInit(user.assistant_initiative || "reactive");
       setCustomBg(user.custom_bg_url || "");
       setAvatarFrame(user.avatar_frame || "");
     }
@@ -251,7 +256,8 @@ const _av = user.assistant_voice || "ermil";
         assistant_name: assistantName || "Джим",
         assistant_gender: assistantGender,
         assistant_voice: assistantVoice,
-        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji }),
+        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji, humor_level: trHumorLvl, warmth: trWarmth, directness: trDirect, formality: trFormal }),
+        assistant_initiative: trInit || undefined,
         assistant_age: assistantAge ? parseInt(assistantAge) : undefined,
       } as Partial<UserProfile>);
       localStorage.setItem("jinntell_assistant_voice", assistantVoice);
@@ -641,6 +647,27 @@ const _av = user.assistant_voice || "ermil";
                 <div className="flex gap-2">
                   <button onClick={() => setTrHumor(!trHumor)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trHumor ? "var(--accent)" : "var(--bg-glass)", color: trHumor ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trHumor ? "var(--accent)" : "var(--bg-glass-border)"}` }}>😄 С юмором</button>
                   <button onClick={() => setTrEmoji(!trEmoji)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trEmoji ? "var(--accent)" : "var(--bg-glass)", color: trEmoji ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trEmoji ? "var(--accent)" : "var(--bg-glass-border)"}` }}>✨ Эмодзи</button>
+                </div>
+              </div>
+
+              {/* Характер (тонкая настройка, Interstellar) */}
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Характер помощника</label>
+                {[{ k: "humor", label: "Юмор", v: trHumorLvl, set: setTrHumorLvl }, { k: "warmth", label: "Теплота", v: trWarmth, set: setTrWarmth }, { k: "direct", label: "Прямота", v: trDirect, set: setTrDirect }, { k: "formal", label: "Формальность", v: trFormal, set: setTrFormal }].map((sl) => (
+                  <div key={sl.k} className="mb-2">
+                    <div className="flex justify-between text-[11px] mb-0.5" style={{ color: "var(--text-muted)" }}><span>{sl.label}</span><span>{sl.v}</span></div>
+                    <input type="range" min="0" max="100" value={sl.v} onChange={(e) => sl.set(Number(e.target.value))} className="w-full" style={{ accentColor: "var(--accent)" }} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Инициатива в разговоре */}
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Инициатива в разговоре</label>
+                <div className="flex gap-2">
+                  {[{ id: "proactive", label: "Сам начинает" }, { id: "reactive", label: "По ходу" }, { id: "command", label: "По команде" }].map((o) => (
+                    <button key={o.id} onClick={() => setTrInit(o.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trInit === o.id ? "var(--accent)" : "var(--bg-glass)", color: trInit === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trInit === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                  ))}
                 </div>
               </div>
 

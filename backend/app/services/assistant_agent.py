@@ -84,6 +84,28 @@ async def _build_context(user_id: int, text: str) -> str:
             style.append("умеренно используй эмодзи")
         if style:
             parts.append("Стиль общения: " + ", ".join(style) + ".")
+
+        def _lvl(v, lo, mid, hi):
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                return None
+            return lo if v <= 33 else (mid if v <= 66 else hi)
+        char = [x for x in [
+            _lvl(tr.get("humor_level"), "почти без шуток", "с лёгким юмором", "с хорошим, уместным чувством юмора"),
+            _lvl(tr.get("warmth"), "сдержанно", "дружелюбно", "очень тепло и заботливо"),
+            _lvl(tr.get("directness"), "мягко и тактично", "прямо, но деликатно", "прямо и по существу, без воды"),
+            _lvl(tr.get("formality"), "непринуждённо, на «ты»", "нейтрально", "вежливо и формально"),
+        ] if x]
+        if char:
+            parts.append("Характер: " + ", ".join(char) + ".")
+        _init = (getattr(u, "assistant_initiative", None) or "reactive")
+        _imap = {
+            "proactive": "Можешь сам начинать разговор и проявлять инициативу — иногда первым интересуйся делами и интересами пользователя.",
+            "reactive": "Инициативу проявляй по ходу беседы, но не навязывайся.",
+            "command": "Не начинай разговор сам — отвечай, только когда пользователь обратился.",
+        }
+        parts.append(_imap.get(_init, _imap["reactive"]))
     # память о пользователе
     try:
         from app.services.memory import recall
