@@ -1232,6 +1232,9 @@ export function adminSearchRAG(data: {
 }
 
 /** RAG: статистика агента */
+export function adminPublishAgentPost(agentId: number, data: { title: string; body?: string; url?: string }): Promise<{ ok: boolean; post_id: number }> {
+  return apiFetch(`/api/admin/agents/${agentId}/post`, { method: "POST", body: JSON.stringify(data) });
+}
 export function adminGetRAGStats(agentId: number): Promise<RAGStats> {
   return apiFetch(`/api/admin/rag/stats/${agentId}`);
 }

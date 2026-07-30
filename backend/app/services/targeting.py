@@ -49,6 +49,30 @@ def _consent(user: User) -> dict:
     return {"approaches": d.get("approaches", "all"), "allow_promo": d.get("allow_promo", True)}
 
 
+async def publish_post(agent_id: int, title: str, body: str = "", url: str = "") -> int:
+    """Джинн публикует пост в свой канал: создаёт ChannelPost, индексирует в таргетинг,
+    и напрямую доставляет тем, у кого джинн в ИЗБРАННОМ (opt-in, без барьера).
+    Совпадение по интересам (не-избранники) подхватит доставка Ленты (fan-out-on-read)."""
+    from datetime import datetime, timezone
+    from app.models.channel_post import ChannelPost
+    from app.models.feed import FeedEvent
+    from app.models.user_favorite import UserFavorite
+    async with async_session() as db:
+        cp = ChannelPost(agent_id=agent_id, title=(title or "")[:500], body=(body or None), url=(url or None))
+        db.add(cp)
+        await db.commit()
+        await db.refresh(cp)
+        pid = cp.id
+        favs = (await db.execute(select(UserFavorite.user_id).where(UserFavorite.agent_id == agent_id))).scalars().all()
+        for uid in favs[:500]:
+            db.add(FeedEvent(user_id=uid, title=(title or "")[:200], kind="channel", icon="\U0001F4E2",
+                             body=(body or "")[:160] or None, agent_id=agent_id))
+        if favs:
+            await db.commit()
+    await index_post(pid, agent_id, f"{title}. {body}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    return pid
+
+
 async def match_for_user(user_id: int, top_k: int = 8, min_score: float = 0.35) -> dict:
     """Подобрать посты джиннов под интересы пользователя (с барьером).
     Возвращает {ok, reason, posts:[{post_id,agent_id,agent_name,title,body,url,score}]}."""

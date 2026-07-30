@@ -10,6 +10,7 @@ import {
   adminParseSource,
   adminParseRawText,
   adminSearchRAG,
+  adminPublishAgentPost,
   adminGetRAGStats,
   adminGetRAGLog,
   adminDeleteAllRAGChunks,
@@ -641,6 +642,7 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
       {/* ═══ TAB: Управление ═══ */}
       {tab === "control" && (
         <div className="max-w-xl space-y-4">
+          <PublishPanel agentId={agentId} />
           <div className="bg-gray-900 rounded-xl p-5 border border-gray-800">
             <p className="text-sm font-medium mb-4">Действия администратора</p>
             <div className="flex flex-col gap-3">
@@ -734,6 +736,35 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
 }
 
 /* ═══ RAG Panel (Parser tab) ═══ */
+
+function PublishPanel({ agentId }: { agentId: number }) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [url, setUrl] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const publish = async () => {
+    if (!title.trim()) { setMsg("Нужен заголовок"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const r = await adminPublishAgentPost(agentId, { title: title.trim(), body: body.trim(), url: url.trim() });
+      setMsg(`Опубликовано (#${r.post_id}) — доставится избранникам и по интересам в Ленту.`);
+      setTitle(""); setBody(""); setUrl("");
+    } catch { setMsg("Не удалось опубликовать"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-4">
+      <p className="text-sm font-medium mb-1">📢 Публикация в канал джинна</p>
+      <p className="text-[11px] text-gray-500 mb-3">Пост доставится тем, у кого джинн в избранном, и пользователям, чьи интересы совпали (через барьер-помощника → Лента).</p>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Заголовок (напр. «Новая коллекция — скидки 40%»)" className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm text-white mb-2 outline-none focus:border-amber-500" />
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Текст поста" rows={3} className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm text-white mb-2 outline-none focus:border-amber-500 resize-none" />
+      <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Ссылка (необязательно)" className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm text-white mb-2 outline-none focus:border-amber-500" />
+      <button onClick={publish} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-500 text-black disabled:opacity-50">{busy ? "Публикую…" : "Опубликовать"}</button>
+      {msg && <p className="text-[12px] text-emerald-400 mt-2">{msg}</p>}
+    </div>
+  );
+}
 
 function RAGPanel({ agentId }: { agentId: number }) {
   const [sources, setSources] = useState<RAGSource[]>([]);

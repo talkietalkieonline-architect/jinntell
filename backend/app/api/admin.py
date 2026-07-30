@@ -220,6 +220,25 @@ async def admin_update_agent(
     return AgentDetailOut.model_validate(agent)
 
 
+@router.post("/agents/{agent_id}/post")
+async def admin_publish_post(
+    agent_id: int,
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Опубликовать пост в канал джинна (доставится избранникам + по интересам в Ленту)."""
+    agent = (await db.execute(select(Agent).where(Agent.id == agent_id))).scalar_one_or_none()
+    if not agent:
+        raise HTTPException(404, "Агент не найден")
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise HTTPException(400, "Нужен заголовок поста")
+    from app.services.targeting import publish_post
+    pid = await publish_post(agent_id, title, (body.get("body") or "").strip(), (body.get("url") or "").strip())
+    return {"ok": True, "post_id": pid}
+
+
 @router.patch("/agents/{agent_id}/assign", response_model=AgentDetailOut)
 async def admin_assign_agent(
     agent_id: int,
