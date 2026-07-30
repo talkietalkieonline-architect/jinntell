@@ -46,6 +46,7 @@ async def update_news_channel() -> int:
         return 0
     added = 0
     new_items = []
+    new_posts = []
     async with async_session() as db:
         for it in items:
             ex = (await db.execute(select(ChannelPost).where(
@@ -53,11 +54,21 @@ async def update_news_channel() -> int:
             ))).scalar_one_or_none()
             if ex:
                 continue
-            db.add(ChannelPost(agent_id=NEWS_AGENT_ID, title=it["title"], body=it["body"], url=it["url"], guid=it["guid"]))
+            _cp = ChannelPost(agent_id=NEWS_AGENT_ID, title=it["title"], body=it["body"], url=it["url"], guid=it["guid"])
+            db.add(_cp)
             new_items.append(it)
+            new_posts.append(_cp)
             added += 1
         if added:
             await db.commit()
+            for _cp in new_posts:
+                it_txt = f"{_cp.title}. {_cp.body or ''}"
+                try:
+                    from app.services import targeting as _tgt
+                    from datetime import datetime, timezone
+                    await _tgt.index_post(_cp.id, NEWS_AGENT_ID, it_txt, datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+                except Exception as _e:
+                    print(f"[news] targeting index failed: {_e}")
     # Память канала: те же новости кладём в RAG агента (с датой), чтобы он МОГ ОТВЕЧАТЬ, а не только постить
     if new_items:
         try:

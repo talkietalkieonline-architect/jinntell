@@ -44,6 +44,9 @@ TOOLS = [
         "name": "list_interests", "description": "Показать известные интересы пользователя.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {
+        "name": "check_feed", "description": "Проверить, есть ли по интересам пользователя свежие посты/новости от джиннов Города (лента). Вызывай, когда пользователь спрашивает «что нового/интересного», или чтобы предложить релевантное.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
         "name": "reply", "description": "Ответить пользователю обычным текстом (когда действие не нужно или чтобы подтвердить/уточнить).",
         "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
 ]
@@ -254,6 +257,22 @@ async def _web_search(query: str) -> str:
     return "\n".join(f"- {r['title']}: {r['snippet']} ({r['url']})" for r in rs[:4])
 
 
+async def _check_feed(user_id: int) -> str:
+    from app.services import targeting
+    r = await targeting.match_for_user(user_id, top_k=5)
+    if not r.get("ok"):
+        reason = r.get("reason")
+        if reason == "no_interests":
+            return "У пользователя пока не записаны интересы — предложи назвать пару тем, чтобы приносить релевантное."
+        if reason == "approaches_off":
+            return "Пользователь отключил предложения (настройки действий)."
+        return "Сейчас по интересам ничего подходящего нет."
+    posts = r.get("posts") or []
+    if not posts:
+        return "По интересам пользователя свежих постов пока нет."
+    return "Свежее по интересам пользователя: " + " | ".join(f"«{p['title']}» ({p['agent_name']})" for p in posts)
+
+
 async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4) -> dict:
     system = await _build_context(user_id, text or "")
     messages = [
@@ -297,6 +316,9 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
             elif name == "list_interests":
                 _ii = await _get_interests(user_id)
                 result = ("Интересы пользователя: " + ", ".join(_ii)) if _ii else "Интересов пока не записано."
+            elif name == "check_feed":
+                _fr = await _check_feed(user_id)
+                result = _fr
             else:
                 result = "неизвестный инструмент"
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": str(result)[:1500]})
