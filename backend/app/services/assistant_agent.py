@@ -44,6 +44,15 @@ TOOLS = [
         "name": "confirm_interest", "description": "Пользователь подтвердил, что интерес всё ещё актуален — обновить его свежесть.",
         "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
     {"type": "function", "function": {
+        "name": "block_topic", "description": "Заблокировать тему — пользователь не хочет её видеть/получать предложения (напр. «не показывай корм для животных»).",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
+    {"type": "function", "function": {
+        "name": "unblock_topic", "description": "Разблокировать ранее заблокированную тему.",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
+    {"type": "function", "function": {
+        "name": "list_blocked", "description": "Показать заблокированные темы (блок-лист).",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
         "name": "list_interests", "description": "Показать известные интересы пользователя.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {
@@ -62,6 +71,7 @@ _BASE = (
     "У тебя есть инструменты — вызывай их, когда нужно ДЕЙСТВИЕ (найти, открыть/закрыть чат, отправить, избранное, поиск в сети). "
     "Если человека/джинна нет или он не в сети — честно скажи и предложи вариант (например, оставить сообщение). "
     "Когда пользователь называет свой интерес или просит обращать внимание на тему — запомни через remember_interest. "
+    "Если пользователь просит не показывать/не беспокоить какой-то темой — block_topic. "
     "Не выдумывай людей и факты. Отвечай по-русски."
 )
 
@@ -128,6 +138,12 @@ async def _build_context(user_id: int, text: str) -> str:
             _items = []
         if _items:
             parts.append("Известные интересы пользователя: " + ", ".join(x["topic"] for x in _items) + ". Учитывай их и предлагай релевантное.")
+        try:
+            _blk = [x for x in json.loads(u.assistant_blocklist or "[]") if isinstance(x, str)]
+        except Exception:
+            _blk = []
+        if _blk:
+            parts.append("Заблокированные темы (НЕ предлагай их): " + ", ".join(_blk) + ". Изредка можешь предложить пересмотреть блок-лист.")
             _stale = [x["topic"] for x in _items if _age_days(x["ts"]) > 21]
             if _stale:
                 parts.append("Залежавшиеся интересы (давно не подтверждались): " + ", ".join(_stale) + ". Если ты в проактивном режиме и разговор без конкретной задачи (напр. приветствие/болтовня) — МЯГКО спроси, актуален ли ещё ОДИН из них (по одному за раз, не списком). «Уже не нужно» → forget_interest; «да, актуально» → confirm_interest.")
@@ -236,6 +252,44 @@ async def _remove_interest(user_id: int, topic: str) -> str:
     new = [it for it in items if t not in it["topic"].lower()]
     await _save_interests(new, user_id)
     return "Убрал." if len(new) < len(items) else "Такого интереса не нашёл."
+
+
+async def _load_block(user_id: int) -> list:
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not u or not getattr(u, "assistant_blocklist", None):
+        return []
+    try:
+        return [x for x in json.loads(u.assistant_blocklist) if isinstance(x, str)]
+    except Exception:
+        return []
+
+
+async def _save_block(items: list, user_id: int) -> None:
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if u:
+            u.assistant_blocklist = json.dumps(items, ensure_ascii=False)
+            await db.commit()
+
+
+async def _block_topic(user_id: int, topic: str) -> str:
+    t = (topic or "").strip()
+    if not t:
+        return "Тема не указана."
+    items = await _load_block(user_id)
+    if t.lower() not in [x.lower() for x in items]:
+        items.append(t)
+        await _save_block(items, user_id)
+    return f"Заблокировал тему: {t}. Больше не буду это предлагать."
+
+
+async def _unblock_topic(user_id: int, topic: str) -> str:
+    t = (topic or "").strip().lower()
+    items = await _load_block(user_id)
+    new = [x for x in items if t not in x.lower()]
+    await _save_block(new, user_id)
+    return "Разблокировал." if len(new) < len(items) else "Такой темы в блок-листе не нашёл."
 
 
 async def _find_person(user_id: int, name: str) -> str:
@@ -355,6 +409,13 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _remove_interest(user_id, args.get("topic", ""))
             elif name == "confirm_interest":
                 result = await _confirm_interest(user_id, args.get("topic", ""))
+            elif name == "block_topic":
+                result = await _block_topic(user_id, args.get("topic", ""))
+            elif name == "unblock_topic":
+                result = await _unblock_topic(user_id, args.get("topic", ""))
+            elif name == "list_blocked":
+                _bl = await _load_block(user_id)
+                result = ("Заблокировано: " + ", ".join(_bl)) if _bl else "Блок-лист пуст."
             elif name == "list_interests":
                 _ii = await _get_interests(user_id)
                 result = ("Интересы пользователя: " + ", ".join(_ii)) if _ii else "Интересов пока не записано."

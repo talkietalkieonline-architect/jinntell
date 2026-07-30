@@ -36,6 +36,7 @@ class User(Base):
     assistant_traits: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: характеристики общения (тон/длина/юмор/эмодзи)
     assistant_initiative: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # proactive|reactive|command
     assistant_interests: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list: интересы, которые растит помощник
+    assistant_blocklist: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list: заблокированные темы (барьер)
     custom_bg_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # свой фон (URL картинки)
     action_settings: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: настройки действий (обращения/гео/акции)
     user_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # legacy, не используется

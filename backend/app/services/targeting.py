@@ -109,6 +109,22 @@ async def match_for_user(user_id: int, top_k: int = 8, min_score: float = 0.35) 
     hits = [(pid, sc) for pid, sc in hits if pid]
     if not hits:
         return {"ok": True, "reason": "no_match", "posts": []}
+    # блок-лист: исключаем посты по заблокированным темам (семантически, через тот же индекс)
+    try:
+        blocked = json.loads(u.assistant_blocklist or "[]")
+    except Exception:
+        blocked = []
+    if blocked:
+        bemb = await get_embedding(", ".join(blocked))
+        if bemb:
+            bres = await _qdrant_request("POST", f"/collections/{name}/points/search", {
+                "vector": bemb, "limit": 40, "with_payload": True, "score_threshold": 0.45,
+            })
+            if bres.get("result"):
+                blocked_ids = {p.get("payload", {}).get("post_id") for p in bres["result"]}
+                hits = [(pid, sc) for pid, sc in hits if pid not in blocked_ids]
+        if not hits:
+            return {"ok": True, "reason": "all_blocked", "posts": []}
     ids = [pid for pid, _ in hits]
     score_by = {pid: sc for pid, sc in hits}
     async with async_session() as db:
