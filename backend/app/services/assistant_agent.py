@@ -35,6 +35,15 @@ TOOLS = [
         "name": "web_search", "description": "Найти актуальную информацию в интернете.",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
+        "name": "remember_interest", "description": "Запомнить интерес/тему пользователя — когда он называет интерес или просит обращать внимание на тему (напр. «детские коляски»).",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
+    {"type": "function", "function": {
+        "name": "forget_interest", "description": "Убрать интерес пользователя, если тема больше не актуальна.",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
+    {"type": "function", "function": {
+        "name": "list_interests", "description": "Показать известные интересы пользователя.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
         "name": "reply", "description": "Ответить пользователю обычным текстом (когда действие не нужно или чтобы подтвердить/уточнить).",
         "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
 ]
@@ -46,6 +55,7 @@ _BASE = (
     "Общайся тепло, живо и естественно, как хороший внимательный собеседник, а не бот. Коротко, по делу, с эмпатией. "
     "У тебя есть инструменты — вызывай их, когда нужно ДЕЙСТВИЕ (найти, открыть/закрыть чат, отправить, избранное, поиск в сети). "
     "Если человека/джинна нет или он не в сети — честно скажи и предложи вариант (например, оставить сообщение). "
+    "Когда пользователь называет свой интерес или просит обращать внимание на тему — запомни через remember_interest. "
     "Не выдумывай людей и факты. Отвечай по-русски."
 )
 
@@ -106,6 +116,12 @@ async def _build_context(user_id: int, text: str) -> str:
             "command": "Не начинай разговор сам — отвечай, только когда пользователь обратился.",
         }
         parts.append(_imap.get(_init, _imap["reactive"]))
+        try:
+            _ints = json.loads(u.assistant_interests or "[]")
+        except Exception:
+            _ints = []
+        if _ints:
+            parts.append("Известные интересы пользователя: " + ", ".join(_ints) + ". Учитывай их и предлагай релевантное.")
     # память о пользователе
     try:
         from app.services.memory import recall
@@ -129,6 +145,54 @@ async def _build_context(user_id: int, text: str) -> str:
     if parts:
         sys += "\n\n" + "\n".join(p for p in parts if p)
     return sys
+
+
+async def _get_interests(user_id: int) -> list:
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not u or not getattr(u, "assistant_interests", None):
+        return []
+    try:
+        return json.loads(u.assistant_interests) or []
+    except Exception:
+        return []
+
+
+async def _add_interest(user_id: int, topic: str) -> str:
+    t = (topic or "").strip()
+    if not t:
+        return "Тема не указана."
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if not u:
+            return "Не удалось сохранить."
+        try:
+            cur = json.loads(u.assistant_interests or "[]")
+        except Exception:
+            cur = []
+        if t.lower() not in [x.lower() for x in cur]:
+            cur.append(t)
+            u.assistant_interests = json.dumps(cur, ensure_ascii=False)
+            await db.commit()
+        return f"Запомнил интерес: {t}."
+
+
+async def _remove_interest(user_id: int, topic: str) -> str:
+    t = (topic or "").strip().lower()
+    if not t:
+        return "Тема не указана."
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if not u:
+            return "Не удалось."
+        try:
+            cur = json.loads(u.assistant_interests or "[]")
+        except Exception:
+            cur = []
+        new = [x for x in cur if t not in x.lower()]
+        u.assistant_interests = json.dumps(new, ensure_ascii=False)
+        await db.commit()
+        return "Убрал." if len(new) < len(cur) else "Такого интереса не нашёл."
 
 
 async def _find_person(user_id: int, name: str) -> str:
@@ -226,6 +290,13 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _add_favorite(user_id, args.get("name", ""))
             elif name == "web_search":
                 result = await _web_search(args.get("query", ""))
+            elif name == "remember_interest":
+                result = await _add_interest(user_id, args.get("topic", ""))
+            elif name == "forget_interest":
+                result = await _remove_interest(user_id, args.get("topic", ""))
+            elif name == "list_interests":
+                _ii = await _get_interests(user_id)
+                result = ("Интересы пользователя: " + ", ".join(_ii)) if _ii else "Интересов пока не записано."
             else:
                 result = "неизвестный инструмент"
             messages.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": str(result)[:1500]})
