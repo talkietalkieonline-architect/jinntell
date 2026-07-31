@@ -220,6 +220,21 @@ async def admin_update_agent(
     return AgentDetailOut.model_validate(agent)
 
 
+@router.get("/global-blocklist")
+async def admin_get_global_blocklist(admin: User = Depends(get_admin_user)):
+    """Глобальный блок-лист проекта (сырой текст)."""
+    from app.services.settings_store import get_setting
+    return {"raw": (await get_setting("GLOBAL_BLOCKLIST")) or ""}
+
+
+@router.post("/global-blocklist")
+async def admin_set_global_blocklist(body: dict = Body(...), admin: User = Depends(get_admin_user)):
+    """Задать глобальный блок-лист (темы через запятую/с новой строки)."""
+    from app.services.moderation import set_global_blocklist_raw
+    await set_global_blocklist_raw(body.get("raw") or "")
+    return {"ok": True}
+
+
 @router.post("/agents/{agent_id}/post")
 async def admin_publish_post(
     agent_id: int,

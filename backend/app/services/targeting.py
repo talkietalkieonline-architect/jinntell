@@ -114,6 +114,11 @@ async def match_for_user(user_id: int, top_k: int = 8, min_score: float = 0.35) 
         blocked = json.loads(u.assistant_blocklist or "[]")
     except Exception:
         blocked = []
+    try:
+        from app.services.moderation import get_global_blocklist
+        blocked = list(blocked) + await get_global_blocklist()
+    except Exception:
+        pass
     if blocked:
         bemb = await get_embedding(", ".join(blocked))
         if bemb:

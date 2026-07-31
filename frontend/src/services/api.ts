@@ -1516,6 +1516,12 @@ export function reportActivity(ev: {
   apiFetch("/api/activity", { method: "POST", body: JSON.stringify(ev) }).catch(() => { /* noop */ });
 }
 
+export function adminGetGlobalBlocklist(): Promise<{ raw: string }> {
+  return apiFetch("/api/admin/global-blocklist");
+}
+export function adminSetGlobalBlocklist(raw: string): Promise<{ ok: boolean }> {
+  return apiFetch("/api/admin/global-blocklist", { method: "POST", body: JSON.stringify({ raw }) });
+}
 export function getActivityLog(params: { user_id?: number; action?: string; actor?: string; hours?: number; limit?: number } = {}): Promise<{ total: number; items: ActivityItem[] }> {
   const q = new URLSearchParams();
   if (params.user_id) q.set("user_id", String(params.user_id));

@@ -49,6 +49,8 @@ import {
   type ModelInfo,
   getActivityLog,
   type ActivityItem,
+  adminGetGlobalBlocklist,
+  adminSetGlobalBlocklist,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
 
@@ -136,6 +138,8 @@ export default function AdminPage() {
   // System info
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [monitor, setMonitor] = useState<MonitorData | null>(null);
+  const [globalBlock, setGlobalBlock] = useState("");
+  const [blockSaved, setBlockSaved] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [activityActor, setActivityActor] = useState<string>("");
   const [activityHours, setActivityHours] = useState<number>(24);
@@ -220,6 +224,7 @@ export default function AdminPage() {
       ]);
       setSystemInfo(sysInfo);
       setMonitor(mon);
+      try { setGlobalBlock((await adminGetGlobalBlocklist()).raw); } catch { /* noop */ }
     } catch {}
   }, []);
 
@@ -1183,6 +1188,14 @@ export default function AdminPage() {
           {tab === "system" && (
             <div>
               <h2 className="text-lg font-semibold mb-6">Система</h2>
+
+              <div className="bg-gray-900 rounded-xl p-5 border border-amber-800/40 mb-8">
+                <p className="text-sm text-amber-400 font-medium mb-1">🛡 Блок-лист проекта (модерация)</p>
+                <p className="text-[11px] text-gray-500 mb-3">Запретные темы для всего проекта: не попадают в Ленту/таргетинг и джинны их не обсуждают. По одной на строку или через запятую.</p>
+                <textarea value={globalBlock} onChange={(e) => setGlobalBlock(e.target.value)} rows={4} placeholder="напр.: азартные игры, ставки на спорт" className="w-full bg-gray-950 border border-gray-700 rounded px-3 py-2 text-sm text-white outline-none focus:border-amber-500 resize-none mb-2" />
+                <button onClick={async () => { try { await adminSetGlobalBlocklist(globalBlock); setBlockSaved(true); setTimeout(() => setBlockSaved(false), 2000); } catch { /* noop */ } }} className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-500 text-black">Сохранить блок-лист</button>
+                {blockSaved && <span className="text-[12px] text-emerald-400 ml-3">Сохранено</span>}
+              </div>
 
               {monitor && (
                 <div className="mb-8">

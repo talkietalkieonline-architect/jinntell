@@ -497,6 +497,13 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
             _agent_kwargs["system_prompt"] = (agent.system_prompt or "") + _guard_in.INPUT_GUARD_SUFFIX
     except Exception:
         pass
+    try:
+        from app.services.moderation import get_global_blocklist
+        _gb = await get_global_blocklist()
+        if _gb:
+            _agent_kwargs["system_prompt"] = (_agent_kwargs.get("system_prompt") or agent.system_prompt or "") + f"\n\nЗапрещённые темы проекта (НЕ обсуждай, вежливо уходи от них): {', '.join(_gb)}."
+    except Exception:
+        pass
     if _blocked:
         if _ptype == "user" and getattr(agent, "is_paid", False):
             reply_text = "🔒 Это платный джинн, а на балансе недостаточно средств. Пополните баланс, чтобы продолжить общение."

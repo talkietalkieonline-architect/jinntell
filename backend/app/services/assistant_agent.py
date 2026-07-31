@@ -166,6 +166,13 @@ async def _build_context(user_id: int, text: str) -> str:
                 parts.append("Справка о платформе (отвечай по ней, не выдумывай функции): " + " | ".join(c.text for c in kn))
     except Exception:
         pass
+    try:
+        from app.services.moderation import get_global_blocklist
+        _gb = await get_global_blocklist()
+        if _gb:
+            parts.append("Запрещённые темы проекта (НЕ обсуждай и НЕ предлагай, вежливо уходи): " + ", ".join(_gb) + ".")
+    except Exception:
+        pass
     sys = _BASE.format(name=name)
     if parts:
         sys += "\n\n" + "\n".join(p for p in parts if p)
