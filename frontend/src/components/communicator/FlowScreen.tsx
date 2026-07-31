@@ -16,54 +16,72 @@ export default function FlowScreen({ onExit, onSend, lastReply, assistantName, v
   const spokenRef = useRef<string>(lastReply || "");
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
+  // Анти-эхо: пока помощник озвучивает — НЕ слушаем (иначе микрофон слышит TTS и зацикливается)
+  const speakingRef = useRef(false);
+  const finalRef = useRef("");
+  const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
-  // Непрерывное распознавание речи → отправка помощнику
+  // Непрерывное распознавание речи → отправка помощнику (с дебаунсом и анти-эхо)
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) { setStatus("idle"); return; }
     const rec = new (SR as unknown as { new (): SpeechRecognition })();
     rec.lang = "ru-RU"; rec.continuous = true; rec.interimResults = true;
-    let finalBuf = "";
     rec.onresult = (e: SpeechRecognitionEvent) => {
+      if (speakingRef.current) return; // анти-эхо: игнорируем ввод во время озвучки
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalBuf += r[0].transcript;
-        else interim += r[0].transcript;
+        if (r.isFinal) {
+          const seg = r[0].transcript.trim();
+          if (seg) finalRef.current = (finalRef.current ? finalRef.current + " " : "") + seg;
+        } else {
+          interim += r[0].transcript;
+        }
       }
-      setCaption((finalBuf + interim).trim());
-      if (finalBuf.trim().length > 1) {
-        const text = finalBuf.trim(); finalBuf = "";
-        onSendRef.current(text);
-      }
+      setCaption((finalRef.current + " " + interim).trim());
+      // Дебаунс: отправляем цельную фразу после паузы (гасит фрагментацию и дубли)
+      if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
+      sendTimerRef.current = setTimeout(() => {
+        const phrase = finalRef.current.trim();
+        finalRef.current = "";
+        if (phrase && !speakingRef.current) { setCaption(""); onSendRef.current(phrase); }
+      }, 900);
     };
     rec.onend = () => { try { rec.start(); } catch { /* уже запущено */ } };
     try { rec.start(); } catch { /* noop */ }
-    return () => { try { rec.onend = null; rec.stop(); } catch { /* noop */ } };
+    return () => {
+      try { rec.onend = null; rec.stop(); } catch { /* noop */ }
+      if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
+    };
   }, []);
 
-  // Озвучка новых ответов
+  // Озвучка новых ответов — с остановкой предыдущего аудио (без наложения) и флагом анти-эха
   useEffect(() => {
     const text = (lastReply || "").trim();
     if (!text || text === spokenRef.current) return;
     spokenRef.current = text;
     setCaption(text);
     setStatus("speaking");
+    try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп предыдущего — без наложения
+    speakingRef.current = true;
+    finalRef.current = "";  // сбросить накопленное (могло быть эхо)
     let cancelled = false;
     (async () => {
       try {
         const url = await ttsBlobUrl(text, voiceId || "ermil");
-        if (cancelled) return;
+        if (cancelled) { speakingRef.current = false; return; }
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          a.onended = () => setStatus("listening");
-          a.onerror = () => setStatus("listening");
+          const done = () => { setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 600); };
+          a.onended = done;
+          a.onerror = done;
           await a.play();
-        } else { setStatus("listening"); }
-      } catch { setStatus("listening"); }
+        } else { setStatus("listening"); speakingRef.current = false; }
+      } catch { setStatus("listening"); speakingRef.current = false; }
     })();
     return () => { cancelled = true; };
   }, [lastReply, voiceId]);

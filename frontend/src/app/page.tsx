@@ -81,6 +81,7 @@ export default function Home() {
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
   const [view, setView] = useState<"feed" | "chat" | "flow">("feed");
   const flowReturnRef = useRef<{ view: "feed" | "chat" | "flow"; room: string }>({ view: "feed", room: "" });
+  const assistantBusyRef = useRef(false);
   const [drive, setDrive] = useState(false);
   const [topBarH, setTopBarH] = useState(120);
   const [bottomBarH, setBottomBarH] = useState(130);
@@ -417,14 +418,16 @@ export default function Home() {
       // Экран «Поток» (hands-free)
       if (/^(?:вкл\w*\s+|включи\s+|открой\s+|запусти\s+)?(?:поток|без рук|hands.?free)\.?$/i.test(t)) { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); setCommandHint(""); return; }
       // Помощник на инструментах (tool-calling): модель сама выбирает действия и компонует их
+      if (assistantBusyRef.current) return; // не накладываем второй запрос поверх (гасит петлю/наложение)
       if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
+      assistantBusyRef.current = true;
       pushUser(t);
       setCommandHint("💭 думаю…");
       assistantAct(t).then((r) => {
         setCommandHint("");
         if (r.reply) pushAssistant(r.reply);
         if (r.directives && r.directives.length) runDirectives(r.directives);
-      }).catch(() => { setCommandHint(""); sendMessage(t); });
+      }).catch(() => { setCommandHint(""); sendMessage(t); }).finally(() => { assistantBusyRef.current = false; });
       return;
     }
     sendMessage(text);
@@ -574,6 +577,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
+  useEffect(() => { if (user?.assistant_voice) { try { localStorage.setItem("jinntell_assistant_voice", user.assistant_voice); } catch { /* noop */ } } }, [user?.assistant_voice]);
   useEffect(() => { if (user?.custom_bg_url) { try { localStorage.setItem("jinntell_custom_bg", user.custom_bg_url); } catch { /* noop */ } } }, [user?.custom_bg_url]);
 
   // Геотриггер: опрос позиции при открытом приложении (если пользователь разрешил геолокацию)
