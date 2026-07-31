@@ -86,6 +86,14 @@ export default function FlowScreen({ onExit, onSend, lastReply, assistantName, v
     return () => { cancelled = true; };
   }, [lastReply, voiceId]);
 
+  const interrupt = () => {
+    try { audioRef.current?.pause(); } catch { /* noop */ }
+    speakingRef.current = false;
+    finalRef.current = "";
+    setStatus("listening");
+    setCaption("");
+  };
+
   const hh = now ? now.getHours().toString().padStart(2, "0") : "--";
   const mm = now ? now.getMinutes().toString().padStart(2, "0") : "--";
 
@@ -94,11 +102,11 @@ export default function FlowScreen({ onExit, onSend, lastReply, assistantName, v
       <button onClick={onExit} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
       <div className="text-6xl font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3 }}>{hh}:{mm}</div>
       <div className="text-[12px] mb-12 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
-      <div className="flex items-center justify-center" style={{ width: 200, height: 200 }}>
+      <div onClick={interrupt} className="flex items-center justify-center cursor-pointer" style={{ width: 200, height: 200 }} title="Нажми, чтобы прервать">
         <div className={status === "speaking" ? "flow-orb flow-orb-speak" : "flow-orb"} />
       </div>
       <div className="text-sm mt-12 min-h-[44px] text-center px-8 leading-relaxed" style={{ color: "var(--text-secondary)", maxWidth: 520 }}>
-        {status === "speaking" ? caption : (caption || "Слушаю…")}
+        {status === "speaking" ? (caption + " · нажми, чтобы прервать") : (caption || "Слушаю…")}
       </div>
     </div>
   );
