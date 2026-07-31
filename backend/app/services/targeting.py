@@ -66,7 +66,8 @@ async def publish_post(agent_id: int, title: str, body: str = "", url: str = "")
         favs = (await db.execute(select(UserFavorite.user_id).where(UserFavorite.agent_id == agent_id))).scalars().all()
         for uid in favs[:500]:
             db.add(FeedEvent(user_id=uid, title=(title or "")[:200], kind="channel", icon="\U0001F4E2",
-                             body=(body or "")[:160] or None, agent_id=agent_id))
+                             body=(body or "")[:160] or None, agent_id=agent_id,
+                             link_room=f"agent-{agent_id}-u{uid}"))
         if favs:
             await db.commit()
     await index_post(pid, agent_id, f"{title}. {body}", datetime.now(timezone.utc).strftime("%Y-%m-%d"))

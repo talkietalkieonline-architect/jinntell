@@ -66,9 +66,11 @@ async def _deliver_interests(db: AsyncSession, user: User) -> None:
             break
         if pst["title"] in existing:
             continue
+        _aid = pst.get("agent_id")
         await create_feed_event(
             db, user.id, pst["title"], kind="interest", icon="\u2728",
-            body=(pst.get("body") or "")[:160] or None, agent_id=pst.get("agent_id"),
+            body=(pst.get("body") or "")[:160] or None, agent_id=_aid,
+            link_room=(f"agent-{_aid}-u{user.id}" if _aid else None),
         )
         created += 1
 
