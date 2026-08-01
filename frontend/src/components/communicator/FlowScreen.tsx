@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { ttsBlobUrl } from "@/services/api";
+import AppBackground from "@/components/communicator/AppBackground";
 
-export default function FlowScreen({ onExit, onSend, lastReply, assistantName, voiceId }: {
+export default function FlowScreen({ onExit, onSend, lastReply, assistantName, assistantPhoto, voiceId }: {
   onExit: () => void;
   onSend: (text: string) => void;
   lastReply: string;
   assistantName: string;
+  assistantPhoto?: string | null;
   voiceId?: string;
 }) {
   const [now, setNow] = useState<Date | null>(null);
@@ -98,15 +100,37 @@ export default function FlowScreen({ onExit, onSend, lastReply, assistantName, v
   const mm = now ? now.getMinutes().toString().padStart(2, "0") : "--";
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center animate-fade-in" style={{ zIndex: 90, background: "rgba(8,10,16,0.66)", backdropFilter: "blur(2px)" }}>
-      <button onClick={onExit} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
-      <div className="text-6xl font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3 }}>{hh}:{mm}</div>
-      <div className="text-[12px] mb-12 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
-      <div onClick={interrupt} className="flex items-center justify-center cursor-pointer" style={{ width: 200, height: 200 }} title="Нажми, чтобы прервать">
-        <div className={status === "speaking" ? "flow-orb flow-orb-speak" : "flow-orb"} />
-      </div>
-      <div className="text-sm mt-12 min-h-[44px] text-center px-8 leading-relaxed" style={{ color: "var(--text-secondary)", maxWidth: 520 }}>
-        {status === "speaking" ? (caption + " · нажми, чтобы прервать") : (caption || "Слушаю…")}
+    <div className="fixed inset-0 animate-fade-in" style={{ zIndex: 90, background: "var(--bg-deep, #0a0e18)" }}>
+      {/* Непрозрачный фон из системы фонов чата */}
+      <AppBackground />
+      {/* Лёгкий скрим для читаемости текста поверх фона */}
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(8,10,16,0.30)" }} />
+
+      {/* Контент поверх фона (z-1). Пустое место ловит тап-прерывание */}
+      <div onClick={interrupt} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
+        <button onClick={(e) => { e.stopPropagation(); onExit(); }} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
+        <div className="text-6xl font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3 }}>{hh}:{mm}</div>
+        <div className="text-[12px] mb-12 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
+
+        {/* Центр: аватар помощника (фото в покое) → вибрирующая волна во время речи */}
+        <div className="flex items-center justify-center cursor-pointer relative" style={{ width: 200, height: 200 }} title="Нажми, чтобы прервать">
+          {status === "speaking" ? (
+            <div className="flow-orb flow-orb-speak" />
+          ) : assistantPhoto ? (
+            <img
+              src={assistantPhoto}
+              alt={assistantName}
+              className="rounded-full object-cover animate-fade-in"
+              style={{ width: 172, height: 172, boxShadow: "0 0 0 2px var(--bg-glass-border), 0 10px 48px rgba(0,0,0,0.45)" }}
+            />
+          ) : (
+            <div className="flow-orb" />
+          )}
+        </div>
+
+        <div className="text-sm mt-12 min-h-[44px] text-center px-8 leading-relaxed" style={{ color: "var(--text-secondary)", maxWidth: 520 }}>
+          {status === "speaking" ? (caption + " · нажми, чтобы прервать") : (caption || "Слушаю…")}
+        </div>
       </div>
     </div>
   );

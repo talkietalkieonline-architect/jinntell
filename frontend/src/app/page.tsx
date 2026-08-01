@@ -578,6 +578,13 @@ export default function Home() {
 
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
   useEffect(() => { if (user?.assistant_voice) { try { localStorage.setItem("jinntell_assistant_voice", user.assistant_voice); } catch { /* noop */ } } }, [user?.assistant_voice]);
+  // Вход сразу на Поток (голос-первый). Только для вернувшихся (есть имя) — новичок остаётся в ленте на онбординг имени
+  const landedRef = useRef(false);
+  useEffect(() => {
+    if (screen !== "communicator" || !user || landedRef.current) return;
+    landedRef.current = true;
+    if (user.display_name || user.first_name) { setRoom(assistantRoom); setView("flow"); }
+  }, [screen, user, assistantRoom, setRoom]);
   useEffect(() => { if (user?.custom_bg_url) { try { localStorage.setItem("jinntell_custom_bg", user.custom_bg_url); } catch { /* noop */ } } }, [user?.custom_bg_url]);
 
   // Геотриггер: опрос позиции при открытом приложении (если пользователь разрешил геолокацию)
@@ -716,6 +723,7 @@ export default function Home() {
           onSend={(t) => handleSend(t)}
           lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
           assistantName={assistantName}
+          assistantPhoto={assistantPhoto}
           voiceId={user?.assistant_voice}
         />
       )}
