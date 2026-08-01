@@ -100,6 +100,15 @@ import logging as _logging
 _sec_log = _logging.getLogger("jinntell.security")
 
 
+async def _sec_event(action: str, source: str) -> None:
+    """Security-событие в журнал (для Шерифа). source (IP/номер) в target_name — НЕзашифрован, чтобы агрегировать. Fail-soft."""
+    try:
+        from app.services.activity import log as _act_log
+        await _act_log(action, actor="system", result="blocked", target_name=source[:120])
+    except Exception:
+        pass
+
+
 # =====================================
 #  РЕГИСТРАЦИЯ
 # =====================================
@@ -111,6 +120,7 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     # анти-спам: не более 10 регистраций с одного IP в час
     if not await _rate_hit(f"rl:reg:ip:{_client_ip(request)}", 10, 3600):
         _sec_log.warning("rate-limit: регистрация заблокирована ip=%s", _client_ip(request))
+        await _sec_event("security.ratelimit", f"ip:{_client_ip(request)}")
         raise HTTPException(429, _TOO_MANY)
     if len(re.sub(r"\D", "", phone)) < 11:
         raise HTTPException(400, "Некорректный номер телефона")
@@ -173,9 +183,11 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     # анти-брутфорс: лимит попыток на IP и на номер (счётчик сбрасывается при успехе)
     if not await _rate_hit(f"rl:login:ip:{ip}", 40, 900):
         _sec_log.warning("rate-limit: вход по IP заблокирован ip=%s", ip)
+        await _sec_event("security.ratelimit", f"ip:{ip}")
         raise HTTPException(429, _TOO_MANY)
     if not await _rate_hit(f"rl:login:phone:{phone}", 8, 900):
         _sec_log.warning("rate-limit: вход по номеру заблокирован phone=%s ip=%s", phone, ip)
+        await _sec_event("security.ratelimit", f"phone:{phone}")
         raise HTTPException(429, _TOO_MANY)
 
     result = await db.execute(select(User).where(User.phone == phone))

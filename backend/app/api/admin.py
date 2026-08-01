@@ -235,6 +235,39 @@ async def admin_set_global_blocklist(body: dict = Body(...), admin: User = Depen
     return {"ok": True}
 
 
+@router.get("/security-report")
+async def admin_security_report(
+    hours: int = Query(24),
+    admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отчёт Шерифа: security-события из журнала за N часов (rate-limit, инъекции) — агрегаты + свежие."""
+    from datetime import datetime, timezone, timedelta
+    from app.models.activity import ActivityLog
+    since = datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 168)))
+    rows = (await db.execute(
+        select(ActivityLog).where(ActivityLog.action.like("security.%"), ActivityLog.created_at >= since)
+        .order_by(ActivityLog.id.desc()).limit(500)
+    )).scalars().all()
+    by_action: dict = {}
+    by_source: dict = {}
+    recent = []
+    for r in rows:
+        by_action[r.action] = by_action.get(r.action, 0) + 1
+        src = r.target_name or "?"
+        by_source[src] = by_source.get(src, 0) + 1
+        if len(recent) < 20:
+            recent.append({"action": r.action, "source": src, "room": r.room, "at": r.created_at.isoformat()})
+    top = sorted(by_source.items(), key=lambda x: -x[1])[:10]
+    return {
+        "window_hours": hours,
+        "total": len(rows),
+        "by_action": by_action,
+        "top_sources": [{"source": k, "count": v} for k, v in top],
+        "recent": recent,
+    }
+
+
 @router.post("/agents/{agent_id}/post")
 async def admin_publish_post(
     agent_id: int,

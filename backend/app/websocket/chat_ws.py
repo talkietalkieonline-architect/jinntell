@@ -21,6 +21,15 @@ from app.websocket.manager import manager
 _sec_log = logging.getLogger("jinntell.security")
 router = APIRouter()
 
+
+async def _sec_event(action: str, room: str, source: str) -> None:
+    """Security-событие в журнал (для Шерифа). source в target_name — НЕзашифрован, для агрегации. Fail-soft."""
+    try:
+        from app.services.activity import log as _act_log
+        await _act_log(action, actor="system", room=room, result="flagged", target_name=source[:120])
+    except Exception:
+        pass
+
 # Regex для определения комнаты агента: agent-{id}
 _AGENT_ROOM_RE = re.compile(r"^agent-(\d+)(?:-u\d+)?$")
 _ROOM_RE = re.compile(r"^room-(\d+)$")
@@ -370,6 +379,7 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         if not _guard_in2.check_input(user_message)["ok"]:
             _asst_sys = (_asst_sys or "") + _guard_in2.INPUT_GUARD_SUFFIX
             _sec_log.warning("guardian: инъекция/джейлбрейк в запросе к помощнику room=%s", room)
+            await _sec_event("security.injection", room, "assistant")
     except Exception:
         pass
     reply_text = await get_llm_reply(
@@ -499,6 +509,7 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         if not _guard_in.check_input(user_message)["ok"]:
             _agent_kwargs["system_prompt"] = (agent.system_prompt or "") + _guard_in.INPUT_GUARD_SUFFIX
             _sec_log.warning("guardian: инъекция/джейлбрейк в запросе к джинну id=%s room=%s", agent.id, room)
+            await _sec_event("security.injection", room, f"agent={agent.id}")
     except Exception:
         pass
     try:
