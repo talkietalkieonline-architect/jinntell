@@ -90,6 +90,60 @@ async def main():
         rec("Public config", "shader_bg_enabled" in c, str(c))
     except Exception as e: rec("Public config", False, str(e)[:90])
 
+    # 10. БД переименована в jinntell
+    try:
+        from sqlalchemy import text
+        async with async_session() as db:
+            dbn = (await db.execute(text("SELECT current_database()"))).scalar()
+        rec("БД имя", dbn == "jinntell", f"current_database={dbn}")
+    except Exception as e: rec("БД имя", False, str(e)[:90])
+
+    # 11. Rate-limit (Redis) — 3-я попытка сверх лимита=2 должна блокироваться
+    try:
+        from app.api.auth import _rate_hit, _rate_reset
+        k = "rl:smoke:test"
+        await _rate_reset(k)
+        a = await _rate_hit(k, 2, 60); b = await _rate_hit(k, 2, 60); c = await _rate_hit(k, 2, 60)
+        await _rate_reset(k)
+        rec("Rate-limit", a and b and (not c), f"1={a}, 2={b}, 3(сверх)={c}")
+    except Exception as e: rec("Rate-limit", False, str(e)[:90])
+
+    # 12. Помощник (tool-calling) — новые инструменты на месте
+    try:
+        from app.services.assistant_agent import TOOLS
+        names = {t["function"]["name"] for t in TOOLS}
+        need = {"deep_search", "show_media", "check_feed", "block_topic", "add_favorite", "reply"}
+        rec("Помощник инструменты", need.issubset(names), f"{len(names)} инстр., нужные есть={need.issubset(names)}")
+    except Exception as e: rec("Помощник инструменты", False, str(e)[:90])
+
+    # 13. show_media — фото джинна (read-only)
+    try:
+        from app.services.assistant_agent import _show_media
+        from app.models.agent import Agent
+        async with async_session() as db:
+            a = (await db.execute(select(Agent).where(Agent.photo_url.isnot(None), Agent.is_active == True).limit(1))).scalar_one_or_none()
+        if a:
+            _, media = await _show_media(1, {"jinn": a.name})
+            rec("show_media", bool(media and media.get("url")), f"фото {a.name}")
+        else:
+            rec("show_media", True, "нет джиннов с фото — пропуск")
+    except Exception as e: rec("show_media", False, str(e)[:90])
+
+    # 14. Таргетинг/барьер — структура ответа (read-only)
+    try:
+        from app.services import targeting
+        r = await targeting.match_for_user(1, top_k=3)
+        rec("Таргетинг/барьер", isinstance(r, dict) and "ok" in r, f"ok={r.get('ok')}, reason={r.get('reason','')}")
+    except Exception as e: rec("Таргетинг/барьер", False, str(e)[:90])
+
+    # 15. Внутренние джинны на месте (Контент=3, Архитектор=39, Поиск=40)
+    try:
+        from app.models.agent import Agent
+        async with async_session() as db:
+            ids = set((await db.execute(select(Agent.id).where(Agent.id.in_([3, 39, 40])))).scalars().all())
+        rec("Внутренние джинны", {3, 39, 40}.issubset(ids), f"есть id: {sorted(ids)}")
+    except Exception as e: rec("Внутренние джинны", False, str(e)[:90])
+
     ok = sum(results); tot = len(results)
     print(f"\n===== ИТОГ: {ok}/{tot} проверок пройдено =====")
     print("ВСЁ ЗЕЛЁНОЕ ✓" if ok == tot else "ЕСТЬ ПРОБЛЕМЫ — смотри [FAIL] выше")
