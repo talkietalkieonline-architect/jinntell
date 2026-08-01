@@ -1097,6 +1097,12 @@ async def admin_test_agent(
     message = (body.get("message") or "").strip()
     if not message:
         raise HTTPException(400, "Сообщение не может быть пустым")
+    # История диалога (многоходовый чат в админке): [{"role":"user"|"assistant","content":str}]
+    raw_history = body.get("history") or []
+    history = [
+        {"role": ("assistant" if h.get("role") == "assistant" else "user"), "content": str(h.get("content") or h.get("text") or "")}
+        for h in raw_history if isinstance(h, dict) and (h.get("content") or h.get("text"))
+    ][-10:]
     agent = await db.get(Agent, agent_id)
     if not agent:
         raise HTTPException(404, "Agent not found")
@@ -1123,6 +1129,7 @@ async def admin_test_agent(
         system_prompt=agent.system_prompt,
         llm_model=agent.llm_model or "deepseek-chat",
         user_message=message,
+        conversation_history=history,
         manner_style=agent.manner_style or "friendly",
         manner_temperament=agent.manner_temperament or "balanced",
         manner_humor=agent.manner_humor if agent.manner_humor is not None else True,

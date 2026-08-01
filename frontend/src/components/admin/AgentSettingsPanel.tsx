@@ -89,10 +89,11 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
     if (!chatInput.trim() || chatLoading) return;
     const userMsg = chatInput.trim();
     setChatInput("");
+    const history = chatMessages.map(m => ({ role: m.role, content: m.text }));
     setChatMessages(prev => [...prev, { role: "user", text: userMsg }]);
     setChatLoading(true);
     try {
-      const result = await adminTestAgentChat(agentId, userMsg);
+      const result = await adminTestAgentChat(agentId, userMsg, history);
       setChatMessages(prev => [...prev, { role: "assistant", text: result.reply }]);
     } catch (e) {
       setChatMessages(prev => [...prev, { role: "assistant", text: "Ошибка: " + (e instanceof Error ? e.message : "нет ответа") }]);

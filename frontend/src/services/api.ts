@@ -787,8 +787,8 @@ export function adminTestAssistant(message: string): Promise<AssistantTestResult
 }
 
 /** Админ: тест конкретного агента (его модель + промпт + RAG) */
-export function adminTestAgentChat(agentId: number, message: string): Promise<{ reply: string; model: string; rag_used: boolean; response_time_ms: number }> {
-  return apiFetch("/api/admin/agents/" + agentId + "/test", { method: "POST", body: JSON.stringify({ message }) });
+export function adminTestAgentChat(agentId: number, message: string, history?: { role: "user" | "assistant"; content: string }[]): Promise<{ reply: string; model: string; rag_used: boolean; response_time_ms: number }> {
+  return apiFetch("/api/admin/agents/" + agentId + "/test", { method: "POST", body: JSON.stringify({ message, history: history || [] }) });
 }
 
 // ═══════════════════════════════════════════════
