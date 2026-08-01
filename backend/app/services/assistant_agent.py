@@ -32,7 +32,10 @@ TOOLS = [
         "name": "add_favorite", "description": "Добавить джинна в избранное пользователя.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {
-        "name": "web_search", "description": "Найти актуальную информацию в интернете.",
+        "name": "web_search", "description": "Быстрый веб-поиск для ПРОСТОГО факта (погода, курс, одна цифра, короткая справка). Для сложного/исследовательского запроса используй deep_search.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "deep_search", "description": "Делегировать ТЯЖЁЛЫЙ/исследовательский запрос Поисковому джинну (мультиисточник + выжимка со ссылками). Для сложных вопросов, сравнений, «разберись подробно» — не для простого факта.",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "show_media", "description": "Показать пользователю картинку или видео на экране (напр. фото джинна, или изображение по прямой ссылке). Используй, когда просят «покажи», «как выглядит», или чтобы проиллюстрировать ответ.",
@@ -381,6 +384,41 @@ async def _check_feed(user_id: int) -> str:
     return "Свежее по интересам пользователя: " + " | ".join(f"«{p['title']}» ({p['agent_name']})" for p in posts)
 
 
+async def _deep_search(user_id: int, query: str) -> str:
+    """Делегирование Поисковому джинну: веб-поиск → выжимка его персоной → сохранить в его комнату (память)."""
+    q = (query or "").strip()
+    if not q:
+        return "Запрос не указан."
+    from app.services import websearch
+    from app.services.llm import get_llm_reply
+    from app.models.message import Message
+    r = await websearch.search(q, max_results=6)
+    if not r.get("ok"):
+        if r.get("reason") in ("off", "no_key"):
+            return "Веб-поиск не подключён — задай провайдер и ключ в админке."
+        return f"Поиск не удался ({r.get('reason')})."
+    results = r.get("results") or []
+    answer = r.get("answer") or ""
+    async with async_session() as db:
+        sj = (await db.execute(select(Agent).where(Agent.name == "Поисковый джинн").limit(1))).scalar_one_or_none()
+    src_block = "\n".join(f"- {x.get('title','')} — {x.get('url','')}: {(x.get('snippet','') or '')[:200]}" for x in results)
+    sys = sj.system_prompt if sj else "Сделай краткую выжимку на русском с источниками."
+    prompt = f"Запрос: {q}\n\nКраткий ответ движка: {answer}\n\nРезультаты поиска:\n{src_block}"
+    summary = await get_llm_reply(user_message=prompt, system_prompt=sys,
+                                  model=(sj.llm_model if sj else None), max_tokens=500,
+                                  payer_type="free", agent_id=(sj.id if sj else None), user_id=user_id)
+    if sj:
+        try:
+            async with async_session() as db:
+                room = f"agent-{sj.id}-u{user_id}"
+                db.add(Message(room=room, sender_type="user", sender_user_id=user_id, sender_name="", text=q))
+                db.add(Message(room=room, sender_type="agent", sender_name=sj.name, text=summary))
+                await db.commit()
+        except Exception:
+            pass
+    return summary
+
+
 async def _show_media(user_id: int, args: dict) -> tuple[str, dict | None]:
     """Возвращает (текст-результат, media|None). media = {'url':..., 'type':...}."""
     url = (args.get("url") or "").strip()
@@ -441,6 +479,8 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _add_favorite(user_id, args.get("name", ""))
             elif name == "web_search":
                 result = await _web_search(args.get("query", ""))
+            elif name == "deep_search":
+                result = await _deep_search(user_id, args.get("query", ""))
             elif name == "show_media":
                 result, _m = await _show_media(user_id, args)
                 if _m:
