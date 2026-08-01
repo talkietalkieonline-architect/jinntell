@@ -1,9 +1,17 @@
 """JinnTell — FastAPI Backend"""
+import logging as _logging
+# Фундамент логирования: единый формат, вывод в stdout (ловит docker logs). Ставим ДО импортов, чтобы применился первым.
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = _logging.getLogger("jinntell")
+
 from contextlib import asynccontextmanager
 
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -72,6 +80,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _log_unhandled_errors(request: Request, call_next):
+    """Логируем ЛЮБУЮ необработанную ошибку запроса с трейсбеком и путём — чтобы баги не прятались.
+    Поведение не меняем: пробрасываем дальше (Starlette вернёт 500)."""
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("Необработанная ошибка: %s %s", request.method, request.url.path)
+        raise
 
 # Подключаем роутеры
 app.include_router(auth_router)

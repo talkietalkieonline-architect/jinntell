@@ -96,6 +96,9 @@ async def _rate_reset(key: str) -> None:
 
 _TOO_MANY = "Слишком много попыток. Попробуйте позже (через несколько минут)."
 
+import logging as _logging
+_sec_log = _logging.getLogger("jinntell.security")
+
 
 # =====================================
 #  РЕГИСТРАЦИЯ
@@ -107,6 +110,7 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     phone = _normalize_phone(body.phone)
     # анти-спам: не более 10 регистраций с одного IP в час
     if not await _rate_hit(f"rl:reg:ip:{_client_ip(request)}", 10, 3600):
+        _sec_log.warning("rate-limit: регистрация заблокирована ip=%s", _client_ip(request))
         raise HTTPException(429, _TOO_MANY)
     if len(re.sub(r"\D", "", phone)) < 11:
         raise HTTPException(400, "Некорректный номер телефона")
@@ -168,8 +172,10 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     ip = _client_ip(request)
     # анти-брутфорс: лимит попыток на IP и на номер (счётчик сбрасывается при успехе)
     if not await _rate_hit(f"rl:login:ip:{ip}", 40, 900):
+        _sec_log.warning("rate-limit: вход по IP заблокирован ip=%s", ip)
         raise HTTPException(429, _TOO_MANY)
     if not await _rate_hit(f"rl:login:phone:{phone}", 8, 900):
+        _sec_log.warning("rate-limit: вход по номеру заблокирован phone=%s ip=%s", phone, ip)
         raise HTTPException(429, _TOO_MANY)
 
     result = await db.execute(select(User).where(User.phone == phone))

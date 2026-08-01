@@ -1,6 +1,7 @@
 """WebSocket эндпоинт для чата с LLM-ответами"""
 import asyncio
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Optional
@@ -17,6 +18,7 @@ from app.services.llm import get_llm_reply, get_agent_reply
 from app.services import rag as rag_service
 from app.websocket.manager import manager
 
+_sec_log = logging.getLogger("jinntell.security")
 router = APIRouter()
 
 # Regex для определения комнаты агента: agent-{id}
@@ -367,6 +369,7 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
         from app.services import guardian as _guard_in2
         if not _guard_in2.check_input(user_message)["ok"]:
             _asst_sys = (_asst_sys or "") + _guard_in2.INPUT_GUARD_SUFFIX
+            _sec_log.warning("guardian: инъекция/джейлбрейк в запросе к помощнику room=%s", room)
     except Exception:
         pass
     reply_text = await get_llm_reply(
@@ -495,6 +498,7 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         from app.services import guardian as _guard_in
         if not _guard_in.check_input(user_message)["ok"]:
             _agent_kwargs["system_prompt"] = (agent.system_prompt or "") + _guard_in.INPUT_GUARD_SUFFIX
+            _sec_log.warning("guardian: инъекция/джейлбрейк в запросе к джинну id=%s room=%s", agent.id, room)
     except Exception:
         pass
     try:
