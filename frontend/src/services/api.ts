@@ -463,7 +463,7 @@ export function webSearch(query: string): Promise<{ ok: boolean; text: string; s
 }
 
 export interface AssistantDirective { action: string; name?: string; to?: string; text?: string }
-export function assistantAct(text: string): Promise<{ reply: string; directives: AssistantDirective[]; steps: { tool: string }[] }> {
+export function assistantAct(text: string): Promise<{ reply: string; directives: AssistantDirective[]; steps: { tool: string }[]; media_url?: string | null; media_type?: string | null }> {
   return apiFetch("/api/chat/assistant-act", { method: "POST", body: JSON.stringify({ text }) });
 }
 

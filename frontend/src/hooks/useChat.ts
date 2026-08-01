@@ -112,7 +112,7 @@ interface UseChatResult {
   isConnected: boolean;
   sendMessage: (text: string) => void;
   attachMedia: (file: File, asNote?: boolean) => void;
-  pushAssistant: (text: string) => void;
+  pushAssistant: (text: string, media?: { url: string; type: string }) => void;
   pushUser: (text: string) => void;
   room: string;
   setRoom: (room: string) => void;
@@ -249,8 +249,8 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
   }, [room]);
   useEffect(() => { loadHistoryRef.current = loadHistory; }, [loadHistory]);
 
-  const pushAssistant = useCallback((text: string) => {
-    setMessages((prev) => [...prev, { id: `local-${Date.now()}`, sender: "assistant", name: assistantNameRef.current || "Джим", text, color: "var(--accent)", timestamp: new Date() }]);
+  const pushAssistant = useCallback((text: string, media?: { url: string; type: string }) => {
+    setMessages((prev) => [...prev, { id: `local-${Date.now()}`, sender: "assistant", name: assistantNameRef.current || "Джим", text, color: "var(--accent)", timestamp: new Date(), mediaUrl: media?.url, mediaType: media?.type as ChatMessage["mediaType"] }]);
   }, []);
   const pushUser = useCallback((text: string) => {
     setMessages((prev) => [...prev, { id: `local-${Date.now()}`, sender: "user", name: "", text, color: "var(--accent)", timestamp: new Date() }]);

@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ttsBlobUrl } from "@/services/api";
+import { ttsBlobUrl, mediaUrl } from "@/services/api";
 import AppBackground from "@/components/communicator/AppBackground";
 
-export default function FlowScreen({ onExit, onSend, lastReply, assistantName, assistantPhoto, voiceId }: {
+export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assistantName, assistantPhoto, voiceId }: {
   onExit: () => void;
   onSend: (text: string) => void;
   lastReply: string;
+  lastMedia?: { url: string; type: string } | null;
   assistantName: string;
   assistantPhoto?: string | null;
   voiceId?: string;
@@ -132,6 +133,32 @@ export default function FlowScreen({ onExit, onSend, lastReply, assistantName, a
           {status === "speaking" ? (caption + " · нажми, чтобы прервать") : (caption || "Слушаю…")}
         </div>
       </div>
+
+      {/* Медиа «из дымки» снизу: помощник показывает картинку/видео */}
+      {lastMedia?.url && (
+        <div
+          key={lastMedia.url}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-0 right-0 bottom-0 flex justify-center animate-fade-in"
+          style={{ zIndex: 2, paddingBottom: 24, pointerEvents: "auto" }}
+        >
+          <div
+            className="absolute left-0 right-0 bottom-0 pointer-events-none"
+            style={{ height: 220, background: "linear-gradient(to top, rgba(8,10,16,0.72), transparent)" }}
+          />
+          <div className="relative rounded-2xl overflow-hidden" style={{ maxWidth: "78%", maxHeight: 260, boxShadow: "0 12px 48px rgba(0,0,0,0.5)", border: "1px solid var(--bg-glass-border)" }}>
+            {(() => {
+              const raw = lastMedia.url;
+              const src = raw.startsWith("blob:") || raw.startsWith("data:") ? raw : mediaUrl(raw);
+              return lastMedia.type === "video" ? (
+                <video src={src} controls playsInline style={{ maxWidth: "100%", maxHeight: 260, display: "block" }} />
+              ) : (
+                <img src={src} alt="" style={{ maxWidth: "100%", maxHeight: 260, display: "block", objectFit: "contain" }} />
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

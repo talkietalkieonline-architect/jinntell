@@ -35,6 +35,13 @@ TOOLS = [
         "name": "web_search", "description": "Найти актуальную информацию в интернете.",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
+        "name": "show_media", "description": "Показать пользователю картинку или видео на экране (напр. фото джинна, или изображение по прямой ссылке). Используй, когда просят «покажи», «как выглядит», или чтобы проиллюстрировать ответ.",
+        "parameters": {"type": "object", "properties": {
+            "jinn": {"type": "string", "description": "Имя джинна — показать его фото."},
+            "url": {"type": "string", "description": "Прямая ссылка на изображение или видео."},
+            "media_type": {"type": "string", "enum": ["image", "video"], "description": "Тип медиа (по умолчанию image)."}
+        }, "required": []}}},
+    {"type": "function", "function": {
         "name": "remember_interest", "description": "Запомнить интерес/тему пользователя — когда он называет интерес или просит обращать внимание на тему (напр. «детские коляски»).",
         "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
     {"type": "function", "function": {
@@ -374,6 +381,29 @@ async def _check_feed(user_id: int) -> str:
     return "Свежее по интересам пользователя: " + " | ".join(f"«{p['title']}» ({p['agent_name']})" for p in posts)
 
 
+async def _show_media(user_id: int, args: dict) -> tuple[str, dict | None]:
+    """Возвращает (текст-результат, media|None). media = {'url':..., 'type':...}."""
+    url = (args.get("url") or "").strip()
+    mtype = (args.get("media_type") or "image").strip().lower()
+    if mtype not in ("image", "video"):
+        mtype = "image"
+    jinn = (args.get("jinn") or "").strip()
+    if jinn:
+        pat = f"%{jinn}%"
+        async with async_session() as db:
+            a = (await db.execute(
+                select(Agent).where(Agent.name.ilike(pat), Agent.is_active == True).limit(1)
+            )).scalar_one_or_none()
+        if a and a.photo_url:
+            return (f"Показываю фото джинна {a.name}.", {"url": a.photo_url, "type": "image"})
+        if a:
+            return (f"У джинна {a.name} нет фото.", None)
+        return (f"Джинн «{jinn}» не найден.", None)
+    if url and (url.startswith("http://") or url.startswith("https://")):
+        return ("Показываю медиа.", {"url": url, "type": mtype})
+    return ("Нечего показать: укажи имя джинна или ссылку на изображение.", None)
+
+
 async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4) -> dict:
     system = await _build_context(user_id, text or "")
     messages = [
@@ -383,6 +413,7 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
     directives = []
     steps = []
     final = ""
+    media = None
     for _ in range(max_iters):
         res = await deepseek_tools(messages, TOOLS, temperature=0.6, frequency_penalty=0.3)
         calls = res.get("tool_calls") or []
@@ -410,6 +441,10 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _add_favorite(user_id, args.get("name", ""))
             elif name == "web_search":
                 result = await _web_search(args.get("query", ""))
+            elif name == "show_media":
+                result, _m = await _show_media(user_id, args)
+                if _m:
+                    media = _m
             elif name == "remember_interest":
                 result = await _add_interest(user_id, args.get("topic", ""))
             elif name == "forget_interest":
@@ -435,5 +470,6 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
         if final:
             break
     if not final:
-        final = "Готово."
-    return {"reply": final, "directives": directives, "steps": steps}
+        final = "Показываю." if media else "Готово."
+    return {"reply": final, "directives": directives, "steps": steps,
+            "media_url": (media or {}).get("url"), "media_type": (media or {}).get("type")}

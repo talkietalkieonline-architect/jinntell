@@ -253,7 +253,8 @@ async def assistant_act(body: IntentRequest, db: AsyncSession = Depends(get_db),
         if body.text:
             db.add(Message(room=room, sender_type="user", sender_user_id=user.id, sender_name=user.display_name, text=body.text))
         if result.get("reply"):
-            db.add(Message(room=room, sender_type="assistant", sender_name=(user.assistant_name or "Джим"), text=result["reply"]))
+            db.add(Message(room=room, sender_type="assistant", sender_name=(user.assistant_name or "Джим"),
+                           text=result["reply"], media_url=result.get("media_url"), media_type=result.get("media_type")))
         await db.commit()
     except Exception:
         pass

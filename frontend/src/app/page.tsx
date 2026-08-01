@@ -425,7 +425,7 @@ export default function Home() {
       setCommandHint("💭 думаю…");
       assistantAct(t).then((r) => {
         setCommandHint("");
-        if (r.reply) pushAssistant(r.reply);
+        if (r.reply || r.media_url) pushAssistant(r.reply || "", r.media_url ? { url: r.media_url, type: r.media_type || "image" } : undefined);
         if (r.directives && r.directives.length) runDirectives(r.directives);
       }).catch(() => { setCommandHint(""); sendMessage(t); }).finally(() => { assistantBusyRef.current = false; });
       return;
@@ -722,6 +722,7 @@ export default function Home() {
           onExit={() => { const r = flowReturnRef.current; setRoom(r.room || assistantRoom); setView(r.view === "flow" ? "feed" : r.view); }}
           onSend={(t) => handleSend(t)}
           lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
+          lastMedia={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") { return mm.mediaUrl ? { url: mm.mediaUrl, type: mm.mediaType || "image" } : null; } } return null; })()}
           assistantName={assistantName}
           assistantPhoto={assistantPhoto}
           voiceId={user?.assistant_voice}
