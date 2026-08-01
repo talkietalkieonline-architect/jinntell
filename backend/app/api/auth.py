@@ -79,6 +79,22 @@ async def _rate_hit(key: str, limit: int, window: int) -> bool:
             pass
 
 
+async def _is_blocked_ip(ip: str) -> bool:
+    """IP в чёрном списке (Шериф/админ заблокировал)? Fail-open."""
+    r = await _rl_client()
+    if not r:
+        return False
+    try:
+        return bool(await r.exists(f"sec:blocked:ip:{ip}"))
+    except Exception:
+        return False
+    finally:
+        try:
+            await r.aclose()
+        except Exception:
+            pass
+
+
 async def _rate_reset(key: str) -> None:
     r = await _rl_client()
     if not r:
@@ -117,6 +133,9 @@ async def _sec_event(action: str, source: str) -> None:
 async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Регистрация: телефон + пароль + email (опционально)"""
     phone = _normalize_phone(body.phone)
+    if await _is_blocked_ip(_client_ip(request)):
+        await _sec_event("security.blocked", f"ip:{_client_ip(request)}")
+        raise HTTPException(403, "Доступ временно заблокирован.")
     # анти-спам: не более 10 регистраций с одного IP в час
     if not await _rate_hit(f"rl:reg:ip:{_client_ip(request)}", 10, 3600):
         _sec_log.warning("rate-limit: регистрация заблокирована ip=%s", _client_ip(request))
@@ -180,6 +199,10 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     """Вход по телефону + паролю"""
     phone = _normalize_phone(body.phone)
     ip = _client_ip(request)
+    if await _is_blocked_ip(ip):
+        _sec_log.warning("blocked ip попытка входа ip=%s", ip)
+        await _sec_event("security.blocked", f"ip:{ip}")
+        raise HTTPException(403, "Доступ временно заблокирован.")
     # анти-брутфорс: лимит попыток на IP и на номер (счётчик сбрасывается при успехе)
     if not await _rate_hit(f"rl:login:ip:{ip}", 40, 900):
         _sec_log.warning("rate-limit: вход по IP заблокирован ip=%s", ip)

@@ -268,6 +268,50 @@ async def admin_security_report(
     }
 
 
+@router.post("/security/block")
+async def admin_block_ip(body: dict = Body(...), admin: User = Depends(get_admin_user)):
+    """Заблокировать IP на N часов (инструмент Шерифа/админа; проверяется на входе)."""
+    ip = (body.get("ip") or "").strip()
+    hours = max(1, min(int(body.get("hours", 24)), 720))
+    if not ip:
+        raise HTTPException(400, "Не указан ip")
+    r = await _get_redis()
+    try:
+        await r.set(f"sec:blocked:ip:{ip}", "1", ex=hours * 3600)
+    finally:
+        try: await r.aclose()
+        except Exception: pass
+    return {"ok": True, "ip": ip, "hours": hours}
+
+
+@router.post("/security/unblock")
+async def admin_unblock_ip(body: dict = Body(...), admin: User = Depends(get_admin_user)):
+    """Снять блокировку IP."""
+    ip = (body.get("ip") or "").strip()
+    r = await _get_redis()
+    try:
+        await r.delete(f"sec:blocked:ip:{ip}")
+    finally:
+        try: await r.aclose()
+        except Exception: pass
+    return {"ok": True, "ip": ip}
+
+
+@router.get("/security/blocked")
+async def admin_list_blocked(admin: User = Depends(get_admin_user)):
+    """Список заблокированных IP (+ сколько осталось до снятия)."""
+    r = await _get_redis()
+    out = []
+    try:
+        async for k in r.scan_iter(match="sec:blocked:ip:*"):
+            ttl = await r.ttl(k)
+            out.append({"ip": k.split("sec:blocked:ip:")[-1], "ttl_sec": ttl})
+    finally:
+        try: await r.aclose()
+        except Exception: pass
+    return {"blocked": out}
+
+
 @router.post("/agents/{agent_id}/post")
 async def admin_publish_post(
     agent_id: int,
