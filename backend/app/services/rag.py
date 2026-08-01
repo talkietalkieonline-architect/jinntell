@@ -213,6 +213,33 @@ async def ensure_collection(agent_id: int) -> bool:
     return ok
 
 
+def _provenance_tail(chunk: dict) -> str:
+    """«Хвост» провенанса для КАЖДОГО чанка: где взяли (домен/источник) + когда.
+    Дописывается к хранимому тексту, чтобы джинн цитировал источник. Пусто, если данных нет."""
+    md = chunk.get("metadata") or {}
+    url = (md.get("url") or "").strip()
+    date = (md.get("date") or "").strip()
+    src = (chunk.get("source_title") or "").strip()
+    where = src
+    if url:
+        try:
+            from urllib.parse import urlparse
+            where = urlparse(url).netloc or src or url
+        except Exception:
+            where = src or url
+    if not (where or date):
+        return ""
+    parts = []
+    if where:
+        parts.append(f"источник: {where}")
+    if date:
+        parts.append(f"дата: {date}")
+    tail = "\n\n— " + ", ".join(parts)
+    if url:
+        tail += f" ({url})"
+    return tail
+
+
 async def index_chunks(
     agent_id: int,
     chunks: List[dict],
@@ -245,7 +272,7 @@ async def index_chunks(
                 "id": point_id,
                 "vector": embedding,
                 "payload": {
-                    "text": chunk["text"],
+                    "text": chunk["text"] + _provenance_tail(chunk),
                     "article_number": chunk.get("article_number", ""),
                     "layer": chunk.get("layer", "law"),
                     "source_title": chunk.get("source_title", ""),
