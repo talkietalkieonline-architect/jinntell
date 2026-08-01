@@ -10,7 +10,7 @@ import random
 import re
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,14 +44,70 @@ def _normalize_phone(raw: str) -> str:
     return "+" + digits[:11]
 
 
+# ── Rate-limit (Redis, fail-open: если Redis недоступен — НЕ блокируем вход) ──
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown")
+
+
+async def _rl_client():
+    try:
+        import redis.asyncio as aioredis
+        return aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    except Exception:
+        return None
+
+
+async def _rate_hit(key: str, limit: int, window: int) -> bool:
+    """Инкремент счётчика попыток. True = в пределах лимита, False = превышен. Fail-open."""
+    r = await _rl_client()
+    if not r:
+        return True
+    try:
+        n = await r.incr(key)
+        if n == 1:
+            await r.expire(key, window)
+        return n <= limit
+    except Exception:
+        return True
+    finally:
+        try:
+            await r.aclose()
+        except Exception:
+            pass
+
+
+async def _rate_reset(key: str) -> None:
+    r = await _rl_client()
+    if not r:
+        return
+    try:
+        await r.delete(key)
+    except Exception:
+        pass
+    finally:
+        try:
+            await r.aclose()
+        except Exception:
+            pass
+
+
+_TOO_MANY = "Слишком много попыток. Попробуйте позже (через несколько минут)."
+
+
 # =====================================
 #  РЕГИСТРАЦИЯ
 # =====================================
 
 @router.post("/register", response_model=TokenResponse)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Регистрация: телефон + пароль + email (опционально)"""
     phone = _normalize_phone(body.phone)
+    # анти-спам: не более 10 регистраций с одного IP в час
+    if not await _rate_hit(f"rl:reg:ip:{_client_ip(request)}", 10, 3600):
+        raise HTTPException(429, _TOO_MANY)
     if len(re.sub(r"\D", "", phone)) < 11:
         raise HTTPException(400, "Некорректный номер телефона")
 
@@ -106,9 +162,15 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 # =====================================
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Вход по телефону + паролю"""
     phone = _normalize_phone(body.phone)
+    ip = _client_ip(request)
+    # анти-брутфорс: лимит попыток на IP и на номер (счётчик сбрасывается при успехе)
+    if not await _rate_hit(f"rl:login:ip:{ip}", 40, 900):
+        raise HTTPException(429, _TOO_MANY)
+    if not await _rate_hit(f"rl:login:phone:{phone}", 8, 900):
+        raise HTTPException(429, _TOO_MANY)
 
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
@@ -122,6 +184,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(403, "Аккаунт деактивирован")
 
+    # успех — сбрасываем счётчик неудач по номеру
+    await _rate_reset(f"rl:login:phone:{phone}")
     user.is_online = True
     user.last_seen = datetime.now(timezone.utc)
     await db.flush()
