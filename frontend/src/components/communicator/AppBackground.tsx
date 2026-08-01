@@ -203,9 +203,9 @@ export default function AppBackground() {
       {bg.kind === "shader" && mounted && (
         <>
           {bg.shader === "waves" ? (
-            <Waves style={shaderStyle} colorFront={pal.wavesFront} colorBack={pal.wavesBack} frequency={1.4} amplitude={0.42} spacing={0.9} proportion={0.5} softness={0.85} rotation={0.35} />
+            anim ? <Waves style={shaderStyle} colorFront={pal.wavesFront} colorBack={pal.wavesBack} frequency={1.4} amplitude={0.42} spacing={0.9} proportion={0.5} softness={0.85} rotation={0.35} /> : null
           ) : bg.shader === "dots" ? (
-            <DotOrbit style={shaderStyle} colors={pal.dots} colorBack={pal.dotsBack} size={0.5} sizeRange={0.5} spreading={0.6} stepsPerColor={2} />
+            anim ? <DotOrbit style={shaderStyle} colors={pal.dots} colorBack={pal.dotsBack} size={0.5} sizeRange={0.5} spreading={0.6} stepsPerColor={2} /> : null
           ) : (
             <MeshGradient style={shaderStyle} colors={pal.mesh} speed={anim ? 0.16 * animSpeed : 0} distortion={0.85} swirl={0.55} />
           )}
