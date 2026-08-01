@@ -1104,7 +1104,7 @@ async def admin_test_agent(
     rag_context = None
     if agent.agent_type == "specialist":
         try:
-            results = await rag_service.search(agent_id, message, limit=5)
+            results = await rag_service.search(agent_id, message, top_k=5)
             if results:
                 parts = []
                 for i, r in enumerate(results, 1):
