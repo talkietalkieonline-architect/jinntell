@@ -41,13 +41,18 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [accountMode, setAccountMode] = useState<"user" | "business">("user");
+  const [compact, setCompact] = useState(false);  // «запомненный номер»: показываем только поле пароля
   const [bizLogin, setBizLogin] = useState("");
   const [bizPassword, setBizPassword] = useState("");
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("jinntell_phone");
-    if (saved) setDigits(onlyDigits(saved).slice(0, 10));
+    if (saved) {
+      const d = onlyDigits(saved).slice(0, 10);
+      setDigits(d);
+      setCompact(d.length === 10);  // номер запомнен → компактный вход (только пароль)
+    }
   }, []);
 
   const fullPhone = "+7" + digits;
@@ -341,10 +346,24 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
         {accountMode === "user" && step === "login" && (
           <div className="flex flex-col gap-3">
             <p className="text-center text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
-              Войдите в аккаунт
+              {compact ? "С возвращением!" : "Войдите в аккаунт"}
             </p>
 
-            {PhoneField()}
+            {compact ? (
+              <div className="flex items-center justify-between rounded-xl px-4 py-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="text-base font-medium" style={{ color: "var(--text-primary)" }}>
+                  +7 ({digits.slice(0, 3)}) •••-••-{digits.slice(8, 10)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setCompact(false); setDigits(""); setPassword(""); setError(""); }}
+                  className="text-xs"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Сменить номер
+                </button>
+              </div>
+            ) : PhoneField()}
             {PasswordField({ value: password, onChange: setPassword, onSubmit: handleLogin })}
             <ErrorMsg />
 
