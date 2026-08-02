@@ -149,7 +149,12 @@ async def _room_reply(room: str, text: str, members: list, user_id: int = 0, ass
     _low = (text or "").lower()
     _an = (assistant_name or DEFAULT_ASSISTANT_NAME).lower()
     if (_an and _an in _low) or "помощник" in _low or "ассистент" in _low:
-        await _assistant_reply(room, text, assistant_name, user_id)
+        _reply = await _assistant_reply(room, text, assistant_name, user_id, room_members=members)
+        # Авто-передача слова: если помощник назвал присутствующего джинна — тот отвечает по существу
+        picked = _addressed_agent(_reply or "", members)
+        if picked:
+            _room_last_agent[room] = picked.id
+            await _agent_reply(room, picked, text)
         return
     addressed = _addressed_agent(text, members)
     if addressed:
@@ -353,8 +358,9 @@ def _build_user_persona_injection(settings: dict) -> str:
 === КОНЕЦ ==={traits_text}"""
 
 
-async def _assistant_reply(room: str, user_message: str, assistant_name: str = DEFAULT_ASSISTANT_NAME, user_id: int = 0):
-    """Помощник отвечает через LLM с инъекцией пользовательских настроек"""
+async def _assistant_reply(room: str, user_message: str, assistant_name: str = DEFAULT_ASSISTANT_NAME, user_id: int = 0, room_members: list = None):
+    """Помощник отвечает через LLM с инъекцией пользовательских настроек.
+    room_members: если задан (комната) — помощник диспетчирует среди ПРИСУТСТВУЮЩИХ. Возвращает текст ответа."""
     # Отправляем индикатор «печатает...»
     await manager.broadcast(room, {
         "type": "typing",
@@ -385,18 +391,29 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
                 )
         except Exception as e:
             print(f"[ws] memory recall error: {e}")
-        try:
-            _agents = await _find_relevant_agents(user_message, user_id)
-            if _agents:
-                _lst = "; ".join(f"{a.name} — {a.profession}" for a in _agents)
-                user_persona += (
-                    "\n\n=== ДОСТУПНЫЕ ДЖИННЫ ПО ТЕМЕ ЗАПРОСА ===\n"
-                    f"{_lst}\n"
-                    "Если пользователь ищет специалиста — предложи ПОДХОДЯЩЕГО из этого списка "
-                    "(не выдумывай несуществующих) и подскажи открыть его через Избранное → Город джиннов."
-                )
-        except Exception as e:
-            print(f"[ws] agent suggest error: {e}")
+        if room_members:
+            # В комнате: диспетчеризация среди ПРИСУТСТВУЮЩИХ джиннов
+            _lst = "; ".join(f"{a.name} — {a.profession}" for a in room_members)
+            user_persona += (
+                "\n\n=== ДЖИННЫ В ЭТОЙ КОМНАТЕ ===\n"
+                f"{_lst}\n"
+                "Ты — помощник-диспетчер в общей комнате. Если для вопроса нужен специалист из присутствующих — "
+                "коротко скажи, к кому передаёшь слово, и НАЗОВИ его ПО ИМЕНИ (точно как в списке). "
+                "Если можешь помочь сам — помоги. Не выдумывай джиннов, которых нет в комнате."
+            )
+        else:
+            try:
+                _agents = await _find_relevant_agents(user_message, user_id)
+                if _agents:
+                    _lst = "; ".join(f"{a.name} — {a.profession}" for a in _agents)
+                    user_persona += (
+                        "\n\n=== ДОСТУПНЫЕ ДЖИННЫ ПО ТЕМЕ ЗАПРОСА ===\n"
+                        f"{_lst}\n"
+                        "Если пользователь ищет специалиста — предложи ПОДХОДЯЩЕГО из этого списка "
+                        "(не выдумывай несуществующих) и подскажи открыть его через Избранное → Город джиннов."
+                    )
+            except Exception as e:
+                print(f"[ws] agent suggest error: {e}")
 
     # LLM-ответ (базовый промпт из Redis/настроек + пользовательская персонализация)
     # Мозг и промпт берём из карточки core-агента «Помощник Джим» (единый источник)
@@ -485,6 +502,7 @@ async def _assistant_reply(room: str, user_message: str, assistant_name: str = D
     })
 
     await manager.broadcast(room, msg_data)
+    return reply_text
 
 
 # Legacy aliases
