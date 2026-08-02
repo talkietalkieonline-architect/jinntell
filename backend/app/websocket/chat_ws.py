@@ -122,6 +122,42 @@ def _pick_addressed_agent(room: str, text: str, members: list) -> Agent:
     return members[0]
 
 
+# Триггер «круглого стола»: пользователь зовёт всех обсудить
+_DISCUSS_RE = re.compile(r"(обсуд|что думает|ваше мнени|ваши мнени|мнения|совещан|по очереди|все выскаж|каждый из вас|дискусс|подебат|round.?table)", re.I)
+
+
+def _addressed_agent(text: str, members: list):
+    """Явно адресованный джинн (по имени/профессии) или None."""
+    low = (text or "").lower()
+    for a in members:
+        name = (a.name or "").lower()
+        prof = (a.profession or "").lower()
+        if (name and name in low) or (prof and prof in low):
+            return a
+    return None
+
+
+async def _room_reply(room: str, text: str, members: list) -> None:
+    """Маршрутизация ответа в комнате:
+    - адресован конкретному джинну (по имени/профессии) → отвечает он один;
+    - «обсудите / что думаете / совещание» → КРУГЛЫЙ СТОЛ: до 3 джиннов по очереди (каждый видит предыдущих);
+    - обычный вопрос без адресата → один (последний адресат / первый)."""
+    if not members:
+        return
+    addressed = _addressed_agent(text, members)
+    if addressed:
+        _room_last_agent[room] = addressed.id
+        await _agent_reply(room, addressed, text)
+        return
+    if _DISCUSS_RE.search(text or "") and len(members) > 1:
+        for a in members[:3]:  # круглый стол: последовательно, каждый видит реплики предыдущих через историю
+            await _agent_reply(room, a, text)
+        _room_last_agent[room] = members[0].id
+        return
+    target = _pick_addressed_agent(room, text, members)
+    await _agent_reply(room, target, text)
+
+
 async def _notify_participants(room: str) -> None:
     """Пинг персональных каналов user-{id} участников — реалтайм-обновление чат-листа."""
     m = re.match(r"^dm-(\d+)-(\d+)$", room)
@@ -758,8 +794,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
             if text and agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
             elif text and room_members:
-                target = _pick_addressed_agent(room, text, room_members)
-                asyncio.create_task(_agent_reply(room, target, text))
+                asyncio.create_task(_room_reply(room, text, room_members))
             elif text and (room == "general" or room.startswith("jim-")):
                 asyncio.create_task(_assistant_reply(room, text, assistant_name, user_id))
 
