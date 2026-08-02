@@ -661,7 +661,7 @@ export function updateActionSettings(data: Partial<ActionSettings>): Promise<Act
   return apiFetch("/api/users/action-settings", { method: "PATCH", body: JSON.stringify(data) });
 }
 
-export interface GeoDelivery { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; room: string; quiet: boolean; }
+export interface GeoDelivery { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; room: string; quiet: boolean; voice?: string | null; }
 export function geoCheck(lat: number, lng: number): Promise<{ deliveries: GeoDelivery[] }> {
   return apiFetch("/api/geo/check", { method: "POST", body: JSON.stringify({ lat, lng }) });
 }

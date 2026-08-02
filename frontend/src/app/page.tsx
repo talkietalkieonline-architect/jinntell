@@ -9,7 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -599,7 +599,14 @@ export default function Home() {
         try {
           const r = await geoCheck(p.coords.latitude, p.coords.longitude);
           const d = (r.deliveries || []).find((x) => !x.quiet) || null;
-          if (d) setGeoKnock(d);
+          if (d) {
+            setGeoKnock(d);
+            // Зазывала «зазывает» голосом (best-effort; браузер может блокировать автозвук)
+            try {
+              const call = `${d.title || ""}. ${d.message || ""}`.trim();
+              if (call) { const u = await ttsBlobUrl(call, d.voice || "zahar", "good"); if (u) { const a = new Audio(u); a.play().catch(() => {}); } }
+            } catch { /* noop */ }
+          }
         } catch { /* noop */ }
       }, () => {}, { maximumAge: 60000, timeout: 10000 });
     };
@@ -697,12 +704,17 @@ export default function Home() {
       {geoKnock && (
         <div
           onClick={() => { openAgentChat(geoKnock.agent_id, { name: geoKnock.agent_name, color: geoKnock.color }); setGeoKnock(null); }}
-          className="fixed left-1/2 -translate-x-1/2 px-4 py-3 rounded-2xl text-sm animate-fade-in cursor-pointer flex items-center gap-2"
-          style={{ bottom: 96, zIndex: 80, background: "var(--panel-bg)", border: "1px solid var(--accent)", boxShadow: "0 6px 24px rgba(0,0,0,0.35)", maxWidth: "90%" }}
+          className="fixed left-1/2 -translate-x-1/2 p-3 rounded-2xl text-sm animate-fade-in cursor-pointer flex flex-col gap-2"
+          style={{ bottom: 96, zIndex: 80, background: "var(--panel-bg)", border: "1px solid var(--accent)", boxShadow: "0 6px 24px rgba(0,0,0,0.35)", maxWidth: "min(90%, 320px)" }}
         >
-          <span style={{ fontSize: 18 }}>🔔</span>
-          <span style={{ color: "var(--text-primary)" }}><b>{geoKnock.agent_name}</b> рядом: {geoKnock.title || geoKnock.message}</span>
-          <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); }} className="ml-1 text-[12px]" style={{ color: "var(--text-muted)" }}>✕</button>
+          {geoKnock.media_url && (
+            <img src={geoKnock.media_url.startsWith("data:") || geoKnock.media_url.startsWith("blob:") ? geoKnock.media_url : mediaUrl(geoKnock.media_url)} alt="" className="rounded-xl w-full" style={{ maxHeight: 140, objectFit: "cover" }} />
+          )}
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 18 }}>🔔</span>
+            <span style={{ color: "var(--text-primary)" }}><b>{geoKnock.agent_name}</b> рядом: {geoKnock.title || geoKnock.message}</span>
+            <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); }} className="ml-auto text-[12px]" style={{ color: "var(--text-muted)" }}>✕</button>
+          </div>
         </div>
       )}
 

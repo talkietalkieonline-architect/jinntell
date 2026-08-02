@@ -97,6 +97,7 @@ async def geo_check(
                 "title": gt.title or "", "message": gt.message or "",
                 "media_url": gt.media_url, "room": room,
                 "quiet": acts.get("approaches") == "assistant",
+                "voice": (getattr(agent, "tts_voice_id", None) or getattr(agent, "voice_id", None) or None),
             })
         except Exception as e:
             print(f"[geo] trigger {gt.id} error: {e}")
