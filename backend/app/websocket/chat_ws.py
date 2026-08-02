@@ -137,12 +137,19 @@ def _addressed_agent(text: str, members: list):
     return None
 
 
-async def _room_reply(room: str, text: str, members: list) -> None:
+async def _room_reply(room: str, text: str, members: list, user_id: int = 0, assistant_name: str = DEFAULT_ASSISTANT_NAME) -> None:
     """Маршрутизация ответа в комнате:
+    - обратились к ПОМОЩНИКУ (по имени/«помощник») → отвечает фоновый помощник (персона+память+диспетчеризация);
     - адресован конкретному джинну (по имени/профессии) → отвечает он один;
     - «обсудите / что думаете / совещание» → КРУГЛЫЙ СТОЛ: до 3 джиннов по очереди (каждый видит предыдущих);
     - обычный вопрос без адресата → один (последний адресат / первый)."""
     if not members:
+        return
+    # Фоновый помощник: слышит комнату, подключается по обращению по имени
+    _low = (text or "").lower()
+    _an = (assistant_name or DEFAULT_ASSISTANT_NAME).lower()
+    if (_an and _an in _low) or "помощник" in _low or "ассистент" in _low:
+        await _assistant_reply(room, text, assistant_name, user_id)
         return
     addressed = _addressed_agent(text, members)
     if addressed:
@@ -794,7 +801,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
             if text and agent:
                 asyncio.create_task(_agent_reply(room, agent, text))
             elif text and room_members:
-                asyncio.create_task(_room_reply(room, text, room_members))
+                asyncio.create_task(_room_reply(room, text, room_members, user_id, assistant_name))
             elif text and (room == "general" or room.startswith("jim-")):
                 asyncio.create_task(_assistant_reply(room, text, assistant_name, user_id))
 
