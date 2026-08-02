@@ -586,20 +586,40 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         else:
             reply_text = agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂"
     else:
-        reply_text = await get_agent_reply(**_agent_kwargs)
-        # Guardian: анти-галлюцинации для ответов с базой знаний (сверка + строгая перегенерация)
-        if rag_context:
+        reply_text = None
+        # Q&A-кэш (2-я память): для консультантов (specialist/business) на СВЕЖИЙ вопрос без длинной истории —
+        # похожий вопрос уже был → берём готовый ответ, не генерим (экономия). См. [[design_data_and_memory_layers]].
+        _qa_ok = (getattr(agent, "agent_type", "") in ("specialist", "business")) and len(history) <= 2
+        if _qa_ok:
             try:
-                from app.services import guardian
-                if await guardian.enabled():
-                    _v = await guardian.verify(user_message, rag_context, reply_text)
-                    if not _v.get("ok"):
-                        print(f"[guardian] flagged agent {agent.id}: {_v.get('issue')}")
-                        _strict = dict(_agent_kwargs)
-                        _strict["system_prompt"] = (agent.system_prompt or "") + guardian.STRICT_SUFFIX
-                        reply_text = await get_agent_reply(**_strict)
+                from app.services import qa_cache
+                _hit = await qa_cache.lookup(agent.id, user_message)
+                if _hit and _hit.get("answer"):
+                    reply_text = _hit["answer"]  # переиспользуем (Guardian уже проверял при сохранении)
             except Exception as e:
-                print(f"[guardian] error: {e}")
+                print(f"[qa_cache] lookup skip: {e}")
+        if reply_text is None:
+            reply_text = await get_agent_reply(**_agent_kwargs)
+            # Guardian: анти-галлюцинации для ответов с базой знаний (сверка + строгая перегенерация)
+            if rag_context:
+                try:
+                    from app.services import guardian
+                    if await guardian.enabled():
+                        _v = await guardian.verify(user_message, rag_context, reply_text)
+                        if not _v.get("ok"):
+                            print(f"[guardian] flagged agent {agent.id}: {_v.get('issue')}")
+                            _strict = dict(_agent_kwargs)
+                            _strict["system_prompt"] = (agent.system_prompt or "") + guardian.STRICT_SUFFIX
+                            reply_text = await get_agent_reply(**_strict)
+                except Exception as e:
+                    print(f"[guardian] error: {e}")
+            # Сохранить свежесгенерированный ответ в Q&A-кэш
+            if _qa_ok:
+                try:
+                    from app.services import qa_cache
+                    await qa_cache.store(agent.id, user_message, reply_text)
+                except Exception as e:
+                    print(f"[qa_cache] store skip: {e}")
 
     async with async_session() as db:
         agent_msg = Message(
