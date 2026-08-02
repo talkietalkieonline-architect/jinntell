@@ -45,6 +45,34 @@ async def report_event(body: ClientEvent, user: User = Depends(get_current_user)
     return {"ok": True}
 
 
+@router.get("/mine")
+async def read_my_log(
+    hours: int = Query(168, ge=1, le=720),
+    limit: int = Query(100, ge=1, le=500),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """«Действия помощника» — срез общего журнала по СВОЕМУ user_id (прозрачная память действий).
+    Один журнал → роль-вид: пользователь видит только своё (действия помощника + свои), без системного/security шума."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    q = (select(ActivityLog)
+         .where(ActivityLog.created_at >= since,
+                ActivityLog.user_id == user.id,
+                ActivityLog.actor.in_(["assistant", "user"]))
+         .order_by(ActivityLog.id.desc()).limit(limit))
+    rows = (await db.execute(q)).scalars().all()
+    return {"total": len(rows), "items": [{
+        "id": r.id,
+        "actor": r.actor,
+        "action": r.action,
+        "target_name": r.target_name,
+        "room": r.room,
+        "result": r.result,
+        "detail": decrypt_text(r.detail) if r.detail else None,
+        "created_at": r.created_at.isoformat(),
+    } for r in rows]}
+
+
 @router.get("/admin")
 async def read_log(
     user_id: Optional[int] = None,
