@@ -758,7 +758,10 @@ export default function Home() {
           topPad={topBarH}
           bottomPad={bottomBarH}
           assistantName={assistantName}
+          assistantPhoto={assistantPhoto}
+          openChats={openChats}
           onOpenAssistant={() => { setRoom(assistantRoom); setView("chat"); }}
+          onOpenFlow={() => { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); }}
           onOpenChat={(r) => { setRoom(r); setView("chat"); }}
         />
       ) : (
