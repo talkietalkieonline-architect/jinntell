@@ -16,6 +16,7 @@ interface Props {
   onOpenAgent?: (agentId: number, meta?: { name?: string; color?: string }) => void;
   onOpenContact?: (c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean; avatar_frame?: string | null }) => void;
   onOpenChat?: (room: string) => void;
+  onOpenActions?: () => void;
 }
 
 const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
@@ -62,7 +63,8 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   );
 }
 
-export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat }: Props) {
+export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions }: Props) {
+  const [hint, setHint] = useState("");
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +138,18 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
         {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => agentCircle(a, true))}</Strip>}
         {guests.length > 0 && <Strip title="Гости · недавние">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
+
+        {/* ═══ ИНФОРМАЦИЯ (коллекции помощника) ═══ */}
+        <Strip title="Информация">
+          <Circle label="Лента" emoji="🔔" color="#5ea0e8" small onClick={() => document.getElementById("home-feed")?.scrollIntoView({ behavior: "smooth" })} />
+          <Circle label="Приглашения" emoji="📍" color="#c0563a" small onClick={() => setHint("«Приглашения» — гео-предложения рядom (гео-промо). Экран-подборка в разработке.")} />
+          <Circle label="Действия" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
+        </Strip>
+        {hint && (
+          <div onClick={() => setHint("")} className="rounded-xl px-3 py-2 text-[12px] cursor-pointer" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--text-secondary)" }}>
+            {hint} <span style={{ color: "var(--text-muted)" }}>· закрыть</span>
+          </div>
+        )}
 
         {/* ═══ МОИ ЛЮДИ ═══ */}
         <div className="pt-1">

@@ -1535,3 +1535,7 @@ export function getActivityLog(params: { user_id?: number; action?: string; acto
   q.set("limit", String(params.limit ?? 200));
   return apiFetch(`/api/activity/admin?${q.toString()}`);
 }
+export interface MyActivityItem { id: number; actor: string; action: string; target_name?: string | null; room?: string | null; result?: string | null; detail?: string | null; created_at: string }
+export function getMyActivity(hours = 168, limit = 100): Promise<{ total: number; items: MyActivityItem[] }> {
+  return apiFetch(`/api/activity/mine?hours=${hours}&limit=${limit}`);
+}

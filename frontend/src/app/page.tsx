@@ -9,6 +9,7 @@ import AppBackground from "@/components/communicator/AppBackground";
 import NavBar, { type OpenChat } from "@/components/communicator/NavBar";
 import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
+import ActionsModal from "@/components/communicator/ActionsModal";
 import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
@@ -68,6 +69,7 @@ export default function Home() {
   const { isLoggedIn, isAdmin, login, logout, user } = useAuth();
   const [screen, setScreen] = useState<AppScreen>("splash");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
@@ -767,6 +769,7 @@ export default function Home() {
           onOpenAgent={openAgentChat}
           onOpenContact={openDM}
           onOpenChat={(r) => { setRoom(r); setView("chat"); }}
+          onOpenActions={() => setActionsOpen(true)}
         />
       ) : (
         <ChatArea
@@ -877,6 +880,8 @@ export default function Home() {
       )}
 
       {/* Центр Управления */}
+      {actionsOpen && <ActionsModal onClose={() => setActionsOpen(false)} assistantName={assistantName} />}
+
       {settingsOpen && (
       <SettingsModal
         isOpen={settingsOpen}
