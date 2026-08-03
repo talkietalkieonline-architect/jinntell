@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, mediaUrl, type FeedEvent, type ChannelUnread } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getFavoriteAgents, getRecommendedAgents, getContacts, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -8,47 +8,17 @@ interface Props {
   bottomPad: number;
   assistantName: string;
   assistantPhoto?: string | null;
+  userId?: number;
   openChats?: OpenChat[];
+  favIds?: Set<number>;
   onOpenAssistant: () => void;
   onOpenFlow?: () => void;
+  onOpenAgent?: (agentId: number, meta?: { name?: string; color?: string }) => void;
+  onOpenContact?: (c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean; avatar_frame?: string | null }) => void;
   onOpenChat?: (room: string) => void;
 }
 
-// Кружок (коллекция или разговор): аватар/эмодзи + подпись
-function Circle({ label, photo, color, emoji, pinned, badge, onClick }: {
-  label: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; onClick?: () => void;
-}) {
-  const src = photo ? (photo.startsWith("http") || photo.startsWith("data:") || photo.startsWith("blob:") ? photo : mediaUrl(photo)) : null;
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1 shrink-0 w-[64px] transition-transform hover:scale-105">
-      <div className="relative w-14 h-14 rounded-full flex items-center justify-center overflow-hidden" style={{ border: pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)" }}>
-        {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span className="text-xl">{emoji || "💬"}</span>}
-        {!!badge && badge > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{badge}</span>}
-      </div>
-      <span className="text-[10px] leading-tight truncate w-full text-center" style={{ color: "var(--text-secondary)" }}>{label}</span>
-    </button>
-  );
-}
-
-// Полоса — заголовок + горизонтальный скролл кружков
-function Strip({ title, children, empty }: { title: string; children: ReactNode; empty?: string }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-[0.15em] mb-1.5 px-1 font-semibold" style={{ color: "var(--text-muted)" }}>{title}</div>
-      <div className="flex gap-3 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
-        {children}
-        {empty && <span className="text-[11px] self-center px-2" style={{ color: "var(--text-muted)", opacity: 0.6 }}>{empty}</span>}
-      </div>
-    </div>
-  );
-}
-
-const KIND_ICON: Record<string, string> = {
-  info: "ℹ️",
-  reminder: "⏰",
-  offer: "🏷️",
-  event: "📅",
-};
+const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -60,13 +30,45 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)} дн назад`;
 }
 
-export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, openChats = [], onOpenAssistant, onOpenFlow, onOpenChat }: Props) {
-  const jinnChats = openChats.filter((c) => c.room.startsWith("agent-") || c.room.startsWith("room-"));
-  const peopleChats = openChats.filter((c) => c.room.startsWith("dm-"));
-  const [hint, setHint] = useState("");
+// Кружок (джинн/человек/коллекция): аватар + подпись; варианты — закреплён, платный, малый, онлайн, счётчик
+function Circle({ label, photo, color, emoji, pinned, badge, paid, small, online, onClick }: {
+  label: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; onClick?: () => void;
+}) {
+  const src = photo ? (photo.startsWith("http") || photo.startsWith("data:") || photo.startsWith("blob:") ? photo : mediaUrl(photo)) : null;
+  const d = small ? 44 : 56;
+  return (
+    <button onClick={onClick} className="flex flex-col items-center gap-1 shrink-0 transition-transform hover:scale-105" style={{ width: small ? 54 : 64 }}>
+      <div className="relative rounded-full flex items-center justify-center overflow-hidden" style={{ width: d, height: d, border: pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)" }}>
+        {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: small ? 16 : 20 }}>{emoji || "💬"}</span>}
+        {!!badge && badge > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold home-badge" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{badge}</span>}
+        {paid && <span className="absolute -bottom-0.5 -right-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px]" style={{ background: "#e8b84a", color: "#1a1400" }}>₽</span>}
+        {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />}
+      </div>
+      <span className="text-[10px] leading-tight truncate w-full text-center" style={{ color: "var(--text-secondary)" }}>{label}</span>
+    </button>
+  );
+}
+
+function Strip({ title, children, empty }: { title: string; children: ReactNode; empty?: string }) {
+  return (
+    <div>
+      {title && <div className="text-[11px] uppercase tracking-[0.12em] mb-1.5 px-1 font-semibold" style={{ color: "var(--text-muted)" }}>{title}</div>}
+      <div className="flex gap-2.5 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
+        {children}
+        {empty && <span className="text-[11px] self-center px-2" style={{ color: "var(--text-muted)", opacity: 0.6 }}>{empty}</span>}
+      </div>
+    </div>
+  );
+}
+
+export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat }: Props) {
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
   const [loading, setLoading] = useState(true);
+  const [favs, setFavs] = useState<AgentOut[]>([]);
+  const [recommended, setRecommended] = useState<AgentOut[]>([]);
+  const [contacts, setContacts] = useState<ContactOut[]>([]);
+  const [peopleSearch, setPeopleSearch] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -81,66 +83,72 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     return () => { alive = false; clearInterval(iv); window.removeEventListener("jinntell_feed_ping", onPing); };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    getFavoriteAgents().then((f) => { if (alive) setFavs(f); }).catch(() => {});
+    getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
+    getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const handleDismiss = async (id: number) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
     try { await dismissFeed(id); } catch { /* noop */ }
   };
 
+  // Категоризация «Мои джинны» из избранного
+  const personal = favs.filter((a) => userId && a.owner_id === userId);
+  const personalIds = new Set(personal.map((a) => a.id));
+  const consultants = favs.filter((a) => a.agent_type === "business" && !personalIds.has(a.id));
+  const specialists = favs.filter((a) => a.agent_type === "specialist" && !personalIds.has(a.id));
+  const grouped = new Set([...personal, ...consultants, ...specialists].map((a) => a.id));
+  const others = favs.filter((a) => !grouped.has(a.id));
+  const recIds = new Set(favs.map((a) => a.id));
+  const recs = recommended.filter((a) => !recIds.has(a.id)).slice(0, 12);
+
+  // Гости — недавние чаты с джиннами, которых нет в избранном (авто-истечение 12ч — TODO)
+  const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)));
+
+  const peopleList = contacts.filter((c) => !peopleSearch || c.display_name.toLowerCase().includes(peopleSearch.toLowerCase()));
+
+  const agentCircle = (a: AgentOut, small?: boolean) => (
+    <Circle key={a.id} label={a.name} color={a.color} emoji="🧞" paid={a.is_paid} small={small} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} />
+  );
+
   return (
     <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
-      <div className="w-full max-w-[620px] px-4 flex flex-col gap-4">
-        {/* ПОЛОСА 1 — Коллекции (Поток и Помощник закреплены, далее Лента, Приглашения, Действия) */}
-        <Strip title="Ленты и подборки">
-          <Circle label="Поток" emoji="🌀" pinned onClick={onOpenFlow} />
+      <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
+
+        {/* ═══ БЛОК 1: МОИ ДЖИННЫ ═══ */}
+        <div className="text-[13px] font-bold px-1" style={{ color: "var(--text-primary)" }}>Мои джинны</div>
+        <Strip title="">
           <Circle label={assistantName} photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
-          <Circle label="Лента" emoji="🔔" color="#5ea0e8" onClick={() => { const el = document.getElementById("home-feed"); el?.scrollIntoView({ behavior: "smooth" }); }} />
-          <Circle label="Приглашения" emoji="📍" color="#c0563a" onClick={() => setHint("«Приглашения» — здесь появятся гео-предложения рядом (гео-промо). Экран в разработке.")} />
-          <Circle label="Действия" emoji="📋" color="#4a9e7f" onClick={() => setHint("«Действия помощника» — журнал того, что делал помощник. Экран в разработке.")} />
+          <Circle label="Поток" emoji="🌀" pinned onClick={onOpenFlow} />
+          {personal.map((a) => agentCircle(a))}
         </Strip>
-        {hint && (
-          <div onClick={() => setHint("")} className="rounded-xl px-3 py-2 text-[12px] cursor-pointer" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--text-secondary)" }}>
-            {hint} <span style={{ color: "var(--text-muted)" }}>· закрыть</span>
+        {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
+        {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
+        {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
+        {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => agentCircle(a, true))}</Strip>}
+        {guests.length > 0 && <Strip title="Гости · недавние">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
+
+        {/* ═══ МОИ ЛЮДИ ═══ */}
+        <div className="pt-1">
+          <div className="text-[13px] font-bold px-1 mb-1.5" style={{ color: "var(--text-primary)" }}>Мои люди</div>
+          <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Поиск людей…" className="w-full rounded-xl px-3 py-2 text-sm outline-none mb-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+          <div className="flex gap-2.5 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
+            {peopleList.length > 0 ? peopleList.map((c) => (
+              <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} onClick={() => onOpenContact?.(c)} />
+            )) : <span className="text-[11px] self-center px-2" style={{ color: "var(--text-muted)", opacity: 0.6 }}>{peopleSearch ? "никого не найдено" : "нет контактов"}</span>}
           </div>
-        )}
+        </div>
 
-        {/* ПОЛОСА 2 — Джинны (чаты и комнаты) */}
-        <Strip title="Джинны" empty={jinnChats.length === 0 ? "пока пусто — найди джинна в Городе" : undefined}>
-          {jinnChats.map((c) => (
-            <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" badge={c.count} onClick={() => onOpenChat?.(c.room)} />
-          ))}
-        </Strip>
-
-        {/* ПОЛОСА 3 — Люди */}
-        <Strip title="Люди" empty={peopleChats.length === 0 ? "пока нет диалогов" : undefined}>
-          {peopleChats.map((c) => (
-            <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="👤" badge={c.count} onClick={() => onOpenChat?.(c.room)} />
-          ))}
-        </Strip>
-
-        {/* Заголовок Ленты */}
-        <div id="home-feed" className="flex items-center gap-2 px-1 pt-1">
+        {/* ═══ БЛОК: ЛЕНТА (события + каналы) ═══ */}
+        <div id="home-feed" className="flex items-center gap-2 px-1 pt-2">
           <span className="text-base">🔔</span>
-          <span className="text-[12px] uppercase tracking-[0.2em] font-semibold" style={{ color: "var(--text-muted)" }}>Лента</span>
+          <span className="text-[13px] font-bold" style={{ color: "var(--text-primary)" }}>Лента</span>
         </div>
 
-        {/* Приветствие помощника */}
-        <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>🧞</div>
-            <div>
-              <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{assistantName}</p>
-              <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>ваш помощник</p>
-            </div>
-          </div>
-          <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-            Здесь важное: напоминания, события и сообщения от джиннов. Чтобы задать вопрос — откройте чат.
-          </p>
-          <button onClick={onOpenAssistant} className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
-            Чат с {assistantName}
-          </button>
-        </div>
-
-        {/* Непрочитанное по каналам */}
         {channels.map((ch) => (
           <button key={ch.agent_id} onClick={() => onOpenChat?.(ch.link_room)} className="rounded-2xl p-3.5 flex items-center gap-3 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
             <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style={{ background: `${ch.color}22`, border: `1.5px solid ${ch.color}55`, color: ch.color }}>📰</div>
@@ -152,7 +160,6 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           </button>
         ))}
 
-        {/* События */}
         {loading ? (
           <p className="text-[13px] text-center py-6" style={{ color: "var(--text-muted)", opacity: 0.55 }}>Загрузка…</p>
         ) : events.length === 0 ? (
@@ -163,12 +170,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           events.map((e) => {
             const clickable = !!e.link_room && !!onOpenChat;
             return (
-              <div
-                key={e.id}
-                onClick={() => { if (clickable) onOpenChat!(e.link_room!); }}
-                className={`rounded-2xl p-3.5 relative transition-all ${clickable ? "cursor-pointer hover:scale-[1.01]" : ""}`}
-                style={{ background: "var(--bg-glass)", border: `1px solid ${e.is_read ? "var(--bg-glass-border)" : "var(--accent)"}` }}
-              >
+              <div key={e.id} onClick={() => { if (clickable) onOpenChat!(e.link_room!); }} className={`rounded-2xl p-3.5 relative transition-all ${clickable ? "cursor-pointer hover:scale-[1.01]" : ""}`} style={{ background: "var(--bg-glass)", border: `1px solid ${e.is_read ? "var(--bg-glass-border)" : "var(--accent)"}` }}>
                 <div className="flex items-start gap-3">
                   <span className="text-lg shrink-0 mt-0.5">{e.icon || KIND_ICON[e.kind] || "ℹ️"}</span>
                   <div className="min-w-0 flex-1 pr-5">
