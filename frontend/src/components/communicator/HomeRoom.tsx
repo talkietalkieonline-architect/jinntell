@@ -38,9 +38,10 @@ function Circle({ label, photo, color, emoji, pinned, badge, paid, small, online
   const d = small ? 44 : 56;
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-1 shrink-0 transition-transform hover:scale-105" style={{ width: small ? 54 : 64 }}>
-      <div className="relative rounded-full flex items-center justify-center overflow-hidden" style={{ width: d, height: d, border: pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)" }}>
+      <div className="relative rounded-full flex items-center justify-center overflow-hidden" style={{ width: d, height: d, border: (badge && badge > 0) ? "2px solid var(--accent)" : pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)", boxShadow: (badge && badge > 0) ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)" : undefined }}>
         {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: small ? 16 : 20 }}>{emoji || "💬"}</span>}
-        {!!badge && badge > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold home-badge" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{badge}</span>}
+        {!!badge && badge > 0 && <span className="absolute inset-0 rounded-full animate-ping pointer-events-none" style={{ boxShadow: "0 0 0 2px var(--accent)", opacity: 0.35 }} />}
+        {!!badge && badge > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{badge}</span>}
         {paid && <span className="absolute -bottom-0.5 -right-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px]" style={{ background: "#e8b84a", color: "#1a1400" }}>₽</span>}
         {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />}
       </div>
@@ -111,8 +112,12 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
   const peopleList = contacts.filter((c) => !peopleSearch || c.display_name.toLowerCase().includes(peopleSearch.toLowerCase()));
 
+  // Непрочитанные из открытых чатов → «живой» кружок джинна
+  const unreadByAgent = new Map<number, number>();
+  openChats.forEach((c) => { if (c.count && c.count > 0 && c.agentId) unreadByAgent.set(c.agentId, (unreadByAgent.get(c.agentId) || 0) + c.count); });
+
   const agentCircle = (a: AgentOut, small?: boolean) => (
-    <Circle key={a.id} label={a.name} color={a.color} emoji="🧞" paid={a.is_paid} small={small} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} />
+    <Circle key={a.id} label={a.name} color={a.color} emoji="🧞" paid={a.is_paid} small={small} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} />
   );
 
   return (
