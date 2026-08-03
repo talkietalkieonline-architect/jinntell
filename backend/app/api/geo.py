@@ -42,7 +42,7 @@ async def geo_check(
     if not acts.get("allow_location") or acts.get("approaches") == "off":
         return {"deliveries": []}
 
-    from app.models.geo_trigger import GeoTrigger, GeoTriggerHit
+    from app.models.geo_trigger import GeoTrigger, GeoTriggerHit, GeoContact
     from app.models.agent import Agent
     from app.models.contractor import Contractor
     from app.models.message import Message
@@ -85,6 +85,8 @@ async def geo_check(
                 text = (text + "\n" + gt.message).strip() if text else gt.message.strip()
             if not text:
                 text = "У нас есть предложение для вас рядом!"
+            if gt.promo_code:
+                text = f"{text}\nПромокод: {gt.promo_code} (назовите на месте)"
             msg = Message(
                 room=room, sender_type="agent", sender_agent_id=agent.id,
                 sender_name=agent.name, text=text,
@@ -92,12 +94,16 @@ async def geo_check(
                 media_type=("image" if gt.media_url else None),
             )
             db.add(msg)
+            # Журнал контактов гео-промо (атрибуция трафика)
+            db.add(GeoContact(trigger_id=gt.id, agent_id=agent.id, user_id=user.id,
+                              promo_code=gt.promo_code, result="shown"))
             deliveries.append({
                 "agent_id": agent.id, "agent_name": agent.name, "color": agent.color,
                 "title": gt.title or "", "message": gt.message or "",
                 "media_url": gt.media_url, "room": room,
                 "quiet": acts.get("approaches") == "assistant",
                 "voice": (getattr(agent, "tts_voice_id", None) or getattr(agent, "voice_id", None) or None),
+                "promo_code": gt.promo_code or None,
             })
         except Exception as e:
             print(f"[geo] trigger {gt.id} error: {e}")

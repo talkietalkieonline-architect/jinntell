@@ -85,12 +85,13 @@ async def _agent_rooms(agent_id: int, db: AsyncSession) -> list[str]:
 class GeoTriggerIn(BaseModel):
     lat: float
     lng: float
-    radius_m: int = 200
+    radius_m: int = 80          # дефолт «у двери» (200м = хаос в плотных местах)
     title: str = ""
     message: str = ""
     media_url: Optional[str] = None
     is_active: bool = True
     cooldown_hours: int = 24
+    promo_code: Optional[str] = None
 
 
 def _geo_out(gt) -> dict:
@@ -98,7 +99,7 @@ def _geo_out(gt) -> dict:
         "agent_id": gt.agent_id, "lat": gt.lat, "lng": gt.lng, "radius_m": gt.radius_m,
         "title": gt.title or "", "message": gt.message or "", "media_url": gt.media_url,
         "is_active": gt.is_active, "cooldown_hours": gt.cooldown_hours,
-        "price_kopecks": gt.price_kopecks,
+        "price_kopecks": gt.price_kopecks, "promo_code": gt.promo_code or "",
     }
 
 
@@ -122,16 +123,39 @@ async def put_geo_trigger(agent_id: int, body: GeoTriggerIn, contractor: Contrac
         db.add(gt)
     gt.lat = float(body.lat)
     gt.lng = float(body.lng)
-    gt.radius_m = max(20, min(5000, int(body.radius_m)))
+    gt.radius_m = max(20, min(300, int(body.radius_m)))  # потолок 300м (200м уже хаос на Невском)
     gt.title = (body.title or "")[:200]
     gt.message = body.message or ""
     gt.media_url = body.media_url or None
     gt.is_active = bool(body.is_active)
     gt.cooldown_hours = max(1, int(body.cooldown_hours))
+    gt.promo_code = (body.promo_code or "").strip()[:40] or None
     gt.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(gt)
     return _geo_out(gt)
+
+
+@router.get("/agents/{agent_id}/geo-stats")
+async def geo_stats(agent_id: int, contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
+    """Статистика гео-промо джинна: сколько показов/открытий/конверсий (атрибуция трафика)."""
+    from sqlalchemy import func as _f
+    from app.models.geo_trigger import GeoContact
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    rows = (await db.execute(
+        select(GeoContact.result, _f.count()).where(GeoContact.agent_id == agent.id).group_by(GeoContact.result)
+    )).all()
+    by_result = {r[0]: r[1] for r in rows}
+    recent = (await db.execute(
+        select(GeoContact).where(GeoContact.agent_id == agent.id).order_by(GeoContact.id.desc()).limit(20)
+    )).scalars().all()
+    return {
+        "shown": by_result.get("shown", 0),
+        "opened": by_result.get("opened", 0),
+        "converted": by_result.get("converted", 0),
+        "by_result": by_result,
+        "recent": [{"user_id": c.user_id, "result": c.result, "promo_code": c.promo_code, "at": c.created_at.isoformat()} for c in recent],
+    }
 
 
 @router.post("/agents/{agent_id}/geo-trigger/flyer")

@@ -25,6 +25,7 @@ class GeoTrigger(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     cooldown_hours: Mapped[int] = mapped_column(Integer, default=24)     # не чаще раза в N часов на юзера
     price_kopecks: Mapped[int] = mapped_column(Integer, default=200)     # цена показа контрагенту (2 ₽)
+    promo_code: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)  # код для атрибуции трафика («назови на кассе»)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -37,3 +38,17 @@ class GeoTriggerHit(Base):
     trigger_id: Mapped[int] = mapped_column(Integer, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     last_fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class GeoContact(Base):
+    """Журнал контактов гео-промо (для атрибуции трафика): каждый показ/результат.
+    result: shown | opened | refused | converted. promo_code — код зазывалы для сверки на кассе."""
+    __tablename__ = "geo_contacts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trigger_id: Mapped[int] = mapped_column(Integer, index=True)
+    agent_id: Mapped[int] = mapped_column(Integer, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    promo_code: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    result: Mapped[str] = mapped_column(String(20), default="shown")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
