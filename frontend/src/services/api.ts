@@ -976,9 +976,13 @@ export function contractorGetBilling(): Promise<ContractorBilling> {
   return contractorFetch("/api/contractor/billing");
 }
 
-export interface GeoTriggerData { agent_id?: number; lat: number; lng: number; radius_m: number; title: string; message: string; media_url?: string | null; is_active: boolean; cooldown_hours: number; price_kopecks?: number; }
+export interface GeoTriggerData { agent_id?: number; lat: number; lng: number; radius_m: number; title: string; message: string; media_url?: string | null; is_active: boolean; cooldown_hours: number; price_kopecks?: number; promo_code?: string; }
+export interface GeoStats { shown: number; opened: number; converted: number; by_result: Record<string, number>; recent: { user_id: number; result: string; promo_code?: string | null; at: string }[]; }
 export function contractorGetGeoTrigger(agentId: number): Promise<GeoTriggerData | null> {
   return contractorFetch(`/api/contractor/agents/${agentId}/geo-trigger`);
+}
+export function contractorGeoStats(agentId: number): Promise<GeoStats> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/geo-stats`);
 }
 export function contractorPutGeoTrigger(agentId: number, data: Omit<GeoTriggerData, "agent_id" | "price_kopecks">): Promise<GeoTriggerData> {
   return contractorFetch(`/api/contractor/agents/${agentId}/geo-trigger`, { method: "PUT", body: JSON.stringify(data) });

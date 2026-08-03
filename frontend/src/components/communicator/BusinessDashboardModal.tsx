@@ -37,6 +37,8 @@ import {
   contractorGetGeoTrigger,
   contractorPutGeoTrigger,
   contractorUploadGeoFlyer,
+  contractorGeoStats,
+  type GeoStats,
 } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
@@ -98,9 +100,11 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [activeSection, setActiveSection] = useState<EditSection>("main");
   const [geoLat, setGeoLat] = useState(""); const [geoLng, setGeoLng] = useState("");
-  const [geoRadius, setGeoRadius] = useState("200"); const [geoTitle, setGeoTitle] = useState("");
+  const [geoRadius, setGeoRadius] = useState("80"); const [geoTitle, setGeoTitle] = useState("");
   const [geoMsg, setGeoMsg] = useState(""); const [geoMedia, setGeoMedia] = useState("");
   const [geoActive, setGeoActive] = useState(true); const [geoCooldown, setGeoCooldown] = useState("24");
+  const [geoPromo, setGeoPromo] = useState("");
+  const [geoStats, setGeoStats] = useState<GeoStats | null>(null);
   const [geoSaved, setGeoSaved] = useState(false);
 
   // ── Редактируемые поля (все секции) ──
@@ -336,15 +340,16 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
 
   useEffect(() => {
     if (activeSection === "geo" && selectedAgent) {
+      contractorGeoStats(selectedAgent.id).then(setGeoStats).catch(() => setGeoStats(null));
       contractorGetGeoTrigger(selectedAgent.id).then((g) => {
-        if (g) { setGeoLat(String(g.lat)); setGeoLng(String(g.lng)); setGeoRadius(String(g.radius_m)); setGeoTitle(g.title || ""); setGeoMsg(g.message || ""); setGeoMedia(g.media_url || ""); setGeoActive(g.is_active); setGeoCooldown(String(g.cooldown_hours)); }
+        if (g) { setGeoLat(String(g.lat)); setGeoLng(String(g.lng)); setGeoRadius(String(g.radius_m)); setGeoTitle(g.title || ""); setGeoMsg(g.message || ""); setGeoMedia(g.media_url || ""); setGeoActive(g.is_active); setGeoCooldown(String(g.cooldown_hours)); setGeoPromo(g.promo_code || ""); }
       }).catch(() => {});
     }
   }, [activeSection, selectedAgent]);
   const saveGeo = async () => {
     if (!selectedAgent) return;
     try {
-      await contractorPutGeoTrigger(selectedAgent.id, { lat: parseFloat(geoLat) || 0, lng: parseFloat(geoLng) || 0, radius_m: parseInt(geoRadius) || 200, title: geoTitle, message: geoMsg, media_url: geoMedia || null, is_active: geoActive, cooldown_hours: parseInt(geoCooldown) || 24 });
+      await contractorPutGeoTrigger(selectedAgent.id, { lat: parseFloat(geoLat) || 0, lng: parseFloat(geoLng) || 0, radius_m: parseInt(geoRadius) || 80, title: geoTitle, message: geoMsg, media_url: geoMedia || null, is_active: geoActive, cooldown_hours: parseInt(geoCooldown) || 24, promo_code: geoPromo });
       setGeoSaved(true); setTimeout(() => setGeoSaved(false), 1500);
     } catch { /* noop */ }
   };
@@ -816,6 +821,17 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                     )}
                   </div>
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Не чаще раза в (часов)</label><input value={geoCooldown} onChange={(e) => setGeoCooldown(e.target.value)} placeholder="24" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
+                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Промокод (для атрибуции трафика)</label><input value={geoPromo} onChange={(e) => setGeoPromo(e.target.value)} placeholder="напр. COFFEE10" maxLength={40} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /><p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Показывается в приглашении; клиент называет на месте → вы видите, что пришёл от гео-промо.</p></div>
+                  {geoStats && (geoStats.shown > 0) && (
+                    <div className="rounded-xl px-3 py-2.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      <div className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--text-muted)" }}>Статистика гео-промо</div>
+                      <div className="flex gap-4 text-sm" style={{ color: "var(--text-primary)" }}>
+                        <span>Показов: <b>{geoStats.shown}</b></span>
+                        <span>Открыто: <b>{geoStats.opened}</b></span>
+                        <span>Конверсий: <b style={{ color: "var(--accent)" }}>{geoStats.converted}</b></span>
+                      </div>
+                    </div>
+                  )}
                   <button onClick={saveGeo} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Сохранить геотриггер</button>
                   {geoSaved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
                 </div>
