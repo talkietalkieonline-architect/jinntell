@@ -1539,3 +1539,17 @@ export interface MyActivityItem { id: number; actor: string; action: string; tar
 export function getMyActivity(hours = 168, limit = 100): Promise<{ total: number; items: MyActivityItem[] }> {
   return apiFetch(`/api/activity/mine?hours=${hours}&limit=${limit}`);
 }
+export interface DigestSection { agent_id: number; agent_name: string; color?: string; text: string }
+export interface DigestFull { id: number; query: string; sections: DigestSection[]; created_at: string }
+export function makeDigest(query: string): Promise<{ ok: boolean; id?: number; query?: string; sections?: DigestSection[]; reason?: string }> {
+  return apiFetch("/api/chat/digest", { method: "POST", body: JSON.stringify({ text: query }) });
+}
+export function listDigests(): Promise<{ items: { id: number; query: string; created_at: string }[] }> {
+  return apiFetch("/api/chat/digests");
+}
+export function getDigest(id: number): Promise<DigestFull> {
+  return apiFetch(`/api/chat/digests/${id}`);
+}
+export function deleteDigest(id: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/chat/digests/${id}`, { method: "DELETE" });
+}

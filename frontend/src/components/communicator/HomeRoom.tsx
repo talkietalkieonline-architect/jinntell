@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, getFavoriteAgents, getRecommendedAgents, getContacts, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getFavoriteAgents, getRecommendedAgents, getContacts, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
   onOpenContact?: (c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean; avatar_frame?: string | null }) => void;
   onOpenChat?: (room: string) => void;
   onOpenActions?: () => void;
+  onOpenDigest?: (id: number) => void;
 }
 
 const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
@@ -73,8 +74,9 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   );
 }
 
-export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions }: Props) {
+export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest }: Props) {
   const [hint, setHint] = useState("");
+  const [digests, setDigests] = useState<{ id: number; query: string; created_at: string }[]>([]);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +116,10 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     getFavoriteAgents().then((f) => { if (alive) setFavs(f); }).catch(() => {});
     getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
     getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
-    return () => { alive = false; };
+    const loadDigests = () => listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
+    loadDigests();
+    window.addEventListener("jinntell_feed_ping", loadDigests);
+    return () => { alive = false; window.removeEventListener("jinntell_feed_ping", loadDigests); };
   }, []);
 
   const handleDismiss = async (id: number) => {
@@ -173,6 +178,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           <Circle label="Лента" emoji="🔔" color="#5ea0e8" small onClick={() => document.getElementById("home-feed")?.scrollIntoView({ behavior: "smooth" })} />
           <Circle label="Приглашения" emoji="📍" color="#c0563a" small onClick={() => setHint("«Приглашения» — гео-предложения рядom (гео-промо). Экран-подборка в разработке.")} />
           <Circle label="Действия" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
+          {digests.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" small onClick={() => onOpenDigest?.(d.id)} />)}
         </Strip>
         {hint && (
           <div onClick={() => setHint("")} className="rounded-xl px-3 py-2 text-[12px] cursor-pointer" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--text-secondary)" }}>
