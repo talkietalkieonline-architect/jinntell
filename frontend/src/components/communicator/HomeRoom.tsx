@@ -18,6 +18,7 @@ interface Props {
   onOpenChat?: (room: string) => void;
   onOpenActions?: () => void;
   onOpenDigest?: (id: number) => void;
+  onOpenInvites?: () => void;
 }
 
 const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
@@ -74,8 +75,7 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   );
 }
 
-export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest }: Props) {
-  const [hint, setHint] = useState("");
+export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest, onOpenInvites }: Props) {
   const [digests, setDigests] = useState<{ id: number; query: string; created_at: string }[]>([]);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
@@ -176,15 +176,10 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {/* ═══ ИНФОРМАЦИЯ (коллекции помощника) ═══ */}
         <Strip title="Информация">
           <Circle label="Лента" emoji="🔔" color="#5ea0e8" small onClick={() => document.getElementById("home-feed")?.scrollIntoView({ behavior: "smooth" })} />
-          <Circle label="Приглашения" emoji="📍" color="#c0563a" small onClick={() => setHint("«Приглашения» — гео-предложения рядom (гео-промо). Экран-подборка в разработке.")} />
+          <Circle label="Приглашения" emoji="📍" color="#c0563a" small onClick={onOpenInvites} />
           <Circle label="Действия" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
           {digests.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" small onClick={() => onOpenDigest?.(d.id)} />)}
         </Strip>
-        {hint && (
-          <div onClick={() => setHint("")} className="rounded-xl px-3 py-2 text-[12px] cursor-pointer" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--text-secondary)" }}>
-            {hint} <span style={{ color: "var(--text-muted)" }}>· закрыть</span>
-          </div>
-        )}
 
         {/* ═══ МОИ ЛЮДИ ═══ */}
         <div className="pt-1">

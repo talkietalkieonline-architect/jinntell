@@ -110,3 +110,33 @@ async def geo_check(
 
     await db.commit()
     return {"deliveries": deliveries}
+
+
+@router.get("/my-invites")
+async def my_invites(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Мои приглашения (гео-промо, что мне показывали) — по одному свежему на джинна."""
+    from app.models.geo_trigger import GeoContact, GeoTrigger
+    from app.models.agent import Agent
+    rows = (await db.execute(
+        select(GeoContact).where(GeoContact.user_id == user.id).order_by(GeoContact.id.desc()).limit(60)
+    )).scalars().all()
+    items = []
+    seen = set()
+    for c in rows:
+        if c.agent_id in seen:
+            continue
+        seen.add(c.agent_id)
+        a = await db.get(Agent, c.agent_id)
+        if not a or not a.is_active:
+            continue
+        gt = (await db.execute(select(GeoTrigger).where(GeoTrigger.agent_id == c.agent_id))).scalar_one_or_none()
+        items.append({
+            "agent_id": a.id, "agent_name": a.name, "color": a.color,
+            "title": (gt.title if gt else "") or "", "message": (gt.message if gt else "") or "",
+            "media_url": (gt.media_url if gt else None),
+            "promo_code": c.promo_code or (gt.promo_code if gt else None),
+            "at": c.created_at.isoformat(), "room": f"agent-{a.id}-u{user.id}",
+        })
+        if len(items) >= 20:
+            break
+    return {"items": items}

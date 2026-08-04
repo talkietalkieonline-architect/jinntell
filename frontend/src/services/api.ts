@@ -665,6 +665,10 @@ export interface GeoDelivery { agent_id: number; agent_name: string; color?: str
 export function geoCheck(lat: number, lng: number): Promise<{ deliveries: GeoDelivery[] }> {
   return apiFetch("/api/geo/check", { method: "POST", body: JSON.stringify({ lat, lng }) });
 }
+export interface GeoInvite { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; promo_code?: string | null; at: string; room: string }
+export function getMyInvites(): Promise<{ items: GeoInvite[] }> {
+  return apiFetch("/api/geo/my-invites");
+}
 
 export interface TurnConfig { iceServers: RTCIceServer[]; ttl?: number; }
 /** Эфемерные TURN/STUN-креды для звонков */

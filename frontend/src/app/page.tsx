@@ -11,6 +11,7 @@ import BottomBar from "@/components/communicator/BottomBar";
 import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
 import ActionsModal from "@/components/communicator/ActionsModal";
 import DigestModal from "@/components/communicator/DigestModal";
+import InvitesModal from "@/components/communicator/InvitesModal";
 import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
@@ -72,6 +73,7 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [digestId, setDigestId] = useState<number | null>(null);
+  const [invitesOpen, setInvitesOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
@@ -773,6 +775,7 @@ export default function Home() {
           onOpenChat={(r) => { setRoom(r); setView("chat"); }}
           onOpenActions={() => setActionsOpen(true)}
           onOpenDigest={(id) => setDigestId(id)}
+          onOpenInvites={() => setInvitesOpen(true)}
         />
       ) : (
         <ChatArea
@@ -885,6 +888,7 @@ export default function Home() {
       {/* Центр Управления */}
       {actionsOpen && <ActionsModal onClose={() => setActionsOpen(false)} assistantName={assistantName} />}
       {digestId != null && <DigestModal digestId={digestId} onClose={() => setDigestId(null)} onOpenAgent={openAgentChat} />}
+      {invitesOpen && <InvitesModal onClose={() => setInvitesOpen(false)} onOpenAgent={openAgentChat} />}
 
       {settingsOpen && (
       <SettingsModal
