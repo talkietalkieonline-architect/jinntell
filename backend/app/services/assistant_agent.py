@@ -38,6 +38,9 @@ TOOLS = [
         "name": "deep_search", "description": "Делегировать ТЯЖЁЛЫЙ/исследовательский запрос Поисковому джинну (мультиисточник + выжимка со ссылками). Для сложных вопросов, сравнений, «разберись подробно» — не для простого факта.",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
+        "name": "make_digest", "description": "Собрать ПОДБОРКУ: опросить несколько джиннов Города по теме и составить документ с их мнениями (с указанием, кто что сказал). Для запросов «составь рейтинг/подборку/сравни варианты X». Результат сохраняется как подборка на главном экране (раздел Информация).",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
         "name": "show_media", "description": "Показать пользователю картинку или видео на экране (напр. фото джинна, или изображение по прямой ссылке). Используй, когда просят «покажи», «как выглядит», или чтобы проиллюстрировать ответ.",
         "parameters": {"type": "object", "properties": {
             "jinn": {"type": "string", "description": "Имя джинна — показать его фото."},
@@ -492,6 +495,15 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _web_search(args.get("query", ""))
             elif name == "deep_search":
                 result = await _deep_search(user_id, args.get("query", ""))
+            elif name == "make_digest":
+                from app.services import digest as _dg
+                _dr = await _dg.build_digest(user_id, args.get("query", ""))
+                if _dr.get("ok"):
+                    result = f"Собрал подборку «{(args.get('query') or '')[:60]}» — {len(_dr['sections'])} мнений джиннов. Открой её на главном экране (раздел Информация)."
+                elif _dr.get("reason") == "no_agents":
+                    result = "Не нашёл в Городе джиннов по этой теме для подборки."
+                else:
+                    result = "Не удалось собрать подборку."
             elif name == "show_media":
                 result, _m = await _show_media(user_id, args)
                 if _m:

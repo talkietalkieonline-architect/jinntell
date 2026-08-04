@@ -268,6 +268,43 @@ async def assistant_act(body: IntentRequest, db: AsyncSession = Depends(get_db),
     return result
 
 
+# ── Подборки: помощник опрашивает джиннов Города по запросу → документ с атрибуцией ──
+@router.post("/digest")
+async def make_digest(body: IntentRequest, user: User = Depends(get_current_user)):
+    """Собрать подборку по запросу (опрос релевантных джиннов Города, атрибуция)."""
+    from app.services import digest as _dg
+    return await _dg.build_digest(user.id, (body.text or ""))
+
+
+@router.get("/digests")
+async def list_digests(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from app.models.digest import Digest
+    rows = (await db.execute(
+        select(Digest).where(Digest.user_id == user.id).order_by(Digest.id.desc()).limit(30)
+    )).scalars().all()
+    return {"items": [{"id": d.id, "query": d.query, "created_at": d.created_at.isoformat()} for d in rows]}
+
+
+@router.get("/digests/{digest_id}")
+async def get_digest(digest_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    import json as _json
+    from app.models.digest import Digest
+    d = await db.get(Digest, digest_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(404, "Подборка не найдена")
+    return {"id": d.id, "query": d.query, "sections": _json.loads(d.sections or "[]"), "created_at": d.created_at.isoformat()}
+
+
+@router.delete("/digests/{digest_id}")
+async def delete_digest(digest_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from app.models.digest import Digest
+    d = await db.get(Digest, digest_id)
+    if d and d.user_id == user.id:
+        await db.delete(d)
+        await db.commit()
+    return {"ok": True}
+
+
 class ForwardRequest(BaseModel):
     room: str
     text: str = ""

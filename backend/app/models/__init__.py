@@ -16,5 +16,6 @@ from app.models.llm_usage import LlmUsage
 from app.models.contact import Contact
 from app.models.geo_trigger import GeoTrigger, GeoTriggerHit
 from app.models.activity import ActivityLog
+from app.models.digest import Digest
 
 __all__ = ["User", "Agent", "AgentWardrobe", "Message", "Contractor", "AgentSource", "AgentRAGChunk", "AgentParseLog", "AppSetting", "FeedEvent", "Room", "RoomMember", "AgentAccess", "UserFavorite", "Contact", "ActivityLog"]
