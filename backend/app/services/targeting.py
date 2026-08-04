@@ -90,10 +90,13 @@ async def match_for_user(user_id: int, top_k: int = 8, min_score: float = 0.35) 
         interests = json.loads(u.assistant_interests or "[]")
     except Exception:
         interests = []
-    if not interests:
+    # нормализуем: элементы могут быть {topic, ts} (новый формат) или строки (старый)
+    topics = [(i.get("topic") if isinstance(i, dict) else str(i)) for i in interests]
+    topics = [t.strip() for t in topics if t and str(t).strip()]
+    if not topics:
         return {"ok": False, "reason": "no_interests", "posts": []}
     # вектор интересов → поиск по постам
-    q = ", ".join(interests)
+    q = ", ".join(topics)
     emb = await get_embedding(q)
     if not emb:
         return {"ok": False, "reason": "no_embedding", "posts": []}
@@ -120,6 +123,8 @@ async def match_for_user(user_id: int, top_k: int = 8, min_score: float = 0.35) 
         blocked = list(blocked) + await get_global_blocklist()
     except Exception:
         pass
+    blocked = [(b.get("topic") if isinstance(b, dict) else str(b)) for b in blocked]
+    blocked = [b.strip() for b in blocked if b and str(b).strip()]
     if blocked:
         bemb = await get_embedding(", ".join(blocked))
         if bemb:
