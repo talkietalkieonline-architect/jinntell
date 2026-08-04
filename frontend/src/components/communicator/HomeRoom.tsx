@@ -32,18 +32,28 @@ function timeAgo(iso: string): string {
 }
 
 // Кружок (джинн/человек/коллекция): аватар + подпись; варианты — закреплён, платный, малый, онлайн, счётчик
-function Circle({ label, photo, color, emoji, pinned, badge, paid, small, online, onClick }: {
-  label: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; onClick?: () => void;
+function Circle({ label, photo, color, emoji, pinned, badge, paid, small, online, star, onClick, onLongPress }: {
+  label: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; star?: boolean; onClick?: () => void; onLongPress?: () => void;
 }) {
   const src = photo ? (photo.startsWith("http") || photo.startsWith("data:") || photo.startsWith("blob:") ? photo : mediaUrl(photo)) : null;
   const d = small ? 44 : 56;
+  let lp: ReturnType<typeof setTimeout> | null = null;
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1 shrink-0 transition-transform hover:scale-105" style={{ width: small ? 54 : 64 }}>
+    <button
+      onClick={onClick}
+      onContextMenu={(e) => { if (onLongPress) { e.preventDefault(); onLongPress(); } }}
+      onTouchStart={() => { if (onLongPress) lp = setTimeout(onLongPress, 550); }}
+      onTouchEnd={() => { if (lp) clearTimeout(lp); }}
+      onTouchMove={() => { if (lp) clearTimeout(lp); }}
+      className="flex flex-col items-center gap-1 shrink-0 transition-transform hover:scale-105"
+      style={{ width: small ? 54 : 64 }}
+    >
       <div className="relative rounded-full flex items-center justify-center overflow-hidden" style={{ width: d, height: d, border: (badge && badge > 0) ? "2px solid var(--accent)" : pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)", boxShadow: (badge && badge > 0) ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)" : undefined }}>
         {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: small ? 16 : 20 }}>{emoji || "💬"}</span>}
         {!!badge && badge > 0 && <span className="absolute inset-0 rounded-full animate-ping pointer-events-none" style={{ boxShadow: "0 0 0 2px var(--accent)", opacity: 0.35 }} />}
         {!!badge && badge > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{badge}</span>}
         {paid && <span className="absolute -bottom-0.5 -right-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px]" style={{ background: "#e8b84a", color: "#1a1400" }}>₽</span>}
+        {star && <span className="absolute -top-0.5 -left-0.5 text-[11px]" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))" }}>⭐</span>}
         {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />}
       </div>
       <span className="text-[10px] leading-tight truncate w-full text-center" style={{ color: "var(--text-secondary)" }}>{label}</span>
@@ -72,6 +82,19 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
   const [contacts, setContacts] = useState<ContactOut[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
+  const [pinned, setPinned] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    try { const raw = localStorage.getItem("jinntell_pinned"); if (raw) setPinned(new Set(JSON.parse(raw))); } catch { /* noop */ }
+  }, []);
+  const togglePin = (id: number) => {
+    setPinned((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      try { localStorage.setItem("jinntell_pinned", JSON.stringify([...n])); } catch { /* noop */ }
+      return n;
+    });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -118,8 +141,10 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const unreadByAgent = new Map<number, number>();
   openChats.forEach((c) => { if (c.count && c.count > 0 && c.agentId) unreadByAgent.set(c.agentId, (unreadByAgent.get(c.agentId) || 0) + c.count); });
 
+  const important = favs.filter((a) => pinned.has(a.id));
+
   const agentCircle = (a: AgentOut, small?: boolean) => (
-    <Circle key={a.id} label={a.name} color={a.color} emoji="🧞" paid={a.is_paid} small={small} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} />
+    <Circle key={a.id} label={a.name} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => togglePin(a.id)} />
   );
 
   return (
@@ -127,12 +152,16 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
       <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
 
         {/* ═══ БЛОК 1: МОИ ДЖИННЫ ═══ */}
-        <div className="text-[13px] font-bold px-1" style={{ color: "var(--text-primary)" }}>Мои джинны</div>
+        <div className="flex items-baseline justify-between px-1">
+          <span className="text-[13px] font-bold" style={{ color: "var(--text-primary)" }}>Мои джинны</span>
+          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>удержи кружок → ⭐ важные</span>
+        </div>
         <Strip title="">
           <Circle label={assistantName} photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
           <Circle label="Поток" emoji="🌀" pinned onClick={onOpenFlow} />
           {personal.map((a) => agentCircle(a))}
         </Strip>
+        {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
         {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
         {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
         {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
