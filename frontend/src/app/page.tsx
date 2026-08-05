@@ -716,14 +716,11 @@ export default function Home() {
         onOpenOldFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
       />
 
-      {/* Нижняя панель главного экрана: Город + Создать своего джинна */}
+      {/* Нижняя панель главного: широкая кнопка Города (создание джинна — «+» кружок в «Мои джинны») */}
       {view === "feed" && (
-        <div className="fixed left-1/2 -translate-x-1/2 z-[55] flex gap-2 animate-fade-in" style={{ bottom: bottomBarH + 10 }}>
-          <button onClick={() => setCityOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-105" style={{ background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 6px 20px rgba(0,0,0,0.35)" }}>
-            🏙 Город
-          </button>
-          <button onClick={async () => { try { const a = await createMyJinn(); if (a) openAgentChat(a.id, { name: a.name, color: a.color }); } catch { setCommandHint("Не удалось создать джинна"); } }} className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-105" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)", boxShadow: "0 6px 20px rgba(0,0,0,0.35)" }}>
-            🧞 Создать джинна
+        <div className="fixed left-1/2 -translate-x-1/2 z-[55] w-full max-w-[420px] px-4 animate-fade-in" style={{ bottom: bottomBarH + 10 }}>
+          <button onClick={() => setCityOpen(true)} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all hover:opacity-95 active:scale-[0.99]" style={{ background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 6px 24px rgba(0,0,0,0.4)" }}>
+            🏙 Перейти в Город джиннов
           </button>
         </div>
       )}
@@ -803,6 +800,7 @@ export default function Home() {
           onOpenActions={() => setActionsOpen(true)}
           onOpenDigest={(id) => setDigestId(id)}
           onOpenInvites={() => setInvitesOpen(true)}
+          onCreateJinn={async () => { try { const a = await createMyJinn(); if (a) openAgentChat(a.id, { name: a.name, color: a.color }); } catch { setCommandHint("Не удалось создать джинна"); } }}
         />
       ) : (
         <ChatArea

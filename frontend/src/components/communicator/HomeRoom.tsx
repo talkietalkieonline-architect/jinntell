@@ -19,6 +19,7 @@ interface Props {
   onOpenActions?: () => void;
   onOpenDigest?: (id: number) => void;
   onOpenInvites?: () => void;
+  onCreateJinn?: () => void;
 }
 
 const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
@@ -75,7 +76,7 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   );
 }
 
-export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest, onOpenInvites }: Props) {
+export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest, onOpenInvites, onCreateJinn }: Props) {
   const [digests, setDigests] = useState<{ id: number; query: string; created_at: string }[]>([]);
   const [allChannels, setAllChannels] = useState<ChannelUnread[]>([]);
   const [events, setEvents] = useState<FeedEvent[]>([]);
@@ -167,6 +168,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           <Circle label={assistantName} photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
           <Circle label="Поток" emoji="🌀" pinned onClick={onOpenFlow} />
           {personal.map((a) => agentCircle(a))}
+          {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
         </Strip>
         {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
         {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
