@@ -452,6 +452,7 @@ export function getChannelPosts(agentId: number, limit = 30): Promise<ChannelPos
 }
 export interface ChannelUnread { agent_id: number; name: string; color: string; unread: number; link_room: string }
 export function getChannelsUnread(): Promise<ChannelUnread[]> { return apiFetch("/api/channels/unread"); }
+export function getChannels(): Promise<ChannelUnread[]> { return apiFetch("/api/channels"); }
 export function markChannelRead(agentId: number): Promise<{ ok: boolean }> { return apiFetch(`/api/channels/${agentId}/read`, { method: "POST" }); }
 export interface IntentResult { action: string; target: string; text: string; query: string }
 export function classifyIntent(text: string): Promise<IntentResult> {

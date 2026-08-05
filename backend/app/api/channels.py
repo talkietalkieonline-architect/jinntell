@@ -30,6 +30,30 @@ class ChannelPostOut(BaseModel):
         from_attributes = True
 
 
+@router.get("")
+async def channels_list(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Все каналы-джинны (у кого есть посты) — для полосы «Каналы» на главном."""
+    chans = [c for c in (await db.execute(select(ChannelPost.agent_id).distinct())).scalars().all() if c]
+    if not chans:
+        return []
+    reads = {a: lp for a, lp in (await db.execute(
+        select(ChannelRead.agent_id, ChannelRead.last_post_id).where(
+            ChannelRead.user_id == user.id, ChannelRead.agent_id.in_(chans))
+    )).all()}
+    out = []
+    for aid in chans:
+        ag = await db.get(Agent, aid)
+        if not ag or not ag.is_active:
+            continue
+        last = reads.get(aid, 0)
+        unread = (await db.execute(
+            select(func.count(ChannelPost.id)).where(ChannelPost.agent_id == aid, ChannelPost.id > last)
+        )).scalar() or 0
+        out.append({"agent_id": aid, "name": ag.name, "color": ag.color, "unread": int(unread), "link_room": f"agent-{aid}-u{user.id}"})
+    out.sort(key=lambda x: (-x["unread"], x["name"]))
+    return out
+
+
 @router.get("/unread")
 async def channels_unread(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Непрочитанное по подписанным каналам (подписка = избранное)."""

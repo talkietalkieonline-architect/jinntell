@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, getFavoriteAgents, getRecommendedAgents, getContacts, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -77,6 +77,7 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
 
 export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest, onOpenInvites }: Props) {
   const [digests, setDigests] = useState<{ id: number; query: string; created_at: string }[]>([]);
+  const [allChannels, setAllChannels] = useState<ChannelUnread[]>([]);
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,6 +119,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
     const loadDigests = () => listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
     loadDigests();
+    getChannels().then((c) => { if (alive) setAllChannels(c); }).catch(() => {});
     window.addEventListener("jinntell_feed_ping", loadDigests);
     return () => { alive = false; window.removeEventListener("jinntell_feed_ping", loadDigests); };
   }, []);
@@ -191,6 +193,18 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
             )) : <span className="text-[11px] self-center px-2" style={{ color: "var(--text-muted)", opacity: 0.6 }}>{peopleSearch ? "никого не найдено" : "нет контактов"}</span>}
           </div>
         </div>
+
+        {/* ═══ БЛОК 3: КАНАЛЫ ДЖИННОВ ═══ */}
+        {allChannels.length > 0 && (
+          <div className="pt-1">
+            <div className="text-[13px] font-bold px-1 mb-1.5" style={{ color: "var(--text-primary)" }}>Каналы</div>
+            <div className="flex gap-2.5 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
+              {allChannels.map((ch) => (
+                <Circle key={ch.agent_id} label={ch.name} color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ═══ БЛОК: ЛЕНТА (события + каналы) ═══ */}
         <div id="home-feed" className="flex items-center gap-2 px-1 pt-2">
