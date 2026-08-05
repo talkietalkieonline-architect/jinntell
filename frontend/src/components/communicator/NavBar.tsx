@@ -26,6 +26,10 @@ export default function NavBar({
   onChatAction,
   mutedRooms,
   activeIsFav,
+  userName,
+  online,
+  onLogout,
+  onSwitchUser,
 }: {
   onHeightChange?: (h: number) => void;
   assistantName: string;
@@ -46,6 +50,10 @@ export default function NavBar({
   onChatAction?: (action: string) => void;
   mutedRooms?: string[];
   activeIsFav?: boolean;
+  userName?: string | null;
+  online?: boolean;
+  onLogout?: () => void;
+  onSwitchUser?: () => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -62,12 +70,13 @@ export default function NavBar({
   const isActive = (room: string) => view === "chat" && activeRoom === room;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => {
-    if (!menuOpen) return;
-    const h = () => setMenuOpen(false);
+    if (!menuOpen && !appMenuOpen) return;
+    const h = () => { setMenuOpen(false); setAppMenuOpen(false); };
     const t = setTimeout(() => document.addEventListener("click", h), 0);
     return () => { clearTimeout(t); document.removeEventListener("click", h); };
-  }, [menuOpen]);
+  }, [menuOpen, appMenuOpen]);
   const CHAT_MENU: Record<string, { a: string; label: string; danger?: boolean }[]> = {
     assistant: [ { a: "settings", label: "⚙️ Настройки помощника" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "clear", label: "🧹 Очистить историю" } ],
     dm: [ { a: "wallpaper", label: "🖼 Сменить обои" }, { a: "search", label: "🔍 Поиск по чату" }, { a: "mute", label: "🔕 Приглушить" }, { a: "clear", label: "🧹 Очистить историю" }, { a: "close", label: "🗑 Удалить чат", danger: true } ],
@@ -95,28 +104,30 @@ export default function NavBar({
       className="fixed top-0 left-0 right-0 px-3 pt-3 pb-2"
       style={{ zIndex: 40, background: "var(--bar-bg)" }}
     >
-      {/* Панель: лого + иконки */}
-      <div className="flex items-center justify-between mb-2">
-        <span
-          className="text-[11px] uppercase tracking-[0.3em] font-semibold"
-          style={{ color: "var(--text-muted)" }}
-        >
-          JinnTell
-        </span>
-        <div className="flex items-center gap-1.5">
-          <PanelBtn title="Собеседники" onClick={onFavorites}>
-            ☆
-          </PanelBtn>
-          <PanelBtn active={view === "feed"} title="Лента" onClick={onFeed}>
-            🔔
-          </PanelBtn>
-          <PanelBtn title="Настройки" onClick={() => onSettings?.()}>
-            ⚙️
-          </PanelBtn>
+      {/* Заголовок: JinnTell (меню) · имя пользователя · статус */}
+      <div className="flex items-center justify-between mb-2 relative">
+        <button onClick={(e) => { e.stopPropagation(); setAppMenuOpen((v) => !v); }} className="flex items-center gap-2 min-w-0 transition-opacity hover:opacity-80">
+          <span className="text-[13px] uppercase tracking-[0.22em] font-bold shrink-0" style={{ color: "var(--accent)" }}>JinnTell</span>
+          {userName && <span className="text-[13px] truncate" style={{ color: "var(--text-secondary)" }}>· {userName}</span>}
+          <span className="text-[9px] shrink-0" style={{ color: "var(--text-muted)" }}>▾</span>
+        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {view === "chat" && (
+            <PanelBtn title="Домой" onClick={onFeed}>🏠</PanelBtn>
+          )}
+          <span title={online ? "В сети" : "Нет соединения"} className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: online ? "#3ecf6a" : "#e5484d", boxShadow: online ? "0 0 6px #3ecf6a88" : "0 0 6px #e5484d88" }} />
         </div>
+        {appMenuOpen && (
+          <div className="absolute left-0 top-9 rounded-xl py-1.5 px-1 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 210, zIndex: 90 }} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { setAppMenuOpen(false); onSettings?.(); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>⚙️ Настройки</button>
+            <button onClick={() => { setAppMenuOpen(false); onSwitchUser?.(); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>🔄 Сменить пользователя</button>
+            <button onClick={() => { setAppMenuOpen(false); onLogout?.(); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--danger)" }}>🚪 Выход</button>
+          </div>
+        )}
       </div>
 
-      {/* Лента открытых чатов: помощник закреплён слева, остальные скроллятся */}
+      {/* Лента открытых чатов — ТОЛЬКО в чате (на главном помощник и всё живёт в полосах дома) */}
+      {view !== "feed" && (
       <div className="flex items-end gap-2 px-1">
         {/* Помощник — всегда первый, не уезжает при скролле */}
         <div className="shrink-0">
@@ -152,6 +163,7 @@ export default function NavBar({
           </div>
         )}
       </div>
+      )}
 
       {/* Шапка активного чата */}
       {view === "chat" && (() => {

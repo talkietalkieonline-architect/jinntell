@@ -699,6 +699,10 @@ export default function Home() {
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
         onCall={startCall}
+        userName={user?.display_name || user?.first_name || null}
+        online={isConnected}
+        onLogout={() => { logout(); setScreen("login"); }}
+        onSwitchUser={() => { try { localStorage.removeItem("jinntell_phone"); } catch { /* noop */ } logout(); setScreen("login"); }}
       />
 
       {commandHint && (
