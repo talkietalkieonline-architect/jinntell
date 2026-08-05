@@ -139,29 +139,26 @@ export default function NavBar({
             onClick={() => onSelectChat(assistantRoom)}
           />
         </div>
-        {/* Полоса открытых чатов — только в чате (на главном она дублирует полосы дома) */}
-        {view !== "feed" && openChats.length > 0 && (
+        {openChats.length > 0 && (
           <div className="w-px self-stretch my-1 shrink-0" style={{ background: "var(--bg-glass-border)" }} />
         )}
-        {view !== "feed" && (
-          <div className="flex items-end gap-2 overflow-x-auto no-scrollbar pb-0.5">
-            {openChats.map((c) => (
-              <ChatAvatar
-                key={c.room}
-                active={isActive(c.room)}
-                name={c.name}
-                color={c.color}
-                photo={c.photo}
-                frame={c.frame}
-                count={c.count}
-                online={c.online}
-                muted={mutedRooms?.includes(c.room)}
-                onClick={() => onSelectChat(c.room)}
-                onClose={() => onCloseChat(c.room)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="flex items-end gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          {openChats.map((c) => (
+            <ChatAvatar
+              key={c.room}
+              active={isActive(c.room)}
+              name={c.name}
+              color={c.color}
+              photo={c.photo}
+              frame={c.frame}
+              count={c.count}
+              online={c.online}
+              muted={mutedRooms?.includes(c.room)}
+              onClick={() => onSelectChat(c.room)}
+              onClose={() => onCloseChat(c.room)}
+            />
+          ))}
+        </div>
       </div>
       )}
 
