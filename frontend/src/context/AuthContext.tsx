@@ -28,6 +28,8 @@ interface AuthState {
   login: (user: Partial<UserProfile>) => void;
   /** Выйти */
   logout: () => void;
+  /** Перечитать профиль с сервера (после сохранения настроек) */
+  refreshUser: () => void;
   /** Бэкенд доступен? */
   isOnline: boolean;
   /** Админ? */
@@ -39,6 +41,7 @@ const AuthContext = createContext<AuthState>({
   user: null,
   login: () => {},
   logout: () => {},
+  refreshUser: () => {},
   isOnline: false,
   isAdmin: false,
 });
@@ -187,8 +190,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("jinntell_phone");
   }, []);
 
+  const refreshUser = useCallback(() => {
+    getMe().then((profile) => { if (profile) { setUser(profile); saveSession(profile); } }).catch(() => {});
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ isLoggedIn, user, login, logout, isOnline, isAdmin }}>
+    <AuthContext.Provider value={{ isLoggedIn, user, login, logout, refreshUser, isOnline, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

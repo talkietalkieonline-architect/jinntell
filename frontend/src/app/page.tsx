@@ -12,7 +12,7 @@ import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
 import ActionsModal from "@/components/communicator/ActionsModal";
 import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -713,7 +713,20 @@ export default function Home() {
         onLogout={() => { logout(); setScreen("login"); }}
         onSwitchUser={() => { try { localStorage.removeItem("jinntell_phone"); } catch { /* noop */ } logout(); setScreen("login"); }}
         onOpenSettings={(sec) => { setSettingsSection(sec ?? null); setSettingsOpen(true); }}
+        onOpenOldFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
       />
+
+      {/* Нижняя панель главного экрана: Город + Создать своего джинна */}
+      {view === "feed" && (
+        <div className="fixed left-1/2 -translate-x-1/2 z-[55] flex gap-2 animate-fade-in" style={{ bottom: bottomBarH + 10 }}>
+          <button onClick={() => setCityOpen(true)} className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-105" style={{ background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 6px 20px rgba(0,0,0,0.35)" }}>
+            🏙 Город
+          </button>
+          <button onClick={async () => { try { const a = await createMyJinn(); if (a) openAgentChat(a.id, { name: a.name, color: a.color }); } catch { setCommandHint("Не удалось создать джинна"); } }} className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-105" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)", boxShadow: "0 6px 20px rgba(0,0,0,0.35)" }}>
+            🧞 Создать джинна
+          </button>
+        </div>
+      )}
 
       {commandHint && (
         <div className="fixed left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm animate-fade-in" style={{ top: topBarH + 8, zIndex: 70, background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>

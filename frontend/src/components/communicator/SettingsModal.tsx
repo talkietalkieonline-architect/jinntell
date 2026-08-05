@@ -47,7 +47,7 @@ export default function SettingsModal({
   onLogout?: () => void;
   initialSection?: string | null;
 }) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [activeSection, setActiveSection] = useState<string | null>(null);
   useEffect(() => { if (isOpen) setActiveSection(initialSection ?? null); }, [isOpen, initialSection]);
   const [currentTheme, setCurrentTheme] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_theme") || "light" : "light"));
@@ -205,6 +205,7 @@ const _av = user.assistant_voice || "ermil";
         persona_gender: personaGender || undefined,
         interests: interests.join(",") || undefined,
       } as Partial<UserProfile>);
+      refreshUser();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: unknown) {
@@ -266,6 +267,7 @@ const _av = user.assistant_voice || "ermil";
         assistant_age: assistantAge ? parseInt(assistantAge) : undefined,
       } as Partial<UserProfile>);
       localStorage.setItem("jinntell_assistant_voice", assistantVoice);
+      refreshUser();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: unknown) {
