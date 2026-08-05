@@ -71,6 +71,8 @@ export default function Home() {
   const { isLoggedIn, isAdmin, login, logout, user } = useAuth();
   const [screen, setScreen] = useState<AppScreen>("splash");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<string | null>(null);
+  const [netOnline, setNetOnline] = useState(true);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [digestId, setDigestId] = useState<number | null>(null);
   const [invitesOpen, setInvitesOpen] = useState(false);
@@ -582,6 +584,13 @@ export default function Home() {
     if (ts) document.documentElement.style.fontSize = (parseFloat(ts) * 16) + "px";
   }, []);
 
+  useEffect(() => {
+    const upd = () => setNetOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
+    upd();
+    window.addEventListener("online", upd);
+    window.addEventListener("offline", upd);
+    return () => { window.removeEventListener("online", upd); window.removeEventListener("offline", upd); };
+  }, []);
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
   useEffect(() => { if (user?.assistant_voice) { try { localStorage.setItem("jinntell_assistant_voice", user.assistant_voice); } catch { /* noop */ } } }, [user?.assistant_voice]);
   // Вход сразу на Поток (голос-первый). Только для вернувшихся (есть имя) — новичок остаётся в ленте на онбординг имени
@@ -700,9 +709,10 @@ export default function Home() {
         onInviteJinn={onInviteJinn}
         onCall={startCall}
         userName={user?.display_name || user?.first_name || null}
-        online={isConnected}
+        online={netOnline}
         onLogout={() => { logout(); setScreen("login"); }}
         onSwitchUser={() => { try { localStorage.removeItem("jinntell_phone"); } catch { /* noop */ } logout(); setScreen("login"); }}
+        onOpenSettings={(sec) => { setSettingsSection(sec ?? null); setSettingsOpen(true); }}
       />
 
       {commandHint && (
@@ -897,7 +907,8 @@ export default function Home() {
       {settingsOpen && (
       <SettingsModal
         isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        initialSection={settingsSection}
+        onClose={() => { setSettingsOpen(false); setSettingsSection(null); }}
         onLogout={() => {
           logout();
           setScreen("login");

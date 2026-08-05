@@ -40,13 +40,16 @@ export default function SettingsModal({
   isOpen,
   onClose,
   onLogout,
+  initialSection,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onLogout?: () => void;
+  initialSection?: string | null;
 }) {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  useEffect(() => { if (isOpen) setActiveSection(initialSection ?? null); }, [isOpen, initialSection]);
   const [currentTheme, setCurrentTheme] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_theme") || "light" : "light"));
   const [customAccent, setCustomAccent] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_accent") || "#6c7bff" : "#6c7bff"));
   const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
