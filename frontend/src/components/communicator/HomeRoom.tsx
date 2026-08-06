@@ -118,14 +118,20 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
   useEffect(() => {
     let alive = true;
-    getFavoriteAgents().then((f) => { if (alive) setFavs(f); }).catch(() => {});
-    getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
-    getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
-    const loadDigests = () => listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
-    loadDigests();
-    getChannels().then((c) => { if (alive) setAllChannels(c); }).catch(() => {});
-    window.addEventListener("jinntell_feed_ping", loadDigests);
-    return () => { alive = false; window.removeEventListener("jinntell_feed_ping", loadDigests); };
+    const loadAll = () => {
+      getFavoriteAgents().then((f) => { if (alive) setFavs(f); }).catch(() => {});
+      getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
+      getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
+      listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
+      getChannels().then((c) => { if (alive) setAllChannels(c); }).catch(() => {});
+    };
+    loadAll();
+    // обновляемся при изменении избранного/контактов (из Города и др.) и при возврате на вкладку
+    window.addEventListener("jinntell_feed_ping", loadAll);
+    window.addEventListener("jinntell_favs_change", loadAll);
+    const onVis = () => { if (document.visibilityState === "visible") loadAll(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; window.removeEventListener("jinntell_feed_ping", loadAll); window.removeEventListener("jinntell_favs_change", loadAll); document.removeEventListener("visibilitychange", onVis); };
   }, []);
 
   const handleDismiss = async (id: number) => {

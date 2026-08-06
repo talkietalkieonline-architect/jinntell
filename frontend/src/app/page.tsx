@@ -402,7 +402,7 @@ export default function Home() {
     if (a === "clear_history") { clearHistory(room).catch(() => {}); setCommandHint("Очистил историю"); return; }
     if (a === "favorite") {
       setCommandHint(`Ищу «${target}»…`);
-      try { const res = await getAgents({ search: target }); const ag = res.agents[0]; if (ag) { addFavoriteAgent(ag.id).catch(() => {}); setFavIds((sset) => new Set(sset).add(ag.id)); setCommandHint(`В избранном: ${ag.name}`); return; } } catch { /* noop */ }
+      try { const res = await getAgents({ search: target }); const ag = res.agents[0]; if (ag) { addFavoriteAgent(ag.id).catch(() => {}); setFavIds((sset) => new Set(sset).add(ag.id)); try { window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } setCommandHint(`В избранном: ${ag.name}`); return; } } catch { /* noop */ }
       pushAssistant(`Не нашёл джинна «${target}».`); return;
     }
     sendMessage(t);
@@ -560,6 +560,7 @@ export default function Home() {
         if (agentId) {
           if (favIds.has(agentId)) { removeFavoriteAgent(agentId).catch(() => {}); setFavIds((s) => { const n = new Set(s); n.delete(agentId); return n; }); setCommandHint("Убрано из избранного"); }
           else { addFavoriteAgent(agentId).catch(() => {}); setFavIds((s) => new Set(s).add(agentId)); setCommandHint("Добавлено в избранное ⭐"); }
+          try { window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ }
         }
         break;
       case "report": setCommandHint("Жалоба отправлена, спасибо"); break;

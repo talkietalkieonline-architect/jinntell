@@ -129,7 +129,7 @@ export default function AgentCityModal({
     const willAdd = !favorites.has(id);
     setFavorites((prev) => { const n = new Set(prev); if (willAdd) n.add(id); else n.delete(id); return n; });
     const call = willAdd ? addFavoriteAgent(id) : removeFavoriteAgent(id);
-    call.catch(() => {
+    call.then(() => { try { window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }).catch(() => {
       setFavorites((prev) => { const n = new Set(prev); if (willAdd) n.delete(id); else n.add(id); return n; });
     });
   };
