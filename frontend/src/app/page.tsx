@@ -13,7 +13,7 @@ import ActionsModal from "@/components/communicator/ActionsModal";
 import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
 import FeedModal from "@/components/communicator/FeedModal";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -328,6 +328,19 @@ export default function Home() {
     const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
     return me === a ? b : me === b ? a : null;
   };
+
+  // Присутствие собеседника в личном диалоге (в сети / был недавно) — опрос при открытом DM
+  const [dmPresence, setDmPresence] = useState<Presence | null>(null);
+  useEffect(() => {
+    const other = view === "chat" ? dmOtherId(room) : null;
+    if (!other) { setDmPresence(null); return; }
+    let alive = true;
+    const load = () => { getPresence(other).then((p) => { if (alive) setDmPresence(p); }).catch(() => {}); };
+    load();
+    const iv = setInterval(load, 30000);
+    return () => { alive = false; clearInterval(iv); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, room]);
 
   const openDM = useCallback((c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean; avatar_frame?: string | null }) => {
     const uid = getUserId();
@@ -740,6 +753,7 @@ export default function Home() {
         onInvitePerson={onInvitePerson}
         assistantMuted={assistMuted.has(room)}
         onToggleAssistant={toggleAssist}
+        dmPresence={dmPresence}
         onCall={startCall}
         userName={user?.display_name || user?.first_name || null}
         online={netOnline}

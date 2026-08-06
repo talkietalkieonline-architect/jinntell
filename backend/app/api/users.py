@@ -70,6 +70,25 @@ async def get_me(user: User = Depends(get_current_user)):
     return UserOut.from_user(user)
 
 
+class PresenceOut(BaseModel):
+    is_online: bool
+    last_seen: str | None = None
+
+
+@router.get("/{user_id}/presence", response_model=PresenceOut)
+async def get_presence(
+    user_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Присутствие пользователя: в сети / когда был последний раз. Для шапки диалога."""
+    other = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not other:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    ls = getattr(other, "last_seen", None)
+    return PresenceOut(is_online=bool(other.is_online), last_seen=ls.isoformat() if ls else None)
+
+
 @router.patch("/me", response_model=UserOut)
 async def update_me(
     body: UserUpdate,

@@ -1,8 +1,22 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
-import { mediaUrl } from "@/services/api";
+import { mediaUrl, type Presence } from "@/services/api";
 
 export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean; frame?: string | null };
+
+/** Подпись присутствия для шапки DM: «в сети» / «был(а) N назад». */
+function presenceLabel(p?: Presence | null): { text: string; online: boolean } {
+  if (!p) return { text: "", online: false };
+  if (p.is_online) return { text: "в сети", online: true };
+  if (!p.last_seen) return { text: "не в сети", online: false };
+  const diff = Date.now() - new Date(p.last_seen).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return { text: "был(а) только что", online: false };
+  if (m < 60) return { text: `был(а) ${m} мин назад`, online: false };
+  const h = Math.floor(m / 60);
+  if (h < 24) return { text: `был(а) ${h} ч назад`, online: false };
+  return { text: `был(а) ${Math.floor(h / 24)} дн назад`, online: false };
+}
 
 /** Верхняя панель + горизонтальная лента открытых чатов (вместо боковых створок). */
 export default function NavBar({
@@ -19,6 +33,7 @@ export default function NavBar({
   onInvitePerson,
   assistantMuted,
   onToggleAssistant,
+  dmPresence,
   onCall,
   onSelectChat,
   onCloseChat,
@@ -48,6 +63,7 @@ export default function NavBar({
   onInvitePerson?: () => void;
   assistantMuted?: boolean;
   onToggleAssistant?: () => void;
+  dmPresence?: Presence | null;
   onCall?: () => void;
   onSelectChat: (room: string) => void;
   onCloseChat: (room: string) => void;
@@ -218,8 +234,12 @@ export default function NavBar({
           );
         }
         const name = isAssistant ? assistantName : (activeAgent?.name || activeOpen?.name || "Джинн");
+        const isDm = activeRoom.startsWith("dm-");
+        const pres = isDm ? presenceLabel(dmPresence) : null;
         const sub = isAssistant
           ? "ваш помощник"
+          : isDm
+          ? (pres?.text || "")
           : [activeAgent?.profession, activeAgent?.brand].filter(Boolean).join(" • ");
         const color = isAssistant ? "var(--accent)" : (activeAgent?.color || activeOpen?.color || "var(--accent)");
         const photo = isAssistant ? assistantPhoto : (activeAgent?.photo_url || activeOpen?.photo || null);
@@ -242,7 +262,12 @@ export default function NavBar({
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{name}</span>
-              {sub && <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>{sub}</span>}
+              {sub && (
+                <span className="text-[10px] truncate flex items-center gap-1" style={{ color: pres?.online ? "#2ecc71" : "var(--text-muted)" }}>
+                  {isDm && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: pres?.online ? "#2ecc71" : "#8a8a8a" }} />}
+                  {sub}
+                </span>
+              )}
             </div>
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
               {isAssistant ? (

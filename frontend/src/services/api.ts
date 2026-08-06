@@ -1339,6 +1339,10 @@ export interface UserProfile {
 export function getMe(): Promise<UserProfile> {
   return apiFetch("/api/users/me");
 }
+export interface Presence { is_online: boolean; last_seen: string | null }
+export function getPresence(userId: number): Promise<Presence> {
+  return apiFetch(`/api/users/${userId}/presence`);
+}
 export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: string }> {
   file = await compressImage(file);
   const token = getToken();
