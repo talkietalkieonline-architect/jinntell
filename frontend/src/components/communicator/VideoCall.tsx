@@ -9,7 +9,7 @@ const ICE: RTCConfiguration = {
   ],
 };
 
-type SignalData = { sdp?: string; candidate?: RTCIceCandidateInit };
+type SignalData = { sdp?: string; candidate?: RTCIceCandidateInit; on?: boolean };
 
 export default function VideoCall({
   role,
@@ -36,7 +36,8 @@ export default function VideoCall({
   const [status, setStatus] = useState(role === "caller" ? "Соединение…" : "Соединение…");
   const [error, setError] = useState("");
   const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
+  const [camOn, setCamOn] = useState(false);        // старт как ГОЛОСОВОЙ звонок — камера выкл
+  const [remoteCamOn, setRemoteCamOn] = useState(false); // видео собеседника (по сигналу call_video)
 
   const cleanup = () => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -51,6 +52,7 @@ export default function VideoCall({
   const toggleCam = () => {
     const s = localStreamRef.current; if (!s) return;
     const on = !camOn; s.getVideoTracks().forEach((t) => (t.enabled = on)); setCamOn(on);
+    sendSignal(peerId, "video", { on }); // сообщаем собеседнику: показывать наше видео или нет
   };
 
   const end = (notify: boolean) => {
@@ -108,6 +110,8 @@ export default function VideoCall({
       } else if (type === "call_ice" && data.candidate) {
         if (remoteSet.current) { try { await p.addIceCandidate(data.candidate); } catch { /* noop */ } }
         else pendingIce.current.push(data.candidate);
+      } else if (type === "call_video") {
+        setRemoteCamOn(!!data.on);
       } else if (type === "call_end" || type === "call_reject") {
         end(false);
       }
@@ -118,6 +122,7 @@ export default function VideoCall({
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (!alive) { stream.getTracks().forEach((t) => t.stop()); return; }
         localStreamRef.current = stream;
+        stream.getVideoTracks().forEach((t) => (t.enabled = false)); // старт голосовой — видео выкл
         if (localRef.current) localRef.current.srcObject = stream;
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
@@ -139,11 +144,20 @@ export default function VideoCall({
   }, []);
 
   return (
-    <div className="fixed inset-0" style={{ zIndex: 130, background: "#000" }}>
-      <video ref={remoteRef} autoPlay playsInline className="absolute inset-0 w-full h-full" style={{ objectFit: "cover" }} />
-      <video ref={localRef} autoPlay playsInline muted className="absolute" style={{ width: 118, height: 160, objectFit: "cover", borderRadius: 14, bottom: 110, right: 16, border: "2px solid rgba(255,255,255,0.5)", transform: "scaleX(-1)" }} />
+    <div className="fixed inset-0" style={{ zIndex: 130, background: "#0b0b12" }}>
+      {/* Видео собеседника — только когда у него камера включена */}
+      <video ref={remoteRef} autoPlay playsInline className="absolute inset-0 w-full h-full" style={{ objectFit: "cover", display: remoteCamOn ? "block" : "none" }} />
+      {/* Голосовой плейсхолдер: аватар + имя (когда видео собеседника нет) */}
+      {!remoteCamOn && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          <div className="w-28 h-28 rounded-full flex items-center justify-center text-4xl font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{peerName?.[0] || "?"}</div>
+          <div className="text-white text-xl font-semibold">{peerName}</div>
+          <div className="text-white/60 text-xs">🎧 голосовой звонок</div>
+        </div>
+      )}
+      {/* Своё видео — превью только когда своя камера включена */}
+      <video ref={localRef} autoPlay playsInline muted className="absolute" style={{ width: 118, height: 160, objectFit: "cover", borderRadius: 14, bottom: 110, right: 16, border: "2px solid rgba(255,255,255,0.5)", transform: "scaleX(-1)", display: camOn ? "block" : "none" }} />
       <div className="absolute top-8 left-0 right-0 text-center text-white">
-        <div className="text-lg font-semibold">{peerName}</div>
         <div className="text-sm opacity-80">{error || status}</div>
       </div>
       <div className="absolute bottom-10 left-0 right-0 flex justify-center items-center gap-4">

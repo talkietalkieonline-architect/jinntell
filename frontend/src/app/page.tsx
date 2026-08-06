@@ -201,7 +201,7 @@ export default function Home() {
     let ws: WebSocket | null = null;
     let closed = false;
     const connect = () => {
-      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean; from?: number; from_name?: string; sdp?: string; candidate?: RTCIceCandidateInit; room?: string }) => {
+      ws = connectChat(`user-${user.id}`, (data: { type?: string; user_id?: number; online?: boolean; from?: number; from_name?: string; sdp?: string; candidate?: RTCIceCandidateInit; on?: boolean; room?: string }) => {
         const type = data?.type || "";
         if (type === "presence" && data.user_id != null) {
           const uid = data.user_id;
@@ -211,7 +211,7 @@ export default function Home() {
         } else if (type === "call_accept") {
           callStartRef.current = Date.now();
           setCall((cur) => (cur && cur.role === "caller" ? { ...cur, status: "active" } : cur));
-        } else if (type === "call_offer" || type === "call_answer" || type === "call_ice") {
+        } else if (type === "call_offer" || type === "call_answer" || type === "call_ice" || type === "call_video") {
           callSignalRef.current?.(type, data);
         } else if (type === "call_end" || type === "call_reject") {
           callSignalRef.current?.(type, data);

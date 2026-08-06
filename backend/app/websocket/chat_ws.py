@@ -771,6 +771,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
                         "from_name": user_name,
                         "sdp": payload.get("sdp"),
                         "candidate": payload.get("candidate"),
+                        "on": payload.get("on"),
                     })
                 continue
 
