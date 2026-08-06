@@ -12,6 +12,7 @@ import ChatArea, { type ChatMessage } from "@/components/communicator/ChatArea";
 import ActionsModal from "@/components/communicator/ActionsModal";
 import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
+import FeedModal from "@/components/communicator/FeedModal";
 import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, type ContactOut, type ChannelPost, type GeoDelivery } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
@@ -76,6 +77,7 @@ export default function Home() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [digestId, setDigestId] = useState<number | null>(null);
   const [invitesOpen, setInvitesOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
   const [contactsOpen, setContactsOpen] = useState(false);
@@ -717,15 +719,6 @@ export default function Home() {
         onOpenOldFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
       />
 
-      {/* Нижняя панель главного: широкая кнопка Города (создание джинна — «+» кружок в «Мои джинны») */}
-      {view === "feed" && (
-        <div className="fixed left-1/2 -translate-x-1/2 z-[55] w-full max-w-[420px] px-4 animate-fade-in" style={{ bottom: bottomBarH + 10 }}>
-          <button onClick={() => setCityOpen(true)} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all hover:opacity-95 active:scale-[0.99]" style={{ background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 6px 24px rgba(0,0,0,0.4)" }}>
-            🏙 Перейти в Город джиннов
-          </button>
-        </div>
-      )}
-
       {commandHint && (
         <div className="fixed left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-sm animate-fade-in" style={{ top: topBarH + 8, zIndex: 70, background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
           {commandHint}
@@ -801,6 +794,8 @@ export default function Home() {
           onOpenActions={() => setActionsOpen(true)}
           onOpenDigest={(id) => setDigestId(id)}
           onOpenInvites={() => setInvitesOpen(true)}
+          onOpenFeed={() => setFeedOpen(true)}
+          onOpenCity={() => setCityOpen(true)}
           onCreateJinn={async () => { try { const a = await createMyJinn(); if (a) openAgentChat(a.id, { name: a.name, color: a.color }); } catch { setCommandHint("Не удалось создать джинна"); } }}
         />
       ) : (
@@ -915,6 +910,7 @@ export default function Home() {
       {actionsOpen && <ActionsModal onClose={() => setActionsOpen(false)} assistantName={assistantName} />}
       {digestId != null && <DigestModal digestId={digestId} onClose={() => setDigestId(null)} onOpenAgent={openAgentChat} />}
       {invitesOpen && <InvitesModal onClose={() => setInvitesOpen(false)} onOpenAgent={openAgentChat} />}
+      {feedOpen && <FeedModal onClose={() => setFeedOpen(false)} onOpenChat={(r) => { setFeedOpen(false); setRoom(r); setView("chat"); }} />}
 
       {settingsOpen && (
       <SettingsModal
