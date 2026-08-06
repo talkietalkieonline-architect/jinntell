@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, searchUsers, addContact, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -35,8 +35,8 @@ function timeAgo(iso: string): string {
 }
 
 // Кружок (джинн/человек/коллекция): аватар + подпись; варианты — закреплён, платный, малый, онлайн, счётчик
-function Circle({ label, photo, color, emoji, pinned, badge, paid, small, online, star, onClick, onLongPress }: {
-  label: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; star?: boolean; onClick?: () => void; onLongPress?: () => void;
+function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, online, star, onClick, onLongPress }: {
+  label: string; sub?: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; star?: boolean; onClick?: () => void; onLongPress?: () => void;
 }) {
   const src = photo ? (photo.startsWith("http") || photo.startsWith("data:") || photo.startsWith("blob:") ? photo : mediaUrl(photo)) : null;
   const d = small ? 44 : 56;
@@ -60,6 +60,7 @@ function Circle({ label, photo, color, emoji, pinned, badge, paid, small, online
         {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />}
       </div>
       <span className="text-[10px] leading-tight truncate w-full text-center" style={{ color: "var(--text-secondary)" }}>{label}</span>
+      {sub && <span className="text-[9px] leading-tight truncate w-full text-center -mt-0.5" style={{ color: "var(--text-muted)" }}>{sub}</span>}
     </button>
   );
 }
@@ -86,6 +87,8 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
   const [contacts, setContacts] = useState<ContactOut[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
+  const [userResults, setUserResults] = useState<ContactOut[]>([]);
+  const [addBusy, setAddBusy] = useState(false);
   const [pinned, setPinned] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -143,7 +146,20 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   // Гости — недавние чаты с джиннами, которых нет в избранном (авто-истечение 12ч — TODO)
   const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)));
 
-  const peopleList = contacts.filter((c) => !peopleSearch || c.display_name.toLowerCase().includes(peopleSearch.toLowerCase()));
+  useEffect(() => {
+    const q = peopleSearch.trim();
+    if (q.length < 2) { setUserResults([]); return; }
+    const t = setTimeout(() => { searchUsers(q).then(setUserResults).catch(() => setUserResults([])); }, 300);
+    return () => clearTimeout(t);
+  }, [peopleSearch]);
+
+  const contactIds = new Set(contacts.map((c) => c.id));
+  const doAddContact = async (identifier: string) => {
+    const id = (identifier || "").trim();
+    if (!id || addBusy) return;
+    setAddBusy(true);
+    try { await addContact(id); const cs = await getContacts(); setContacts(cs); setPeopleSearch(""); setUserResults([]); } catch { /* noop */ } finally { setAddBusy(false); }
+  };
 
   // Непрочитанные из открытых чатов → «живой» кружок джинна
   const unreadByAgent = new Map<number, number>();
@@ -152,22 +168,29 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const important = favs.filter((a) => pinned.has(a.id));
 
   const agentCircle = (a: AgentOut, small?: boolean) => (
-    <Circle key={a.id} label={a.name} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => togglePin(a.id)} />
+    <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => togglePin(a.id)} />
   );
 
   return (
     <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
       <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
 
-        {/* ═══ БЛОК 1: МОИ ДЖИННЫ ═══ */}
-        <div className="flex items-baseline justify-between px-1">
-          <span className="text-[13px] font-bold" style={{ color: "var(--text-primary)" }}>Мои джинны</span>
-          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>удержи кружок → ⭐ важные</span>
-        </div>
-        <Strip title="">
-          <Circle label={assistantName} photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
-          <Circle label="Поток" emoji="🌀" pinned onClick={onOpenFlow} />
+        {/* ═══════════ СОБЕСЕДНИКИ ═══════════ */}
+        <div className="text-[15px] font-extrabold px-1 pt-1" style={{ color: "var(--text-primary)" }}>Собеседники</div>
+
+        {/* Помощники */}
+        <Strip title="Помощники">
+          <Circle label={assistantName} sub="помощник" photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
+          <Circle label="Поток" sub="голос" emoji="🌀" pinned onClick={onOpenFlow} />
           {personal.map((a) => agentCircle(a))}
+        </Strip>
+
+        {/* Мои джинны (из Города) */}
+        <div className="flex items-baseline justify-between px-1 pt-0.5">
+          <span className="text-[13px] font-bold" style={{ color: "var(--text-primary)" }}>Мои джинны</span>
+          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>удержи кружок → ⭐</span>
+        </div>
+        <Strip title="" empty={(important.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
           {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
         </Strip>
         {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
@@ -177,35 +200,50 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => agentCircle(a, true))}</Strip>}
         {guests.length > 0 && <Strip title="Гости · недавние">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
 
-        {/* ═══ ИНФОРМАЦИЯ (коллекции помощника) ═══ */}
-        <Strip title="Информация">
-          <Circle label="Лента" emoji="🔔" color="#5ea0e8" small onClick={() => document.getElementById("home-feed")?.scrollIntoView({ behavior: "smooth" })} />
-          <Circle label="Приглашения" emoji="📍" color="#c0563a" small onClick={onOpenInvites} />
-          <Circle label="Действия" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
+        {/* Мои контакты */}
+        <div className="text-[13px] font-bold px-1 pt-0.5" style={{ color: "var(--text-primary)" }}>Мои контакты</div>
+        <Strip title="" empty={contacts.length === 0 ? "нет контактов — найди человека ниже" : undefined}>
+          {contacts.map((c) => (
+            <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} onClick={() => onOpenContact?.(c)} />
+          ))}
+        </Strip>
+        <div className="flex gap-2 px-1">
+          <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Найти человека (имя, @username, телефон)…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+          <button onClick={() => doAddContact(peopleSearch)} disabled={addBusy || peopleSearch.trim().length < 2} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (addBusy || peopleSearch.trim().length < 2) ? 0.5 : 1 }}>Добавить</button>
+        </div>
+        {userResults.filter((u) => !contactIds.has(u.id)).length > 0 && (
+          <div className="flex flex-col gap-1 px-1">
+            {userResults.filter((u) => !contactIds.has(u.id)).slice(0, 8).map((u) => (
+              <div key={u.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] overflow-hidden" style={{ background: `${u.avatar_color || "var(--accent)"}22`, border: `1.5px solid ${u.avatar_color || "var(--accent)"}` }}>{u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" /> : "👤"}</span>
+                <span className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}{u.jinntell_link ? ` · @${u.jinntell_link}` : ""}</span>
+                <button onClick={() => doAddContact(u.jinntell_link || u.phone)} disabled={addBusy} className="text-[12px] font-semibold shrink-0" style={{ color: "var(--accent)" }}>+ добавить</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ═══════════ ИНФОРМАЦИЯ ═══════════ */}
+        <div className="text-[15px] font-extrabold px-1 pt-2" style={{ color: "var(--text-primary)" }}>Информация</div>
+
+        {/* Потоки (уведомления/предложения/приглашения) */}
+        <Strip title="Потоки">
+          <Circle label="Лента" sub="уведомления" emoji="🔔" color="#5ea0e8" small onClick={() => document.getElementById("home-feed")?.scrollIntoView({ behavior: "smooth" })} />
+          <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={() => document.getElementById("home-feed")?.scrollIntoView({ behavior: "smooth" })} />
+          <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={onOpenInvites} />
+          <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
+        </Strip>
+
+        {/* Подборки и результаты */}
+        <Strip title="Подборки и результаты" empty={digests.length === 0 ? "скажи помощнику «составь подборку …»" : undefined}>
           {digests.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" small onClick={() => onOpenDigest?.(d.id)} />)}
         </Strip>
 
-        {/* ═══ МОИ ЛЮДИ ═══ */}
-        <div className="pt-1">
-          <div className="text-[13px] font-bold px-1 mb-1.5" style={{ color: "var(--text-primary)" }}>Мои люди</div>
-          <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Поиск людей…" className="w-full rounded-xl px-3 py-2 text-sm outline-none mb-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
-          <div className="flex gap-2.5 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
-            {peopleList.length > 0 ? peopleList.map((c) => (
-              <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} onClick={() => onOpenContact?.(c)} />
-            )) : <span className="text-[11px] self-center px-2" style={{ color: "var(--text-muted)", opacity: 0.6 }}>{peopleSearch ? "никого не найдено" : "нет контактов"}</span>}
-          </div>
-        </div>
-
-        {/* ═══ БЛОК 3: КАНАЛЫ ДЖИННОВ ═══ */}
+        {/* Каналы */}
         {allChannels.length > 0 && (
-          <div className="pt-1">
-            <div className="text-[13px] font-bold px-1 mb-1.5" style={{ color: "var(--text-primary)" }}>Каналы</div>
-            <div className="flex gap-2.5 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
-              {allChannels.map((ch) => (
-                <Circle key={ch.agent_id} label={ch.name} color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />
-              ))}
-            </div>
-          </div>
+          <Strip title="Каналы">
+            {allChannels.map((ch) => <Circle key={ch.agent_id} label={ch.name} sub="канал" color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />)}
+          </Strip>
         )}
 
         {/* ═══ БЛОК: ЛЕНТА (события + каналы) ═══ */}
