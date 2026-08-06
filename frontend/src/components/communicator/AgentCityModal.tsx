@@ -56,7 +56,7 @@ export default function AgentCityModal({
   const [semantic, setSemantic] = useState<AgentOut[] | null>(null);
   const [paidConfirm, setPaidConfirm] = useState<{ id: number; name: string } | null>(null);
   const [searching, setSearching] = useState(false);
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [cities, setCities] = useState<CityOut[]>([]);
   const [userCity, setUserCity] = useState<string>("");
   const [cityTab, setCityTab] = useState<"city" | "federal">("city");
@@ -114,7 +114,7 @@ export default function AgentCityModal({
 
   const isFav = (id: number) => favorites.has(id);
 
-  const changeCity = (name: string) => { setUserCity(name); updateMe({ city: name || undefined } as never).catch(() => {}); };
+  const changeCity = (name: string) => { setUserCity(name); updateMe({ city: name || undefined } as never).then(() => refreshUser()).catch(() => {}); };
   const detectCity = () => {
     if (!navigator.geolocation) return;
     setGeoLoading(true);

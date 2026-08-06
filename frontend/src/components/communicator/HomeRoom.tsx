@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, searchUsers, addContact, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, mediaUrl, type FeedEvent, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -85,6 +85,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [loading, setLoading] = useState(true);
   const [favs, setFavs] = useState<AgentOut[]>([]);
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
+  const [popular, setPopular] = useState<AgentOut[]>([]);
   const [contacts, setContacts] = useState<ContactOut[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
   const [userResults, setUserResults] = useState<ContactOut[]>([]);
@@ -121,6 +122,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     const loadAll = () => {
       getFavoriteAgents().then((f) => { if (alive) setFavs(f); }).catch(() => {});
       getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
+      getAgents().then((r) => { if (alive) setPopular(r.agents || []); }).catch(() => {});
       getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
       listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
       getChannels().then((c) => { if (alive) setAllChannels(c); }).catch(() => {});
@@ -148,6 +150,8 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const others = favs.filter((a) => !grouped.has(a.id));
   const recIds = new Set(favs.map((a) => a.id));
   const recs = recommended.filter((a) => !recIds.has(a.id)).slice(0, 12);
+  const recSet = new Set(recs.map((a) => a.id));
+  const pops = popular.filter((a) => !recIds.has(a.id) && !recSet.has(a.id)).slice(0, 12);
 
   // Гости — недавние чаты с джиннами, которых нет в избранном (авто-истечение 12ч — TODO)
   const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)));
@@ -176,6 +180,10 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const agentCircle = (a: AgentOut, small?: boolean) => (
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => togglePin(a.id)} />
   );
+  // Кружок «Гостиной» — удержи, чтобы перенести в «Мои джинны» (иначе пропадёт)
+  const guestAgentCircle = (a: AgentOut) => (
+    <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={async () => { try { await addFavoriteAgent(a.id); window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }} />
+  );
 
   return (
     <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
@@ -203,8 +211,6 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
         {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
         {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
-        {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => agentCircle(a, true))}</Strip>}
-        {guests.length > 0 && <Strip title="Гости · недавние">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
 
         {/* Мои контакты */}
         <div className="text-[13px] font-bold px-1 pt-0.5" style={{ color: "var(--text-primary)" }}>Мои контакты</div>
@@ -228,6 +234,16 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
             ))}
           </div>
         )}
+
+        {/* ═══════════ ГОСТИНАЯ (гости пропадают, если не перенести в «Мои джинны») ═══════════ */}
+        <div className="flex items-baseline justify-between px-1 pt-2">
+          <span className="text-[15px] font-extrabold" style={{ color: "var(--text-primary)" }}>Гостиная</span>
+          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>удержи → в «Мои джинны»</span>
+        </div>
+        {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => guestAgentCircle(a))}</Strip>}
+        {pops.length > 0 && <Strip title="Популярные">{pops.map((a) => guestAgentCircle(a))}</Strip>}
+        {guests.length > 0 && <Strip title="Были недавно">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
+        {(recs.length + pops.length + guests.length) === 0 && <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>}
 
         {/* ═══════════ ИНФОРМАЦИЯ ═══════════ */}
         <div className="text-[15px] font-extrabold px-1 pt-2" style={{ color: "var(--text-primary)" }}>Информация</div>
