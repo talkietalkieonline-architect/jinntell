@@ -285,6 +285,24 @@ export default function Home() {
     setAgentsOpen(true);
   }, [room, agentInfo]);
 
+  // «+ человек» в разговор — за этим серверный эпик смешанных комнат (сейчас RoomMember = только джинны)
+  const onInvitePerson = useCallback(() => {
+    setCommandHint("Добавить человека в разговор — скоро");
+    setTimeout(() => setCommandHint(""), 2500);
+  }, []);
+
+  // Помощник «с нами» в строке чата: тумблер «слушает / не слушает» (по комнатам, в localStorage)
+  const [assistMuted, setAssistMuted] = useState<Set<string>>(new Set());
+  useEffect(() => { try { const raw = localStorage.getItem("jinntell_assist_muted"); if (raw) setAssistMuted(new Set(JSON.parse(raw))); } catch { /* noop */ } }, []);
+  const toggleAssist = useCallback(() => {
+    setAssistMuted((prev) => {
+      const n = new Set(prev);
+      if (n.has(room)) n.delete(room); else n.add(room);
+      try { localStorage.setItem("jinntell_assist_muted", JSON.stringify([...n])); } catch { /* noop */ }
+      return n;
+    });
+  }, [room]);
+
   /** Выбор джинна в модалке: либо обычное открытие, либо приглашение в комнату */
   const handlePickAgent = useCallback((agentId: number) => {
     if (!inviteContext) { openAgentChat(agentId); return; }
@@ -717,6 +735,9 @@ export default function Home() {
         activeIsFav={activeIsFav}
         roomMembers={roomMembers}
         onInviteJinn={onInviteJinn}
+        onInvitePerson={onInvitePerson}
+        assistantMuted={assistMuted.has(room)}
+        onToggleAssistant={toggleAssist}
         onCall={startCall}
         userName={user?.display_name || user?.first_name || null}
         online={netOnline}

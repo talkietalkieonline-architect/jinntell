@@ -16,6 +16,9 @@ export default function NavBar({
   activeAgent,
   roomMembers,
   onInviteJinn,
+  onInvitePerson,
+  assistantMuted,
+  onToggleAssistant,
   onCall,
   onSelectChat,
   onCloseChat,
@@ -42,6 +45,9 @@ export default function NavBar({
   activeAgent: { name: string; profession: string; brand: string; color: string; photo_url?: string } | null;
   roomMembers: { id: number; name: string; color: string; photo_url?: string }[];
   onInviteJinn: () => void;
+  onInvitePerson?: () => void;
+  assistantMuted?: boolean;
+  onToggleAssistant?: () => void;
   onCall?: () => void;
   onSelectChat: (room: string) => void;
   onCloseChat: (room: string) => void;
@@ -139,15 +145,32 @@ export default function NavBar({
         const isAssistant = activeRoom === assistantRoom;
         const isRoom = roomMembers.length > 0;
         const activeOpen = openChats.find((c) => c.room === activeRoom);
-        const inviteBtn = (
+        // Помощник «с нами» — аватар в строке; тап = слушает/не слушает (mute-значок сверху, приглушение)
+        const assistChip = !isAssistant ? (
           <button
-            onClick={onInviteJinn}
-            title="Позвать джинна"
-            className="ml-auto shrink-0 px-2 py-1 rounded-lg text-[11px] font-medium transition-all hover:scale-105"
-            style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}
+            onClick={onToggleAssistant}
+            title={assistantMuted ? "Помощник не слушает — включить" : "Помощник слушает — нажмите, чтобы выключить"}
+            className="relative shrink-0 w-9 h-9 rounded-full flex items-center justify-center overflow-hidden transition-all"
+            style={{ border: `1.5px solid ${assistantMuted ? "var(--bg-glass-border)" : "var(--accent)"}`, opacity: assistantMuted ? 0.5 : 1, background: assistantPhoto ? "transparent" : "var(--bg-glass)", color: "var(--accent)" }}
           >
-            + джинн
+            {assistantPhoto ? (
+              <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" />
+            ) : (
+              "🧞"
+            )}
+            {assistantMuted ? (
+              <span className="absolute -top-1 -right-1 text-[9px]">🔇</span>
+            ) : (
+              <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full" style={{ background: "#2ecc71", border: "1.5px solid var(--bar-bg)" }} />
+            )}
           </button>
+        ) : null;
+        // «+ джинн» / «+ человек» — добавить участника в разговор (кружок появится в полосе)
+        const addBtns = (
+          <>
+            <button onClick={onInviteJinn} title="Добавить джинна в разговор" className="shrink-0 px-2 h-9 rounded-lg text-[11px] font-medium transition-all hover:scale-105" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}>+ джинн</button>
+            <button onClick={onInvitePerson} title="Добавить человека в разговор" className="shrink-0 px-2 h-9 rounded-lg text-[11px] font-medium transition-all hover:scale-105" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>+ человек</button>
+          </>
         );
         // ✕ — закрыть чат и вернуться на главный («поговорили — закрыли крестиком»)
         const closeBtn = (
@@ -185,9 +208,12 @@ export default function NavBar({
                 <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{roomMembers.map((m) => m.name).join(" + ")}</span>
                 <span className="text-[10px] truncate" style={{ color: "var(--text-muted)" }}>комната • {roomMembers.length} джиннов</span>
               </div>
-              {inviteBtn}
-              {renderMenu("room")}
-              {closeBtn}
+              <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                {assistChip}
+                {addBtns}
+                {renderMenu("room")}
+                {closeBtn}
+              </div>
             </div>
           );
         }
@@ -221,11 +247,17 @@ export default function NavBar({
             <div className="ml-auto flex items-center gap-1.5 shrink-0">
               {isAssistant ? (
                 <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /><span className="text-[9px]" style={{ color: "var(--text-muted)" }}>online</span></div>
-              ) : activeRoom.startsWith("dm-") ? (
-                <button onClick={onCall} title="Видеозвонок" className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-110" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "#2ecc71" }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
-                </button>
-              ) : null}
+              ) : (
+                <>
+                  {assistChip}
+                  {addBtns}
+                  {activeRoom.startsWith("dm-") && (
+                    <button onClick={onCall} title="Видеозвонок" className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-110" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "#2ecc71" }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
+                    </button>
+                  )}
+                </>
+              )}
               {renderMenu(isAssistant ? "assistant" : activeRoom.startsWith("dm-") ? "dm" : "jinn")}
               {closeBtn}
             </div>
