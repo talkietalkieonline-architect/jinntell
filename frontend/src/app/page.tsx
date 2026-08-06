@@ -780,7 +780,7 @@ export default function Home() {
       {view === "feed" ? (
         <HomeRoom
           topPad={topBarH}
-          bottomPad={bottomBarH}
+          bottomPad={24}
           assistantName={assistantName}
           assistantPhoto={assistantPhoto}
           userId={user?.id}
@@ -821,18 +821,21 @@ export default function Home() {
         />
       )}
 
-      {/* Нижняя панель — ввод + кнопки */}
-      <BottomBar
-        onSettingsClick={() => setSettingsOpen(true)}
-        onContactsClick={() => { setAgentsInitialTab("people"); setAgentsOpen(true); }}
-        onAgentsClick={() => setAgentsOpen(true)}
-        onSendMessage={handleSend}
-        onAttachMedia={attachMedia}
-        onHeightChange={setBottomBarH}
-        onMicStateChange={(active) => setMicActive(active)}
-        onRecordNote={(auto?: boolean) => { setRecorderAuto(!!auto); setRecorderOpen(true); }}
-        assistantName={assistantName}
-      />
+      {/* Нижняя панель — ввод + кнопки (микрофон/видео). На главном экране НЕ показываем:
+          главный = ручное управление (читать/листать); голос — в Потоке или в чате джинна. */}
+      {view !== "feed" && (
+        <BottomBar
+          onSettingsClick={() => setSettingsOpen(true)}
+          onContactsClick={() => { setAgentsInitialTab("people"); setAgentsOpen(true); }}
+          onAgentsClick={() => setAgentsOpen(true)}
+          onSendMessage={handleSend}
+          onAttachMedia={attachMedia}
+          onHeightChange={setBottomBarH}
+          onMicStateChange={(active) => setMicActive(active)}
+          onRecordNote={(auto?: boolean) => { setRecorderAuto(!!auto); setRecorderOpen(true); }}
+          assistantName={assistantName}
+        />
+      )}
       </div>
 
       {chatHidden && (
