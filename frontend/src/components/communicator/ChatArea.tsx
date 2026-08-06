@@ -13,7 +13,7 @@ export interface ChatMessage {
   isVoice?: boolean;
   /** URL медиа (картинка/видео) */
   mediaUrl?: string;
-  mediaType?: "image" | "video" | "note";
+  mediaType?: "image" | "video" | "note" | "voice";
   /** Реплика из другой комнаты (контекст) — показываем приглушённо */
   context?: boolean;
 }
@@ -64,6 +64,44 @@ function stopAllTTS() {
   _ttsAudio = null;
   try { window.speechSynthesis?.cancel(); } catch {}
   window.dispatchEvent(new Event("jinntell_tts_end"));
+}
+
+/** Голосовое сообщение (реальный голос отправителя): play/pause + волна + длительность. */
+function VoiceMessage({ src }: { src: string; mine?: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [cur, setCur] = useState(0);
+  const [dur, setDur] = useState(0);
+  const toggle = () => { const a = audioRef.current; if (!a) return; if (a.paused) a.play().catch(() => {}); else a.pause(); };
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const BARS = 26;
+  const progress = dur > 0 ? cur / dur : 0;
+  return (
+    <div className="flex items-center gap-2 py-0.5 mb-1" style={{ minWidth: 170 }}>
+      <button onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+        {playing ? "❚❚" : "▶"}
+      </button>
+      <div className="flex items-center gap-[2px] flex-1" style={{ height: 24 }}>
+        {Array.from({ length: BARS }).map((_, i) => {
+          const h = 5 + (Math.sin(i * 1.3) * 0.5 + 0.5) * 14;
+          const active = i / BARS <= progress;
+          return <span key={i} style={{ width: 2.5, height: h, borderRadius: 2, background: active ? "var(--accent)" : "var(--bg-glass-border)", transition: "background 0.1s" }} />;
+        })}
+      </div>
+      <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--text-muted)" }}>{fmt(playing || cur ? cur : dur)}</span>
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setCur(0); }}
+        onTimeUpdate={(e) => setCur(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => { const a = e.currentTarget; if (a.duration === Infinity || isNaN(a.duration)) { a.currentTime = 1e101; } else setDur(a.duration || 0); }}
+        onDurationChange={(e) => { const a = e.currentTarget; if (isFinite(a.duration)) { setDur(a.duration); if (a.currentTime > 1e6) a.currentTime = 0; } }}
+      />
+    </div>
+  );
 }
 
 /** Голосовой пузырь в стиле Telegram — волновая дорожка + play */
@@ -331,6 +369,7 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
         {msg.mediaUrl && (() => {
           const raw = msg.mediaUrl as string;
           const src = raw.startsWith("blob:") || raw.startsWith("data:") ? raw : mediaUrl(raw);
+          if (msg.mediaType === "voice") return <VoiceMessage src={src} mine={!userSide} />;
           if (msg.mediaType === "image") return <img src={src} alt="" className="rounded-lg mb-2 max-w-full cursor-zoom-in" style={{ maxHeight: "240px", objectFit: "cover" }} onClick={() => setLightbox({ src, type: "image" })} />;
           if (msg.mediaType === "note") return <video src={src} controls autoPlay muted loop playsInline className="mb-2" style={{ width: 220, height: 220, objectFit: "cover", borderRadius: 24 }} onClick={() => setLightbox({ src, type: "video" })} />;
           if (msg.mediaType === "video") return <video src={src} controls playsInline className="rounded-lg mb-2 max-w-full" style={{ maxHeight: "240px" }} />;

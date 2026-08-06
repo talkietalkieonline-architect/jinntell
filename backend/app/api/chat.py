@@ -112,7 +112,9 @@ async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = De
 
 
 _CHAT_MEDIA = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
-               "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov"}
+               "video/mp4": "mp4", "video/webm": "webm", "video/quicktime": "mov",
+               "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a",
+               "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-m4a": "m4a"}
 
 
 @router.post("/media")
@@ -125,8 +127,10 @@ async def upload_chat_media(file: UploadFile = File(...), user: User = Depends(g
             ext = "webm"
         elif ct.startswith("image/"):
             ext = "jpg"
+        elif ct.startswith("audio/"):
+            ext = "webm"
         else:
-            raise HTTPException(400, "Только изображения и видео")
+            raise HTTPException(400, "Только изображения, видео и аудио")
     data = await file.read()
     if len(data) > 50 * 1024 * 1024:
         raise HTTPException(400, "Файл больше 50 МБ")
@@ -135,7 +139,7 @@ async def upload_chat_media(file: UploadFile = File(...), user: User = Depends(g
     fname = f"{uuid.uuid4().hex}.{ext}"
     with open(os.path.join(d, fname), "wb") as f:
         f.write(data)
-    mtype = "video" if ct.startswith("video/") else "image"
+    mtype = "voice" if ct.startswith("audio/") else "video" if ct.startswith("video/") else "image"
     return {"url": f"/api/storage/chat/{user.id}/{fname}", "type": mtype}
 
 

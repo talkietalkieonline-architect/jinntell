@@ -1,5 +1,4 @@
 "use client";
-import RecSlider from "./RecSlider";
 import { useState, useRef, useEffect, useCallback } from "react";
 
 /** Состояния микрофона */
@@ -18,6 +17,8 @@ export default function BottomBar({
   onAttachMedia,
   onHeightChange,
   onMicStateChange,
+  onCall,
+  canCall = false,
   assistantName = "Джим",
 }: {
   onSettingsClick: () => void;
@@ -28,17 +29,16 @@ export default function BottomBar({
   onAttachMedia: (file: File) => void;
   onHeightChange?: (h: number) => void;
   onMicStateChange?: (active: boolean) => void;
+  onCall?: () => void;
+  canCall?: boolean;
   assistantName?: string;
 }) {
   const [micState, setMicState] = useState<MicState>("off");
-  const [showTextInput, setShowTextInput] = useState(false);
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [inputText, setInputText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const isLongPress = useRef(false);
 
   // Сообщаем родителю свою высоту
   useEffect(() => {
@@ -49,14 +49,7 @@ export default function BottomBar({
     ro.observe(barRef.current);
     onHeightChange(barRef.current.offsetHeight);
     return () => ro.disconnect();
-  }, [onHeightChange, showTextInput]);
-
-  // Фокус на поле ввода при открытии
-  useEffect(() => {
-    if (showTextInput) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [showTextInput]);
+  }, [onHeightChange]);
 
   const handleSend = () => {
     const text = inputText.trim();
@@ -75,7 +68,7 @@ export default function BottomBar({
 
   // === Web Speech API распознавание речи ===
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const [voiceText, setVoiceText] = useState("");
+  const [, setVoiceText] = useState("");
   const onSendRef = useRef(onSendMessage);
   const micStateRef = useRef(micState);
   const startRecognitionRef = useRef<(() => void) | undefined>(undefined);
@@ -171,11 +164,6 @@ export default function BottomBar({
       window.removeEventListener("jinntell_tts_start", onTtsStart);
       window.removeEventListener("jinntell_tts_end", onTtsEnd);
     };
-  }, []);
-
-  const stopRecognition = useCallback(() => {
-    if (recognitionRef.current) { recognitionRef.current.abort(); recognitionRef.current = null; }
-    setVoiceText("");
   }, []);
 
   // === Wake-word: активация по имени ("Джим, ...") ===
@@ -312,20 +300,6 @@ export default function BottomBar({
     return () => stopWake();
   }, [wakeEnabled, micState, startWake, stopWake]);
 
-  // === Микрофон: тап = вкл/выкл распознавание голоса (надёжно на мобиле — один onClick, без гонки mouse/touch) ===
-  const handleMicToggle = useCallback(() => {
-    if (micStateRef.current === "off") { setMicState("on"); startRecognition(); }
-    else { setMicState("off"); stopRecognition(); }
-  }, [startRecognition, stopRecognition]);
-
-  // Визуал микрофона
-  const micVisual = {
-    off:    { bg: "var(--bg-glass)", border: "var(--bg-glass-border)", color: "var(--accent)", shadow: "none", label: "Rec" },
-    on:     { bg: "var(--accent)", border: "var(--accent-bright)", color: "var(--bg-deep)", shadow: "0 0 25px var(--accent-glow-strong)", label: "Говорите" },
-    always: { bg: "var(--accent)", border: "var(--accent-bright)", color: "var(--bg-deep)", shadow: "0 0 30px var(--accent-glow-strong)", label: "Всегда вкл" },
-    mute:   { bg: "var(--danger)", border: "var(--danger)", color: "#fff", shadow: "0 0 20px rgba(231,76,60,0.5)", label: "MUTE" },
-  }[micState];
-
   // Закрыть меню медиа при клике вне
   useEffect(() => {
     if (!showMediaMenu) return;
@@ -333,6 +307,98 @@ export default function BottomBar({
     const timer = setTimeout(() => document.addEventListener("click", close), 0);
     return () => { clearTimeout(timer); document.removeEventListener("click", close); };
   }, [showMediaMenu]);
+
+  // === Голосовое сообщение: запись РЕАЛЬНОГО голоса (аудио) ===
+  const [recording, setRecording] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const audioRecRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recCancelRef = useRef(false);
+  const recSecsRef = useRef(0);
+  const holdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const heldRef = useRef(false);
+  const winUpRef = useRef<(() => void) | null>(null);
+
+  const finishRec = useCallback((send: boolean) => {
+    recCancelRef.current = !send;
+    const rec = audioRecRef.current;
+    if (rec && rec.state !== "inactive") { try { rec.stop(); } catch { /* noop */ } }
+  }, []);
+
+  const startAudioRec = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+      let mime = "";
+      for (const t of types) { if (MediaRecorder.isTypeSupported?.(t)) { mime = t; break; } }
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recCancelRef.current = false;
+      rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        audioStreamRef.current = null;
+        if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
+        if (winUpRef.current) { window.removeEventListener("pointerup", winUpRef.current); winUpRef.current = null; }
+        const secs = recSecsRef.current;
+        setRecording(false); setRecSecs(0); recSecsRef.current = 0;
+        if (recCancelRef.current || secs < 1) return; // отмена или слишком коротко
+        const blob = new Blob(audioChunksRef.current, { type: (rec.mimeType || "audio/webm").split(";")[0] });
+        const ext = (rec.mimeType || "").includes("mp4") ? "m4a" : (rec.mimeType || "").includes("ogg") ? "ogg" : "webm";
+        const file = new File([blob], `voice.${ext}`, { type: (rec.mimeType || "audio/webm").split(";")[0] });
+        onAttachMedia(file);
+      };
+      audioRecRef.current = rec;
+      rec.start();
+      setRecording(true);
+      setRecSecs(0); recSecsRef.current = 0;
+      recTimerRef.current = setInterval(() => { recSecsRef.current += 1; setRecSecs(recSecsRef.current); }, 1000);
+      // Отпускание пальца где угодно → отправить (кнопка микрофона к этому моменту уже сменилась на UI записи)
+      const onWinUp = () => finishRec(true);
+      winUpRef.current = onWinUp;
+      window.addEventListener("pointerup", onWinUp, { once: true });
+    } catch { setRecording(false); }
+  }, [onAttachMedia, finishRec]);
+
+  // === Диктовка (короткий тап микрофона): голос → в поле ввода ===
+  const [dictating, setDictating] = useState(false);
+  const dictRef = useRef<SpeechRecognition | null>(null);
+  const dictBaseRef = useRef("");
+  const startDictation = useCallback(() => {
+    const SR = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new (SR as unknown as { new(): SpeechRecognition })();
+    r.lang = "ru-RU"; r.continuous = true; r.interimResults = true;
+    dictBaseRef.current = inputText ? inputText + " " : "";
+    r.onresult = (event: SpeechRecognitionEvent) => {
+      let full = dictBaseRef.current, interim = "";
+      for (let i = 0; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) full += res[0].transcript + " "; else interim += res[0].transcript;
+      }
+      setInputText((full + interim).replace(/\s+/g, " ").trimStart());
+    };
+    r.onend = () => { setDictating(false); dictRef.current = null; };
+    r.onerror = () => { setDictating(false); };
+    try { r.start(); dictRef.current = r; setDictating(true); } catch { /* noop */ }
+  }, [inputText]);
+  const stopDictation = useCallback(() => {
+    const r = dictRef.current; if (r) { try { r.stop(); } catch { /* noop */ } }
+    setDictating(false);
+  }, []);
+
+  const micDown = useCallback(() => {
+    heldRef.current = false;
+    holdRef.current = setTimeout(() => { heldRef.current = true; startAudioRec(); }, 260);
+  }, [startAudioRec]);
+  const micUp = useCallback(() => {
+    if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null; }
+    if (heldRef.current) { heldRef.current = false; finishRec(true); return; }
+    if (dictating) stopDictation(); else startDictation();
+  }, [dictating, startDictation, stopDictation, finishRec]);
 
   return (
     <div
@@ -344,71 +410,6 @@ export default function BottomBar({
         zIndex: 40,
       }}
     >
-      {/* Поле ввода текста — появляется по кнопке ⌨️ */}
-      {showTextInput && (
-        <div className="px-5 pt-2.5 pb-1.5 flex justify-center animate-fade-in">
-          <div
-            className="flex items-center gap-2 rounded-2xl px-4 py-2.5 w-full"
-            style={{
-              maxWidth: "600px",
-              background: "var(--bg-glass)",
-              border: "1px solid var(--bg-glass-border)",
-            }}
-          >
-            {/* Скрепка + меню вложений */}
-            <div className="relative shrink-0">
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowMediaMenu(!showMediaMenu); }}
-                className="w-8 h-8 flex items-center justify-center transition-all hover:scale-110 active:scale-95 rounded-full"
-                style={{ color: "var(--text-muted)" }}
-                title="Вложить"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                </svg>
-              </button>
-              {showMediaMenu && (
-                <div className="absolute bottom-11 left-0 rounded-xl py-2 px-1 flex flex-col gap-0.5 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 170, zIndex: 20 }}>
-                  <button onClick={() => { setShowMediaMenu(false); onRecordNote?.(); }} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>
-                    <span>🎥</span><span>Записать видео</span>
-                  </button>
-                  <button onClick={() => { setShowMediaMenu(false); fileRef.current?.click(); }} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>
-                    <span>📎</span><span>Фото / видео / файл</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Напишите сообщение..."
-              className="flex-1 bg-transparent outline-none text-sm"
-              style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }}
-            />
-
-            <button
-              onClick={handleSend}
-              disabled={!inputText.trim()}
-              className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110 active:scale-95"
-              style={{
-                background: inputText.trim() ? "var(--accent)" : "var(--bg-glass-border)",
-                color: inputText.trim() ? "var(--bg-deep)" : "var(--text-muted)",
-                cursor: inputText.trim() ? "pointer" : "default",
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M22 2L11 13" />
-                <path d="M22 2L15 22L11 13L2 9L22 2Z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Скрытый file input */}
       <input
         ref={fileRef}
@@ -421,8 +422,8 @@ export default function BottomBar({
         }}
       />
 
-      {/* Индикатор wake-word: жду обращения / слушаю команду */}
-      {wakeEnabled && micState === "off" && (
+      {/* Индикатор wake-word: жду обращения по имени */}
+      {wakeEnabled && micState === "off" && !recording && (
         <div className="flex justify-center pt-1.5 -mb-1">
           <span
             className="text-[10px] px-2.5 py-0.5 rounded-full animate-fade-in flex items-center gap-1"
@@ -435,35 +436,63 @@ export default function BottomBar({
         </div>
       )}
 
-      {/* 5 кнопок управления */}
-      <div className="flex items-center justify-center gap-2 px-3 py-2">
+      {/* Основная панель: 📎 · строка · (🎤 или ▶) · 📞 */}
+      <div className="px-3 pt-2 pb-3 flex justify-center">
+        <div className="flex items-center gap-1.5 rounded-2xl px-3 py-2 w-full" style={{ maxWidth: 600, background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+          {recording ? (
+            <>
+              <button onPointerDown={() => finishRec(false)} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-base" style={{ color: "var(--danger)" }} title="Отменить">✕</button>
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                <span className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "var(--danger)" }} />
+                <span className="text-sm tabular-nums shrink-0" style={{ color: "var(--text-primary)" }}>{Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, "0")}</span>
+                <span className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>отпустите — отправить</span>
+              </div>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><path d="M12 19v4" /></svg>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 📎 вложения */}
+              <div className="relative shrink-0">
+                <button onClick={(e) => { e.stopPropagation(); setShowMediaMenu(!showMediaMenu); }} className="w-9 h-9 flex items-center justify-center rounded-full transition-all hover:scale-110" style={{ color: "var(--text-muted)" }} title="Вложить">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                </button>
+                {showMediaMenu && (
+                  <div className="absolute bottom-11 left-0 rounded-xl py-2 px-1 flex flex-col gap-0.5 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 180, zIndex: 20 }}>
+                    <button onClick={() => { setShowMediaMenu(false); fileRef.current?.click(); }} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}><span>📎</span><span>Фото / видео / файл</span></button>
+                  </div>
+                )}
+              </div>
 
-        {/* Rec-ползунок: тап=голос, сдвиг→видео, тройной тап→строка ввода */}
-        <RecSlider
-          micActive={micState === "on" || micState === "always"}
-          onVoice={handleMicToggle}
-          onVideo={() => onRecordNote?.(false)}
-          onVoiceHold={() => { if (micStateRef.current === "off") { setMicState("on"); startRecognition(); } }}
-          onVideoHold={() => onRecordNote?.(true)}
-          onText={() => setShowTextInput((v) => !v)}
-        />
+              {/* Поле ввода — всегда видно */}
+              <input ref={inputRef} type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown}
+                placeholder={dictating ? "🎙 говорите…" : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
+                style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }} />
 
-      </div>
+              {/* Звонок — только для человека */}
+              {canCall && onCall && (
+                <button onClick={onCall} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110" style={{ color: "#2ecc71" }} title="Звонок">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+                </button>
+              )}
 
-      {/* Подсказка состояния микрофона (только MUTE) */}
-      {micState === "mute" && (
-        <div className="flex flex-col items-center gap-1 pb-1">
-          <span
-            className="text-[9px] uppercase tracking-wider px-3 py-0.5 rounded-full animate-fade-in"
-            style={{
-              color: micState === "mute" ? "var(--danger)" : "var(--accent)",
-              background: micState === "mute" ? "rgba(231,76,60,0.1)" : "rgba(212,168,67,0.1)",
-            }}
-          >
-            {micVisual.label}
-          </span>
+              {/* Микрофон (тап=диктовка, удержание=голосовое) или Отправить (если есть текст) */}
+              {inputText.trim() ? (
+                <button onClick={handleSend} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110" style={{ background: "var(--accent)", color: "var(--bg-deep)" }} title="Отправить">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" /></svg>
+                </button>
+              ) : (
+                <button onPointerDown={micDown} onPointerUp={micUp} onPointerLeave={() => { if (holdRef.current && !heldRef.current) { clearTimeout(holdRef.current); holdRef.current = null; } }}
+                  className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all select-none" style={{ background: dictating ? "var(--accent)" : "var(--bg-glass-hover)", color: dictating ? "var(--bg-deep)" : "var(--accent)", touchAction: "none" }}
+                  title="Тап — диктовка · удержание — голосовое сообщение">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><path d="M12 19v4" /></svg>
+                </button>
+              )}
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

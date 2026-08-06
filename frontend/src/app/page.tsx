@@ -855,6 +855,8 @@ export default function Home() {
           onHeightChange={setBottomBarH}
           onMicStateChange={(active) => setMicActive(active)}
           onRecordNote={(auto?: boolean) => { setRecorderAuto(!!auto); setRecorderOpen(true); }}
+          onCall={startCall}
+          canCall={room.startsWith("dm-")}
           assistantName={assistantName}
         />
       )}
