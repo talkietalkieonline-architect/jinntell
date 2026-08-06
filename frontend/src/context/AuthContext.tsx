@@ -11,6 +11,7 @@ import {
   getToken,
   setToken,
   getMe,
+  ApiError,
   type UserProfile,
 } from "@/services/api";
 
@@ -133,8 +134,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Обновляем локальную сессию свежими данными
           saveSession(profile);
         })
-        .catch(() => {
-          // API недоступен — используем данные из localStorage
+        .catch((err) => {
+          // Токен протух/недействителен (401) — НЕ показываем зомби-сессию со старыми
+          // данными (иначе профиль стар, а любые сохранения молча летят в 401).
+          // Чистим сессию и ведём на вход: перелогин выдаст свежий токен.
+          if (err instanceof ApiError && err.status === 401) {
+            localStorage.removeItem("jinntell_session");
+            localStorage.removeItem("jinntell_token");
+            setToken(null);
+            setUser(null);
+            setIsLoggedIn(false);
+            return;
+          }
+          // Иначе — сеть реально недоступна: оффлайн-фолбэк на localStorage
           const savedData = session.user as Record<string, unknown>;
           setUser({
             id: session.user.id ?? 0,

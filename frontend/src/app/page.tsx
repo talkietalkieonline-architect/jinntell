@@ -624,6 +624,8 @@ export default function Home() {
     setBooting(false); // решение принято — можно показывать (Поток или ленту для новичка)
   }, [screen, user, assistantRoom, setRoom]);
   useEffect(() => { if (user?.custom_bg_url) { try { localStorage.setItem("jinntell_custom_bg", user.custom_bg_url); } catch { /* noop */ } } }, [user?.custom_bg_url]);
+  // Токен протух (AuthContext поймал 401 и разлогинил) — уводим на экран входа, а не держим зомби-сессию
+  useEffect(() => { if (isLoggedIn === false && screen === "communicator") setScreen("login"); }, [isLoggedIn, screen]);
 
   // Геотриггер: опрос позиции при открытом приложении (если пользователь разрешил геолокацию)
   const [geoKnock, setGeoKnock] = useState<GeoDelivery | null>(null);
