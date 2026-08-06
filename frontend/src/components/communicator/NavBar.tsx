@@ -2,7 +2,6 @@
 import { useRef, useEffect, useState } from "react";
 import { mediaUrl } from "@/services/api";
 
-import { FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
 export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean; frame?: string | null };
 
 /** Верхняя панель + горизонтальная лента открытых чатов (вместо боковых створок). */
@@ -71,8 +70,6 @@ export default function NavBar({
     return () => ro.disconnect();
   }, [onHeightChange]);
 
-  const isActive = (room: string) => view === "chat" && activeRoom === room;
-
   const [menuOpen, setMenuOpen] = useState(false);
   const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => {
@@ -116,9 +113,6 @@ export default function NavBar({
           <span className="text-[9px] shrink-0" style={{ color: "var(--text-muted)" }}>▾</span>
         </button>
         <div className="flex items-center gap-2 shrink-0">
-          {view === "chat" && (
-            <PanelBtn title="Домой" onClick={onFeed}>🏠</PanelBtn>
-          )}
           <span title={online ? "В сети" : "Нет соединения"} className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: online ? "#3ecf6a" : "#e5484d", boxShadow: online ? "0 0 6px #3ecf6a88" : "0 0 6px #e5484d88" }} />
         </div>
         {appMenuOpen && (
@@ -140,42 +134,6 @@ export default function NavBar({
         )}
       </div>
 
-      {/* Лента открытых чатов — ТОЛЬКО в чате (на главном помощник и всё живёт в полосах дома) */}
-      {view !== "feed" && (
-      <div className="flex items-end gap-2 px-1">
-        {/* Помощник — всегда первый, не уезжает при скролле */}
-        <div className="shrink-0">
-          <ChatAvatar
-            active={isActive(assistantRoom)}
-            name={assistantName}
-            color="var(--accent)"
-            photo={assistantPhoto}
-            onClick={() => onSelectChat(assistantRoom)}
-          />
-        </div>
-        {openChats.length > 0 && (
-          <div className="w-px self-stretch my-1 shrink-0" style={{ background: "var(--bg-glass-border)" }} />
-        )}
-        <div className="flex items-end gap-2 overflow-x-auto no-scrollbar pb-0.5">
-          {openChats.map((c) => (
-            <ChatAvatar
-              key={c.room}
-              active={isActive(c.room)}
-              name={c.name}
-              color={c.color}
-              photo={c.photo}
-              frame={c.frame}
-              count={c.count}
-              online={c.online}
-              muted={mutedRooms?.includes(c.room)}
-              onClick={() => onSelectChat(c.room)}
-              onClose={() => onCloseChat(c.room)}
-            />
-          ))}
-        </div>
-      </div>
-      )}
-
       {/* Шапка активного чата */}
       {view === "chat" && (() => {
         const isAssistant = activeRoom === assistantRoom;
@@ -189,6 +147,17 @@ export default function NavBar({
             style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}
           >
             + джинн
+          </button>
+        );
+        // ✕ — закрыть чат и вернуться на главный («поговорили — закрыли крестиком»)
+        const closeBtn = (
+          <button
+            onClick={onFeed}
+            title="Закрыть чат"
+            className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
+            style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}
+          >
+            ✕
           </button>
         );
         if (isRoom) {
@@ -218,6 +187,7 @@ export default function NavBar({
               </div>
               {inviteBtn}
               {renderMenu("room")}
+              {closeBtn}
             </div>
           );
         }
@@ -257,131 +227,11 @@ export default function NavBar({
                 </button>
               ) : null}
               {renderMenu(isAssistant ? "assistant" : activeRoom.startsWith("dm-") ? "dm" : "jinn")}
+              {closeBtn}
             </div>
           </div>
         );
       })()}
-    </div>
-  );
-}
-
-function PanelBtn({
-  children,
-  title,
-  active = false,
-  onClick,
-}: {
-  children: React.ReactNode;
-  title: string;
-  active?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className="w-9 h-9 rounded-full flex items-center justify-center text-[15px] transition-all hover:scale-110 active:scale-95"
-      style={{
-        background: active ? "var(--bg-glass-hover)" : "var(--bg-glass)",
-        border: active ? "1px solid var(--accent)" : "1px solid var(--bg-glass-border)",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ChatAvatar({
-  active,
-  name,
-  color,
-  photo,
-  frame,
-  onClick,
-  onClose,
-  count,
-  online,
-  muted,
-}: {
-  active: boolean;
-  name: string;
-  color: string;
-  photo?: string | null;
-  frame?: string | null;
-  onClick: () => void;
-  onClose?: () => void;
-  count?: number;
-  online?: boolean;
-  muted?: boolean;
-}) {
-  const size = active ? 54 : 42;
-  return (
-    <div className="flex flex-col items-center gap-1 shrink-0 relative" style={{ width: 62 }}>
-      <div style={{ position: "relative", width: size, height: size }}>
-        <button
-          onClick={onClick}
-          className="rounded-full flex items-center justify-center font-bold transition-all overflow-hidden"
-          style={{
-            width: size,
-            height: size,
-            background: photo ? "transparent" : "var(--bg-glass)",
-            border: active ? `2px solid ${color}` : "1.5px solid var(--bg-glass-border)",
-            color,
-            boxShadow: frameRing(frame),
-          }}
-        >
-          {photo ? (
-            <img
-              src={photo.startsWith("data:") ? photo : mediaUrl(photo)}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            name[0]
-          )}
-        </button>
-        <FrameDeco frame={frame} size={size} />
-      </div>
-      {onClose && active && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          title="Закрыть чат"
-          className="absolute top-0 right-1 w-4 h-4 rounded-full flex items-center justify-center text-[8px]"
-          style={{
-            background: "var(--bg-glass-hover)",
-            border: "1px solid var(--bg-glass-border)",
-            color: "var(--text-muted)",
-          }}
-        >
-          ✕
-        </button>
-      )}
-      {count && count > 0 ? (
-        <span
-          className="absolute top-0 left-1 min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center text-[8px] font-bold"
-          style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
-        >
-          {count}
-        </span>
-      ) : null}
-      {online !== undefined && (
-        <span
-          className="absolute rounded-full"
-          style={{ top: active ? 44 : 32, right: active ? 6 : 10, width: 9, height: 9, background: online ? "#2ecc71" : "#8a8a8a", border: "1.5px solid var(--bar-bg)" }}
-        />
-      )}
-      {muted && (
-        <span className="absolute" style={{ top: active ? 40 : 28, left: active ? 4 : 8, fontSize: 11, lineHeight: 1 }}>🔕</span>
-      )}
-      <span
-        className="text-[9px] truncate max-w-[58px] text-center"
-        style={{ color: active ? "var(--text-primary)" : "var(--text-muted)" }}
-      >
-        {name}
-      </span>
     </div>
   );
 }

@@ -90,6 +90,7 @@ export default function Home() {
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
   const [view, setView] = useState<"feed" | "chat" | "flow">("feed");
+  const [booting, setBooting] = useState(true); // гейт первого кадра: не мигать главной перед Потоком
   const flowReturnRef = useRef<{ view: "feed" | "chat" | "flow"; room: string }>({ view: "feed", room: "" });
   const assistantBusyRef = useRef(false);
   const [drive, setDrive] = useState(false);
@@ -113,7 +114,7 @@ export default function Home() {
 
   // Чат — через хук (WebSocket + offline fallback)
   const {
-    messages, isTyping, typingName, isConnected,
+    messages, isTyping, typingName,
     sendMessage, attachMedia, pushAssistant, pushUser, room, setRoom, agentInfo, roomMembers,
   } = useChat(getJimRoom());
 
@@ -602,6 +603,7 @@ export default function Home() {
     if (screen !== "communicator" || !user || landedRef.current) return;
     landedRef.current = true;
     if (user.display_name || user.first_name) { setRoom(assistantRoom); setView("flow"); }
+    setBooting(false); // решение принято — можно показывать (Поток или ленту для новичка)
   }, [screen, user, assistantRoom, setRoom]);
   useEffect(() => { if (user?.custom_bg_url) { try { localStorage.setItem("jinntell_custom_bg", user.custom_bg_url); } catch { /* noop */ } } }, [user?.custom_bg_url]);
 
@@ -682,6 +684,11 @@ export default function Home() {
     return <BusinessDashboardModal isOpen onClose={() => { contractorLogout(); setScreen("login"); }} />;
   }
 
+  // Гейт первого кадра: пока не решили, куда вести (Поток/лента) — только фон, без вспышки старой главной
+  if (booting) {
+    return <div className="relative w-full h-screen overflow-hidden"><AppBackground /></div>;
+  }
+
   // Коммуникатор
   return (
     <div className="relative w-full h-screen overflow-hidden" onPointerUp={handleScreenTap}>
@@ -742,17 +749,6 @@ export default function Home() {
         </div>
       )}
 
-      {view === "chat" && (
-        <button
-          onClick={() => { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); }}
-          title="Голосовой режим «Поток»"
-          className="fixed flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold transition-all hover:opacity-90 animate-fade-in"
-          style={{ top: 38, right: 10, zIndex: 75, background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)", backdropFilter: "blur(8px)" }}
-        >
-          🌀 Поток
-        </button>
-      )}
-
       {view === "flow" && (
         <FlowScreen
           onExit={() => { const r = flowReturnRef.current; setRoom(r.room || assistantRoom); setView(r.view === "flow" ? "feed" : r.view); }}
@@ -763,17 +759,6 @@ export default function Home() {
           assistantPhoto={assistantPhoto}
           voiceId={user?.assistant_voice}
         />
-      )}
-
-      {/* Индикатор подключения к серверу */}
-      {isConnected && (
-        <div
-          className="fixed top-1 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] animate-fade-in"
-          style={{ zIndex: 60, background: "rgba(76,175,80,0.15)", color: "#4CAF50" }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          online
-        </div>
       )}
 
       {/* Центральная область — Лента (события) или активный чат */}
