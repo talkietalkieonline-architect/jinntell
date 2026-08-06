@@ -749,7 +749,7 @@ export default function Home() {
         </div>
       )}
 
-      {view !== "flow" && (
+      {view === "chat" && (
         <button
           onClick={() => { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); }}
           title="Голосовой режим «Поток»"

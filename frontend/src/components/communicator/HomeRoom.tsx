@@ -90,6 +90,9 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [peopleSearch, setPeopleSearch] = useState("");
   const [userResults, setUserResults] = useState<ContactOut[]>([]);
   const [addBusy, setAddBusy] = useState(false);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => { try { const raw = localStorage.getItem("jinntell_home_collapsed"); if (raw) setCollapsed(new Set(JSON.parse(raw))); } catch { /* noop */ } }, []);
+  const toggleCollapse = (k: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); try { localStorage.setItem("jinntell_home_collapsed", JSON.stringify([...n])); } catch { /* noop */ } return n; });
   const [pinned, setPinned] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -185,12 +188,31 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={async () => { try { await addFavoriteAgent(a.id); window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }} />
   );
 
+  // Сворачиваемый заголовок блока (клик прячет содержимое — экономит место)
+  const bigHead = (label: string, k: string, hint?: string) => (
+    <button onClick={() => toggleCollapse(k)} className="w-full flex items-baseline justify-between px-1 pt-2 transition-opacity hover:opacity-80">
+      <span className="text-[15px] font-extrabold" style={{ color: "var(--text-primary)" }}>
+        <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{collapsed.has(k) ? "▸ " : "▾ "}</span>{label}
+      </span>
+      {hint && !collapsed.has(k) && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{hint}</span>}
+    </button>
+  );
+  const subHead = (label: string, k: string, hint?: string) => (
+    <button onClick={() => toggleCollapse(k)} className="w-full flex items-baseline justify-between px-1 pt-0.5 transition-opacity hover:opacity-80">
+      <span className="text-[13px] font-bold" style={{ color: "var(--text-primary)" }}>
+        <span style={{ color: "var(--text-muted)", fontSize: 10 }}>{collapsed.has(k) ? "▸ " : "▾ "}</span>{label}
+      </span>
+      {hint && !collapsed.has(k) && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{hint}</span>}
+    </button>
+  );
+
   return (
     <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
       <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
 
         {/* ═══════════ СОБЕСЕДНИКИ ═══════════ */}
-        <div className="text-[15px] font-extrabold px-1 pt-1" style={{ color: "var(--text-primary)" }}>Собеседники</div>
+        {bigHead("Собеседники", "sob")}
+        {!collapsed.has("sob") && (<>
 
         {/* Помощники */}
         <Strip title="Помощники">
@@ -200,10 +222,8 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         </Strip>
 
         {/* Мои джинны (из Города) */}
-        <div className="flex items-baseline justify-between px-1 pt-0.5">
-          <span className="text-[13px] font-bold" style={{ color: "var(--text-primary)" }}>Мои джинны</span>
-          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>удержи кружок → ⭐</span>
-        </div>
+        {subHead("Мои джинны", "jinns", "удержи кружок → ⭐")}
+        {!collapsed.has("jinns") && (<>
         <Strip title="" empty={(important.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
           {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
         </Strip>
@@ -211,6 +231,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
         {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
         {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
+        </>)}
 
         {/* Мои контакты */}
         <div className="text-[13px] font-bold px-1 pt-0.5" style={{ color: "var(--text-primary)" }}>Мои контакты</div>
@@ -235,18 +256,11 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           </div>
         )}
 
-        {/* ═══════════ ГОСТИНАЯ (гости пропадают, если не перенести в «Мои джинны») ═══════════ */}
-        <div className="flex items-baseline justify-between px-1 pt-2">
-          <span className="text-[15px] font-extrabold" style={{ color: "var(--text-primary)" }}>Гостиная</span>
-          <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>удержи → в «Мои джинны»</span>
-        </div>
-        {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => guestAgentCircle(a))}</Strip>}
-        {pops.length > 0 && <Strip title="Популярные">{pops.map((a) => guestAgentCircle(a))}</Strip>}
-        {guests.length > 0 && <Strip title="Были недавно">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
-        {(recs.length + pops.length + guests.length) === 0 && <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>}
+        </>)}
 
         {/* ═══════════ ИНФОРМАЦИЯ ═══════════ */}
-        <div className="text-[15px] font-extrabold px-1 pt-2" style={{ color: "var(--text-primary)" }}>Информация</div>
+        {bigHead("Информация", "info")}
+        {!collapsed.has("info") && (<>
 
         {/* Потоки (уведомления/предложения/приглашения) */}
         <Strip title="Потоки">
@@ -309,6 +323,16 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
             );
           })
         )}
+        </>)}
+
+        {/* ═══════════ ГОСТИНАЯ (внизу — «полистать/открыть для себя»; гости пропадают, если не перенести) ═══════════ */}
+        {bigHead("Гостиная", "gost", "удержи → в «Мои джинны»")}
+        {!collapsed.has("gost") && (<>
+        {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => guestAgentCircle(a))}</Strip>}
+        {pops.length > 0 && <Strip title="Популярные">{pops.map((a) => guestAgentCircle(a))}</Strip>}
+        {guests.length > 0 && <Strip title="Были недавно">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
+        {(recs.length + pops.length + guests.length) === 0 && <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>}
+        </>)}
       </div>
     </div>
   );
