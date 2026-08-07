@@ -116,7 +116,9 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
         {/* Центр: аватар помощника (фото в покое) → вибрирующая волна во время речи */}
         <div className="flex items-center justify-center cursor-pointer relative" style={{ width: 200, height: 200 }} title="Нажми, чтобы прервать">
           {status === "speaking" ? (
-            <div className="flow-orb flow-orb-speak" />
+            <div className="flow-wave">
+              {Array.from({ length: 9 }).map((_, i) => <span key={i} className="flow-wave-bar" style={{ animationDelay: `${i * 0.09}s` }} />)}
+            </div>
           ) : assistantPhoto ? (
             <img
               src={assistantPhoto}

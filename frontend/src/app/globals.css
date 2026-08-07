@@ -302,6 +302,20 @@ input::placeholder {
   50% { transform: translate(-8%, -6%) scale(0.85); }
   75% { transform: translate(6%, 12%) scale(1.1); }
 }
+/* Волновая дорожка в Потоке — движется, пока помощник говорит */
+.flow-wave { display: flex; align-items: center; justify-content: center; gap: 7px; height: 140px; }
+.flow-wave-bar {
+  width: 9px; height: 30px; border-radius: 6px;
+  background: var(--accent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: flowWave 0.85s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes flowWave {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.65; }
+  50% { transform: scaleY(1.7); opacity: 1; }
+}
+
 /* Оживление загруженной картинки — медленный «Ken Burns» (зум + панорама) */
 .ken-burns {
   animation: kenBurns 28s ease-in-out infinite alternate;
