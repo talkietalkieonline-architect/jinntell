@@ -507,6 +507,9 @@ export interface MyChat {
 export function getMyChats(): Promise<MyChat[]> {
   return apiFetch("/api/chat/my-chats");
 }
+export function markChatRead(room: string): Promise<{ ok: boolean }> {
+  return apiFetch("/api/chat/read", { method: "POST", body: JSON.stringify({ room }) });
+}
 
 /** Обновить настройки агента (бизнес / личный) */
 export function updateAgent(id: number, data: AgentPersonaUpdate): Promise<AgentFullOut> {

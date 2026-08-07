@@ -11,6 +11,7 @@ from app.models.user_favorite import UserFavorite
 from app.models.channel_post import ChannelPost
 from app.models.memory_state import MemoryState
 from app.models.channel_read import ChannelRead
+from app.models.chat_read import ChatRead
 from app.models.city import City
 from app.models.llm_usage import LlmUsage
 from app.models.contact import Contact

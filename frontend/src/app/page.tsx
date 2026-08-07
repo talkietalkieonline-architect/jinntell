@@ -14,7 +14,7 @@ import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
 import FeedModal from "@/components/communicator/FeedModal";
 import FlowFab from "@/components/communicator/FlowFab";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, markChatRead, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -181,10 +181,11 @@ export default function Home() {
           const have = new Set(prev.map((c) => c.room));
           const additions = chats
             .filter((ch) => !have.has(ch.room) && !archivedRooms.has(ch.room))
-            .map((ch) => ({ room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, online: ch.online }));
+            .map((ch) => ({ room: ch.room, agentId: 0, name: ch.name, color: ch.color, photo: ch.photo || undefined, online: ch.online, count: ch.count }));
           const updated = prev.map((c) => {
             const srv = chats.find((x) => x.room === c.room);
-            return srv ? { ...c, online: srv.online, name: srv.name, photo: srv.photo || c.photo } : c;
+            // серверный count непрочитанных — источник правды (открытый чат помечается прочитанным → сервер вернёт 0)
+            return srv ? { ...c, online: srv.online, name: srv.name, photo: srv.photo || c.photo, count: srv.count } : c;
           });
           return dedupeOpen(additions.length ? [...additions, ...updated] : updated, assistantRoom);
         });
@@ -329,6 +330,14 @@ export default function Home() {
     const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
     return me === a ? b : me === b ? a : null;
   };
+
+  // Открыл чат/комнату → отметить прочитанным (сервер) + сбросить бейдж локально
+  useEffect(() => {
+    if (view === "chat" && room) {
+      markChatRead(room).catch(() => {});
+      setOpenChats((prev) => prev.map((c) => (c.room === room ? { ...c, count: 0 } : c)));
+    }
+  }, [view, room]);
 
   // Присутствие собеседника в личном диалоге (в сети / был недавно) — опрос при открытом DM
   const [dmPresence, setDmPresence] = useState<Presence | null>(null);

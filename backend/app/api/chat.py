@@ -2,8 +2,10 @@
 import os
 import uuid
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -16,6 +18,7 @@ from pydantic import BaseModel
 
 from app.models.agent import Agent
 from app.api.users import _STORAGE_ROOT
+from app.models.chat_read import ChatRead
 from app.models.message import Message
 from app.models.room import Room, RoomMember
 from app.models.user import User
@@ -75,6 +78,26 @@ class MyChatOut(BaseModel):
     count: int = 0
 
 
+async def _room_unread(db: AsyncSession, user_id: int, room: str) -> int:
+    """Непрочитанные в комнате: сообщения НЕ от меня после базовой отметки.
+    База = явная отметка прочтения (ChatRead) ИЛИ последнее МОЁ сообщение (если отметки нет —
+    чтобы старая история до моего последнего ответа не считалась непрочитанной)."""
+    read_at = (await db.execute(
+        select(ChatRead.last_read_at).where(ChatRead.user_id == user_id, ChatRead.room == room)
+    )).scalar_one_or_none()
+    if read_at is None:
+        read_at = (await db.execute(
+            select(func.max(Message.created_at)).where(Message.room == room, Message.sender_user_id == user_id)
+        )).scalar_one_or_none()
+    q = select(func.count(Message.id)).where(
+        Message.room == room,
+        or_(Message.sender_user_id.is_(None), Message.sender_user_id != user_id),
+    )
+    if read_at is not None:
+        q = q.where(Message.created_at > read_at)
+    return (await db.execute(q)).scalar_one() or 0
+
+
 @router.get("/my-chats", response_model=list[MyChatOut])
 async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Серверный список чатов пользователя (DM + мои комнаты) — чтобы входящие появлялись в ленте."""
@@ -95,7 +118,8 @@ async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = De
         ures = await db.execute(select(User).where(User.id == other_id))
         ou = ures.scalar_one_or_none()
         if ou:
-            out.append(MyChatOut(room=room, kind="dm", name=ou.display_name, color=ou.avatar_color or "#6c7bff", photo=ou.avatar_url, online=ou.is_online))
+            unread = await _room_unread(db, user.id, room)
+            out.append(MyChatOut(room=room, kind="dm", name=ou.display_name, color=ou.avatar_color or "#6c7bff", photo=ou.avatar_url, online=ou.is_online, count=unread))
 
     # Мои комнаты (владелец)
     rres = await db.execute(select(Room).where(Room.owner_user_id == user.id))
@@ -106,9 +130,29 @@ async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = De
         members = mres.all()
         name = " + ".join(mm[0] for mm in members) if members else (r.title or "Комната")
         color = members[0][1] if members else "#6c7bff"
-        out.append(MyChatOut(room=f"room-{r.id}", kind="room", name=name, color=color, count=len(members)))
+        unread = await _room_unread(db, user.id, f"room-{r.id}")
+        out.append(MyChatOut(room=f"room-{r.id}", kind="room", name=name, color=color, count=unread))
 
     return out
+
+
+class ChatReadIn(BaseModel):
+    room: str
+
+
+@router.post("/read")
+async def mark_chat_read(body: ChatReadIn, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Отметить чат/комнату прочитанными (сбрасывает счётчик непрочитанных)."""
+    rec = (await db.execute(
+        select(ChatRead).where(ChatRead.user_id == user.id, ChatRead.room == body.room)
+    )).scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    if rec:
+        rec.last_read_at = now
+    else:
+        db.add(ChatRead(user_id=user.id, room=body.room, last_read_at=now))
+    await db.flush()
+    return {"ok": True}
 
 
 _CHAT_MEDIA = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
