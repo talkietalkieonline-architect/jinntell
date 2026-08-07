@@ -41,13 +41,16 @@ function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, o
       className="flex flex-col items-center gap-1 shrink-0 transition-transform hover:scale-105"
       style={{ width: small ? 54 : 64 }}
     >
-      <div className="relative rounded-full flex items-center justify-center overflow-hidden" style={{ width: d, height: d, border: (badge && badge > 0) ? "2px solid var(--accent)" : pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)", boxShadow: (badge && badge > 0) ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)" : undefined }}>
-        {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: small ? 16 : 20 }}>{emoji || "💬"}</span>}
+      <div className="relative" style={{ width: d, height: d }}>
+        {/* сам круг — только он обрезает картинку; бейджи ниже вынесены НАРУЖУ (не обрезаются) */}
+        <div className="w-full h-full rounded-full flex items-center justify-center overflow-hidden" style={{ border: (badge && badge > 0) ? "2px solid var(--accent)" : pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)", boxShadow: (badge && badge > 0) ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)" : undefined }}>
+          {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: small ? 16 : 20 }}>{emoji || "💬"}</span>}
+        </div>
         {!!badge && badge > 0 && <span className="absolute inset-0 rounded-full animate-ping pointer-events-none" style={{ boxShadow: "0 0 0 2px var(--accent)", opacity: 0.35 }} />}
-        {!!badge && badge > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>{badge}</span>}
-        {paid && <span className="absolute -bottom-0.5 -right-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px]" style={{ background: "#e8b84a", color: "#1a1400" }}>₽</span>}
-        {star && <span className="absolute -top-0.5 -left-0.5 text-[11px]" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))" }}>⭐</span>}
-        {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />}
+        {!!badge && badge > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)", zIndex: 2, boxShadow: "0 0 0 2px var(--panel-bg, #101018)" }}>{badge}</span>}
+        {paid && <span className="absolute -bottom-0.5 -right-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px]" style={{ background: "#e8b84a", color: "#1a1400", zIndex: 2 }}>₽</span>}
+        {star && <span className="absolute -top-1 -left-1 text-[11px]" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))", zIndex: 2 }}>⭐</span>}
+        {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)", zIndex: 2 }} />}
       </div>
       <span className="text-[10px] leading-tight truncate w-full text-center" style={{ color: "var(--text-secondary)" }}>{label}</span>
       {sub && <span className="text-[9px] leading-tight truncate w-full text-center -mt-0.5" style={{ color: "var(--text-muted)" }}>{sub}</span>}
@@ -201,7 +204,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
         {/* ═══════════ ВЕРХ: три «новостные» полосы (просмотрел → исчезает) ═══════════ */}
         {newMsgs.length > 0 && (<div>
-          {newHead("Новые сообщения")}
+          {newHead("Новые события")}
           <Strip title="">{newMsgs.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="💬" badge={c.count} online={c.online} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
         </div>)}
 
