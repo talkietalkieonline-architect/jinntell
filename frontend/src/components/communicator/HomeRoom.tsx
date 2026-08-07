@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent } from "@/services/api";
+import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -78,6 +78,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [popular, setPopular] = useState<AgentOut[]>([]);
   const [contacts, setContacts] = useState<ContactOut[]>([]);
   const [feedEvents, setFeedEvents] = useState<FeedEvent[]>([]);
+  const [invites, setInvites] = useState<GeoInvite[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
   const [userResults, setUserResults] = useState<ContactOut[]>([]);
   const [addBusy, setAddBusy] = useState(false);
@@ -99,13 +100,16 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   // Клиентский read-state (слой 1): документы просмотрены + отметка «когда смотрел ленту»
   const [seenDocs, setSeenDocs] = useState<Set<number>>(new Set());
   const [feedSeenTs, setFeedSeenTs] = useState<number>(0);
+  const [invitesSeenTs, setInvitesSeenTs] = useState<number>(0);
   useEffect(() => {
     try { const s = localStorage.getItem("jinntell_seen_docs"); if (s) setSeenDocs(new Set(JSON.parse(s))); } catch { /* noop */ }
     try { const t = localStorage.getItem("jinntell_feed_seen_ts"); if (t) setFeedSeenTs(parseInt(t, 10) || 0); } catch { /* noop */ }
+    try { const t = localStorage.getItem("jinntell_invites_seen_ts"); if (t) setInvitesSeenTs(parseInt(t, 10) || 0); } catch { /* noop */ }
   }, []);
   const markDocSeen = (id: number) => setSeenDocs((prev) => { const n = new Set(prev); n.add(id); try { localStorage.setItem("jinntell_seen_docs", JSON.stringify([...n])); } catch { /* noop */ } return n; });
   const openDoc = (id: number) => { markDocSeen(id); onOpenDigest?.(id); };
   const openFeed = () => { const now = Date.now(); setFeedSeenTs(now); try { localStorage.setItem("jinntell_feed_seen_ts", String(now)); } catch { /* noop */ } onOpenFeed?.(); };
+  const openInvitesW = () => { const now = Date.now(); setInvitesSeenTs(now); try { localStorage.setItem("jinntell_invites_seen_ts", String(now)); } catch { /* noop */ } onOpenInvites?.(); };
 
   useEffect(() => {
     let alive = true;
@@ -117,6 +121,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
       listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
       getChannels().then((c) => { if (alive) setAllChannels(c); }).catch(() => {});
       getFeed().then((l) => { if (alive) setFeedEvents(l); }).catch(() => {});
+      getMyInvites().then((r) => { if (alive) setInvites(r.items || []); }).catch(() => {});
     };
     loadAll();
     window.addEventListener("jinntell_feed_ping", loadAll);
@@ -163,7 +168,9 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
   // ── ВЕРХНИЕ «НОВОСТНЫЕ» ПОЛОСЫ ──
   const newMsgs = openChats.filter((c) => (c.count || 0) > 0);                              // непрочитанные чаты
-  const newFeedCount = feedEvents.filter((e) => new Date(e.created_at).getTime() > feedSeenTs).length; // свежие события ленты
+  const newEvents = feedEvents.filter((e) => e.kind !== "offer" && new Date(e.created_at).getTime() > feedSeenTs).length;   // события
+  const newOffers = feedEvents.filter((e) => e.kind === "offer" && new Date(e.created_at).getTime() > feedSeenTs).length;   // предложения
+  const newInvites = invites.filter((i) => new Date(i.at).getTime() > invitesSeenTs).length;                               // приглашения
   const newDocs = digests.filter((d) => !seenDocs.has(d.id));                               // непросмотренные документы
 
   const agentCircle = (a: AgentOut, small?: boolean) => (
@@ -208,9 +215,13 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           <Strip title="">{newMsgs.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="💬" badge={c.count} online={c.online} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
         </div>)}
 
-        {newFeedCount > 0 && (<div>
+        {(newEvents + newOffers + newInvites) > 0 && (<div>
           {newHead("Новые ленты")}
-          <Strip title=""><Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" badge={newFeedCount} onClick={openFeed} /></Strip>
+          <Strip title="">
+            {newEvents > 0 && <Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" badge={newEvents} onClick={openFeed} />}
+            {newOffers > 0 && <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" badge={newOffers} onClick={openFeed} />}
+            {newInvites > 0 && <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" badge={newInvites} onClick={openInvitesW} />}
+          </Strip>
         </div>)}
 
         {newDocs.length > 0 && (<div>
@@ -277,7 +288,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           <Strip title="">
             <Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
             <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
-            <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={onOpenInvites} />
+            <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={openInvitesW} />
             <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
           </Strip>
         )}
