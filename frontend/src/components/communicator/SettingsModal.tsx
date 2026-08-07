@@ -301,7 +301,10 @@ const _av = user.assistant_voice || "ermil";
         onClick={(e) => e.stopPropagation()}
       >
         {/* Заголовок */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
+            Центр Управления
+          </h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all hover:opacity-70"
@@ -313,9 +316,6 @@ const _av = user.assistant_voice || "ermil";
           >
             ✕
           </button>
-          <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            Центр Управления
-          </h2>
         </div>
 
         {/* === ГЛАВНОЕ МЕНЮ === */}

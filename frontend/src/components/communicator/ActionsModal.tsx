@@ -37,9 +37,9 @@ export default function ActionsModal({ onClose, assistantName }: { onClose: () =
   return (
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center animate-fade-in" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[560px] max-h-[82vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-4" style={{ background: "var(--panel-bg, #12121a)", border: "1px solid var(--bg-glass-border)" }}>
-        <div className="flex items-center gap-2 mb-1">
-          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>✕</button>
+        <div className="flex items-center justify-between mb-1">
           <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>📋 Действия · {assistantName}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>✕</button>
         </div>
         <p className="text-[11px] mb-3" style={{ color: "var(--text-muted)" }}>Что помощник делал для тебя — прозрачная память действий.</p>
 

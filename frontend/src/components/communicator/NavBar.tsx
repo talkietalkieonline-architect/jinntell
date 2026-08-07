@@ -205,7 +205,6 @@ export default function NavBar({
               className="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-1.5"
               style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
             >
-              {closeBtn}
               <div className="flex shrink-0">
                 {roomMembers.slice(0, 3).map((m, i) => (
                   <div
@@ -229,6 +228,7 @@ export default function NavBar({
                 {assistChip}
                 {addBtns}
                 {renderMenu("room")}
+                {closeBtn}
               </div>
             </div>
           );
@@ -248,7 +248,6 @@ export default function NavBar({
             className="mt-2 flex items-center gap-2.5 rounded-lg px-3 py-1.5"
             style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
           >
-            {closeBtn}
             <div
               className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold overflow-hidden"
               style={{ background: photo ? "transparent" : "var(--bg-glass)", border: `1.5px solid ${color}`, color }}
@@ -280,6 +279,7 @@ export default function NavBar({
                 </>
               )}
               {renderMenu(isAssistant ? "assistant" : activeRoom.startsWith("dm-") ? "dm" : "jinn")}
+              {closeBtn}
             </div>
           </div>
         );

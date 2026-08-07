@@ -169,8 +169,7 @@ export default function AgentCityModal({
         )}
         {/* Шапка */}
         <div className="px-6 pt-5 pb-3">
-          <div className="flex items-center gap-2 mb-4">
-            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
                 Город Джиннов
@@ -179,7 +178,7 @@ export default function AgentCityModal({
                 Всего {counts.total} &bull; Бизнес {counts.business} &bull; Жители {counts.citizen}
               </p>
             </div>
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2">
               {isAdmin && onOpenAdmin && (
                 <button
                   onClick={() => { onClose(); onOpenAdmin(); }}
@@ -205,6 +204,7 @@ export default function AgentCityModal({
                   Для бизнеса
                 </button>
               )}
+              <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
             </div>
           </div>
 
