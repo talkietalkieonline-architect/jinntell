@@ -13,6 +13,7 @@ import ActionsModal from "@/components/communicator/ActionsModal";
 import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
 import FeedModal from "@/components/communicator/FeedModal";
+import FlowFab from "@/components/communicator/FlowFab";
 import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
@@ -796,6 +797,11 @@ export default function Home() {
           assistantPhoto={assistantPhoto}
           voiceId={user?.assistant_voice}
         />
+      )}
+
+      {/* Плавающая перетаскиваемая кнопка Поток — везде, кроме самого Потока */}
+      {view !== "flow" && (
+        <FlowFab onOpen={() => { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); }} />
       )}
 
       {/* Центральная область — Лента (события) или активный чат */}
