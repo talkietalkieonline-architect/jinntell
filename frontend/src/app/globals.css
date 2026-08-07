@@ -287,17 +287,30 @@ input::placeholder {
 }
 .lava-blob {
   position: absolute;
-  width: 55vmax;
-  height: 55vmax;
+  width: 48vmax;
+  height: 48vmax;
   border-radius: 50%;
-  filter: blur(64px);
-  opacity: 0.45;
-  animation: lavaFloat 26s ease-in-out infinite;
+  filter: blur(58px);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  animation: lavaFloat 24s ease-in-out infinite;
+  will-change: transform;
 }
 @keyframes lavaFloat {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(8%, -10%) scale(1.15); }
-  66% { transform: translate(-6%, 6%) scale(0.9); }
+  25% { transform: translate(10%, -16%) scale(1.22); }
+  50% { transform: translate(-8%, -6%) scale(0.85); }
+  75% { transform: translate(6%, 12%) scale(1.1); }
+}
+/* Оживление загруженной картинки — медленный «Ken Burns» (зум + панорама) */
+.ken-burns {
+  animation: kenBurns 28s ease-in-out infinite alternate;
+  will-change: transform;
+  transform-origin: center;
+}
+@keyframes kenBurns {
+  0% { transform: scale(1.05) translate(0, 0); }
+  100% { transform: scale(1.18) translate(-2%, -2%); }
 }
 
 

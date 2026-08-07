@@ -196,7 +196,7 @@ export default function AppBackground() {
       />
       {bg.kind === "image" && (
         <>
-          <div className="absolute inset-0" style={{ backgroundImage: `url(${customBg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+          <div className={`absolute inset-0${anim ? " ken-burns" : ""}`} style={{ backgroundImage: `url(${customBg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
           <div className="absolute inset-0" style={{ background: theme === "dark" ? "rgba(8,10,20,0.34)" : "rgba(246,243,233,0.20)" }} />
         </>
       )}
@@ -219,9 +219,11 @@ export default function AppBackground() {
       {(bg.kind === "stars" || bg.kind === "dust") && <canvas ref={canvasRef} className="absolute inset-0" />}
       {bg.kind === "lava" && anim && (
         <>
-          <div className="lava-blob" style={{ background: "radial-gradient(circle,#3a1d6e,transparent 60%)", left: "8%", top: "18%", animationDelay: "0s" }} />
-          <div className="lava-blob" style={{ background: "radial-gradient(circle,#1d5e54,transparent 60%)", left: "58%", top: "52%", animationDelay: "-8s" }} />
-          <div className="lava-blob" style={{ background: "radial-gradient(circle,#5e1d4a,transparent 60%)", left: "32%", top: "68%", animationDelay: "-16s" }} />
+          <div className="lava-blob" style={{ background: "radial-gradient(circle,#d4622a,transparent 62%)", left: "4%", top: "8%", animationDelay: "0s" }} />
+          <div className="lava-blob" style={{ background: "radial-gradient(circle,#8e2d6a,transparent 62%)", left: "56%", top: "46%", animationDelay: "-6s" }} />
+          <div className="lava-blob" style={{ background: "radial-gradient(circle,#d9a534,transparent 62%)", left: "28%", top: "60%", animationDelay: "-12s", width: "38vmax", height: "38vmax" }} />
+          <div className="lava-blob" style={{ background: "radial-gradient(circle,#1d5e54,transparent 62%)", left: "70%", top: "6%", animationDelay: "-18s", width: "40vmax", height: "40vmax" }} />
+          <div className="lava-blob" style={{ background: "radial-gradient(circle,#3a1d6e,transparent 62%)", left: "16%", top: "38%", animationDelay: "-3s" }} />
         </>
       )}
     </div>
