@@ -310,65 +310,13 @@ export default function BottomBar({
     return () => { clearTimeout(timer); document.removeEventListener("click", close); };
   }, [showMediaMenu]);
 
-  // === Голосовое сообщение: запись РЕАЛЬНОГО голоса (аудио) ===
-  const [recording, setRecording] = useState(false);
-  const [recSecs, setRecSecs] = useState(0);
-  const audioStreamRef = useRef<MediaStream | null>(null);
-  const audioRecRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const recCancelRef = useRef(false);
-  const recSecsRef = useRef(0);
+  // === Микрофон (распознавание речи): УДЕРЖАНИЕ = наговорить СООБЩЕНИЕ в чат (→ текст), КОРОТКИЙ ТАП = команда помощнику ===
+  const [dictating, setDictating] = useState(false);
+  const [dictMode, setDictMode] = useState<"msg" | "cmd">("cmd");
+  const dictRef = useRef<SpeechRecognition | null>(null);
   const holdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heldRef = useRef(false);
-  const winUpRef = useRef<(() => void) | null>(null);
-
-  const finishRec = useCallback((send: boolean) => {
-    recCancelRef.current = !send;
-    const rec = audioRecRef.current;
-    if (rec && rec.state !== "inactive") { try { rec.stop(); } catch { /* noop */ } }
-  }, []);
-
-  const startAudioRec = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioStreamRef.current = stream;
-      const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
-      let mime = "";
-      for (const t of types) { if (MediaRecorder.isTypeSupported?.(t)) { mime = t; break; } }
-      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recCancelRef.current = false;
-      rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      rec.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        audioStreamRef.current = null;
-        if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null; }
-        if (winUpRef.current) { window.removeEventListener("pointerup", winUpRef.current); winUpRef.current = null; }
-        const secs = recSecsRef.current;
-        setRecording(false); setRecSecs(0); recSecsRef.current = 0;
-        if (recCancelRef.current || secs < 1) return; // отмена или слишком коротко
-        const blob = new Blob(audioChunksRef.current, { type: (rec.mimeType || "audio/webm").split(";")[0] });
-        const ext = (rec.mimeType || "").includes("mp4") ? "m4a" : (rec.mimeType || "").includes("ogg") ? "ogg" : "webm";
-        const file = new File([blob], `voice.${ext}`, { type: (rec.mimeType || "audio/webm").split(";")[0] });
-        onAttachMedia(file);
-      };
-      audioRecRef.current = rec;
-      rec.start();
-      setRecording(true);
-      setRecSecs(0); recSecsRef.current = 0;
-      recTimerRef.current = setInterval(() => { recSecsRef.current += 1; setRecSecs(recSecsRef.current); }, 1000);
-      // Отпускание пальца где угодно → отправить (кнопка микрофона к этому моменту уже сменилась на UI записи)
-      const onWinUp = () => finishRec(true);
-      winUpRef.current = onWinUp;
-      window.addEventListener("pointerup", onWinUp, { once: true });
-    } catch { setRecording(false); }
-  }, [onAttachMedia, finishRec]);
-
-  // === Короткий тап микрофона: КОМАНДА ПОМОЩНИКУ (STT). Распознанное видно в поле; при остановке уходит помощнику (не собеседнику). ===
-  const [dictating, setDictating] = useState(false);
-  const dictRef = useRef<SpeechRecognition | null>(null);
-  const startDictation = useCallback(() => {
+  const startDictation = useCallback((mode: "msg" | "cmd") => {
     const SR = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
     if (!SR) return;
     const r = new (SR as unknown as { new(): SpeechRecognition })();
@@ -383,7 +331,7 @@ export default function BottomBar({
     };
     r.onend = () => { setDictating(false); dictRef.current = null; };
     r.onerror = () => { setDictating(false); };
-    try { setInputText(""); r.start(); dictRef.current = r; setDictating(true); } catch { /* noop */ }
+    try { setInputText(""); setDictMode(mode); r.start(); dictRef.current = r; setDictating(true); } catch { /* noop */ }
   }, []);
   const stopDictation = useCallback(() => {
     const r = dictRef.current; if (r) { try { r.stop(); } catch { /* noop */ } }
@@ -392,19 +340,27 @@ export default function BottomBar({
 
   const micDown = useCallback(() => {
     heldRef.current = false;
-    holdRef.current = setTimeout(() => { heldRef.current = true; startAudioRec(); }, 260);
-  }, [startAudioRec]);
+    holdRef.current = setTimeout(() => { heldRef.current = true; startDictation("msg"); }, 300);
+  }, [startDictation]);
   const micUp = useCallback(() => {
     if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null; }
-    if (heldRef.current) { heldRef.current = false; finishRec(true); return; }
+    if (heldRef.current) {
+      // было удержание → голосовое сообщение в ЧАТ (как текст, озвучка при прослушивании)
+      heldRef.current = false;
+      stopDictation();
+      const t = inputText.trim();
+      if (t) { onSendMessage(t); setInputText(""); }
+      return;
+    }
+    // короткий тап → команда помощнику (toggle: тап начать, тап остановить)
     if (dictating) {
       stopDictation();
       const t = inputText.trim();
       if (t && onAssistantCommand) { onAssistantCommand(t); setInputText(""); }
     } else {
-      startDictation();
+      startDictation("cmd");
     }
-  }, [dictating, startDictation, stopDictation, finishRec, inputText, onAssistantCommand]);
+  }, [dictating, startDictation, stopDictation, inputText, onSendMessage, onAssistantCommand]);
 
   return (
     <div
@@ -429,7 +385,7 @@ export default function BottomBar({
       />
 
       {/* Индикатор wake-word: жду обращения по имени */}
-      {wakeEnabled && micState === "off" && !recording && (
+      {wakeEnabled && micState === "off" && !dictating && (
         <div className="flex justify-center pt-1.5 -mb-1">
           <span
             className="text-[10px] px-2.5 py-0.5 rounded-full animate-fade-in flex items-center gap-1"
@@ -445,20 +401,7 @@ export default function BottomBar({
       {/* Основная панель: 📎 · строка · (🎤 или ▶) · 📞 */}
       <div className="px-3 pt-2 pb-3 flex justify-center">
         <div className="flex items-center gap-1.5 rounded-2xl px-3 py-2 w-full" style={{ maxWidth: 600, background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-          {recording ? (
-            <>
-              <button onPointerDown={() => finishRec(false)} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-base" style={{ color: "var(--danger)" }} title="Отменить">✕</button>
-              <div className="flex-1 flex items-center gap-2 min-w-0">
-                <span className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "var(--danger)" }} />
-                <span className="text-sm tabular-nums shrink-0" style={{ color: "var(--text-primary)" }}>{Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, "0")}</span>
-                <span className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>отпустите — отправить</span>
-              </div>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><path d="M12 19v4" /></svg>
-              </div>
-            </>
-          ) : (
-            <>
+          <>
               {/* 📎 вложения */}
               <div className="relative shrink-0">
                 <button onClick={(e) => { e.stopPropagation(); setShowMediaMenu(!showMediaMenu); }} className="w-9 h-9 flex items-center justify-center rounded-full transition-all hover:scale-110" style={{ color: "var(--text-muted)" }} title="Вложить">
@@ -473,7 +416,7 @@ export default function BottomBar({
 
               {/* Поле ввода — всегда видно */}
               <input ref={inputRef} type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder={dictating ? "🎙 команда помощнику…" : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
+                placeholder={dictating ? (dictMode === "msg" ? "🎙 наговорите сообщение…" : "🎙 команда помощнику…") : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
                 style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }} />
 
               {/* Видео-кружок */}
@@ -489,7 +432,7 @@ export default function BottomBar({
               ) : (
                 <button onPointerDown={micDown} onPointerUp={micUp} onPointerLeave={() => { if (holdRef.current && !heldRef.current) { clearTimeout(holdRef.current); holdRef.current = null; } }}
                   className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all select-none" style={{ background: dictating ? "var(--accent)" : "var(--bg-glass-hover)", color: dictating ? "var(--bg-deep)" : "var(--accent)", touchAction: "none" }}
-                  title="Тап — диктовка · удержание — голосовое сообщение">
+                  title="Тап — команда помощнику · удержание — наговорить сообщение в чат">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><path d="M12 19v4" /></svg>
                 </button>
               )}
@@ -501,7 +444,6 @@ export default function BottomBar({
                 </button>
               )}
             </>
-          )}
         </div>
       </div>
     </div>
