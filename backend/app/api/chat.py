@@ -226,6 +226,7 @@ action — одно из:
 
 class IntentRequest(BaseModel):
     text: str
+    room: Optional[str] = None
 
 
 @router.post("/intent")
@@ -294,7 +295,7 @@ async def assistant_act(body: IntentRequest, db: AsyncSession = Depends(get_db),
     """Помощник на tool-calling: модель сама выбирает инструменты. Возвращает {reply, directives, steps}.
     Директивы (open_chat/close_chat/call/send_message) выполняет фронт. Экспериментальный путь рядом с классификатором."""
     from app.services.assistant_agent import run
-    result = await run(user_id=user.id, text=(body.text or ""), assistant_name=(user.assistant_name or "Джим"))
+    result = await run(user_id=user.id, text=(body.text or ""), assistant_name=(user.assistant_name or "Джим"), room=(body.room or None))
     # след в истории помощника (jim-{uid}) — чинит «помощник пропал»
     try:
         room = f"jim-{user.id}"

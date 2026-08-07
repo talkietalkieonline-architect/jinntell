@@ -19,6 +19,7 @@ export default function BottomBar({
   onMicStateChange,
   onCall,
   canCall = false,
+  onAssistantCommand,
   assistantName = "Джим",
 }: {
   onSettingsClick: () => void;
@@ -31,6 +32,7 @@ export default function BottomBar({
   onMicStateChange?: (active: boolean) => void;
   onCall?: () => void;
   canCall?: boolean;
+  onAssistantCommand?: (text: string) => void;
   assistantName?: string;
 }) {
   const [micState, setMicState] = useState<MicState>("off");
@@ -363,18 +365,16 @@ export default function BottomBar({
     } catch { setRecording(false); }
   }, [onAttachMedia, finishRec]);
 
-  // === Диктовка (короткий тап микрофона): голос → в поле ввода ===
+  // === Короткий тап микрофона: КОМАНДА ПОМОЩНИКУ (STT). Распознанное видно в поле; при остановке уходит помощнику (не собеседнику). ===
   const [dictating, setDictating] = useState(false);
   const dictRef = useRef<SpeechRecognition | null>(null);
-  const dictBaseRef = useRef("");
   const startDictation = useCallback(() => {
     const SR = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
     if (!SR) return;
     const r = new (SR as unknown as { new(): SpeechRecognition })();
     r.lang = "ru-RU"; r.continuous = true; r.interimResults = true;
-    dictBaseRef.current = inputText ? inputText + " " : "";
     r.onresult = (event: SpeechRecognitionEvent) => {
-      let full = dictBaseRef.current, interim = "";
+      let full = "", interim = "";
       for (let i = 0; i < event.results.length; i++) {
         const res = event.results[i];
         if (res.isFinal) full += res[0].transcript + " "; else interim += res[0].transcript;
@@ -383,8 +383,8 @@ export default function BottomBar({
     };
     r.onend = () => { setDictating(false); dictRef.current = null; };
     r.onerror = () => { setDictating(false); };
-    try { r.start(); dictRef.current = r; setDictating(true); } catch { /* noop */ }
-  }, [inputText]);
+    try { setInputText(""); r.start(); dictRef.current = r; setDictating(true); } catch { /* noop */ }
+  }, []);
   const stopDictation = useCallback(() => {
     const r = dictRef.current; if (r) { try { r.stop(); } catch { /* noop */ } }
     setDictating(false);
@@ -397,8 +397,14 @@ export default function BottomBar({
   const micUp = useCallback(() => {
     if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null; }
     if (heldRef.current) { heldRef.current = false; finishRec(true); return; }
-    if (dictating) stopDictation(); else startDictation();
-  }, [dictating, startDictation, stopDictation, finishRec]);
+    if (dictating) {
+      stopDictation();
+      const t = inputText.trim();
+      if (t && onAssistantCommand) { onAssistantCommand(t); setInputText(""); }
+    } else {
+      startDictation();
+    }
+  }, [dictating, startDictation, stopDictation, finishRec, inputText, onAssistantCommand]);
 
   return (
     <div
@@ -467,7 +473,7 @@ export default function BottomBar({
 
               {/* Поле ввода — всегда видно */}
               <input ref={inputRef} type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder={dictating ? "🎙 говорите…" : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
+                placeholder={dictating ? "🎙 команда помощнику…" : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
                 style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }} />
 
               {/* Видео-кружок */}
@@ -475,8 +481,8 @@ export default function BottomBar({
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
               </button>
 
-              {/* Микрофон (тап=диктовка, удержание=голосовое) или Отправить (если есть текст) */}
-              {inputText.trim() ? (
+              {/* Микрофон (тап=команда помощнику, удержание=голосовое) или Отправить (если набран текст и не идёт запись команды) */}
+              {inputText.trim() && !dictating ? (
                 <button onClick={handleSend} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110" style={{ background: "var(--accent)", color: "var(--bg-deep)" }} title="Отправить">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" /></svg>
                 </button>

@@ -485,6 +485,18 @@ export default function Home() {
     sendMessage(text);
   }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct, onboarding, pushAssistant]);
 
+  // Команда помощнику ПРЯМО из чата (короткий тап микрофона): помощник действует в ЭТОЙ комнате (add_to_chat и др.)
+  const runAssistantInChat = useCallback((t: string) => {
+    const cmd = (t || "").trim();
+    if (!cmd) return;
+    setCommandHint("💭 помощник…");
+    assistantAct(cmd, room).then((r) => {
+      setCommandHint(r.reply ? r.reply.slice(0, 140) : "Готово");
+      if (r.directives && r.directives.length) runDirectives(r.directives);
+      setTimeout(() => setCommandHint(""), 3500);
+    }).catch(() => { setCommandHint("Не удалось"); setTimeout(() => setCommandHint(""), 2500); });
+  }, [room, runDirectives]);
+
   const sendSignal = useCallback((to: number, signal: string, extra?: Record<string, unknown>) => {
     const payload = JSON.stringify({ signal, to, ...(extra || {}) });
     const ws = userWsRef.current;
@@ -872,6 +884,7 @@ export default function Home() {
           onRecordNote={(auto?: boolean) => { setRecorderAuto(!!auto); setRecorderOpen(true); }}
           onCall={startCall}
           canCall={room.startsWith("dm-")}
+          onAssistantCommand={runAssistantInChat}
           assistantName={assistantName}
         />
       )}

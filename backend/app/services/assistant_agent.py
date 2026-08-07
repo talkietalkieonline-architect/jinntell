@@ -72,6 +72,13 @@ TOOLS = [
         "name": "check_feed", "description": "Проверить, есть ли по интересам пользователя свежие посты/новости от джиннов Города (лента). Вызывай, когда пользователь спрашивает «что нового/интересного», или чтобы предложить релевантное.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {
+        "name": "add_to_chat", "description": "Добавить сообщение в ТЕКУЩИЙ открытый чат (появится как сообщение пользователя). Используй, когда просят «добавь/положи/пришли/скинь в этот чат …» — текст, справку, ссылку или картинку по ПРЯМОЙ ссылке. Если прямой ссылки на фото нет — сначала найди её через deep_search, потом добавь.",
+        "parameters": {"type": "object", "properties": {
+            "text": {"type": "string", "description": "Текст сообщения (необязательно)."},
+            "media_url": {"type": "string", "description": "Прямая ссылка на картинку/видео (необязательно)."},
+            "media_type": {"type": "string", "enum": ["image", "video"], "description": "Тип медиа (по умолчанию image)."}
+        }, "required": []}}},
+    {"type": "function", "function": {
         "name": "reply", "description": "Ответить пользователю обычным текстом (когда действие не нужно или чтобы подтвердить/уточнить).",
         "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
 ]
@@ -456,8 +463,55 @@ async def _show_media(user_id: int, args: dict) -> tuple[str, dict | None]:
     return ("Нечего показать: укажи имя джинна или ссылку на изображение.", None)
 
 
-async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4) -> dict:
+async def _add_to_chat(user_id: int, room: str, args: dict) -> str:
+    """Положить сообщение (текст и/или медиа) в текущий чат — как сообщение пользователя.
+    Хранение + рассылка по WS повторяют канонический путь chat_ws (без шифрования на этом пути)."""
+    text = (args.get("text") or "").strip()
+    media_url = (args.get("media_url") or "").strip() or None
+    media_type = (args.get("media_type") or "image").strip().lower()
+    if media_type not in ("image", "video"):
+        media_type = "image"
+    if not text and not media_url:
+        return "Нечего добавить в чат."
+    from app.models.message import Message
+    from app.models.user import User
+    from app.websocket.manager import manager
+    async with async_session() as db:
+        u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        name = u.display_name if u else "Пользователь"
+        msg = Message(room=room, sender_type="user", sender_user_id=user_id, sender_name=name,
+                      text=text, media_url=media_url, media_type=(media_type if media_url else None))
+        db.add(msg)
+        await db.commit()
+        await db.refresh(msg)
+        msg_data = {
+            "type": "message", "id": msg.id, "room": room, "sender_type": "user",
+            "sender_user_id": user_id, "sender_name": name, "text": text,
+            "media_url": media_url, "media_type": (media_type if media_url else None),
+            "created_at": msg.created_at.isoformat(),
+        }
+    try:
+        await manager.broadcast(room, msg_data)
+    except Exception:
+        pass
+    # пинг собеседнику по DM, чтобы у него обновились «Новые события»
+    try:
+        m = re.match(r"^dm-(\d+)-(\d+)$", room)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            other = b if user_id == a else a
+            await manager.broadcast(f"user-{other}", {"type": "feed_ping"})
+    except Exception:
+        pass
+    return "Добавлено в чат."
+
+
+async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4, room: str | None = None) -> dict:
     system = await _build_context(user_id, text or "")
+    if room:
+        system += ("\n\nКОНТЕКСТ: пользователь сейчас в ОТКРЫТОМ чате. Если он просит ДОБАВИТЬ/положить/скинуть что-то В ЭТОТ чат "
+                   "(текст, справку, ссылку, картинку) — используй add_to_chat. Картинку добавляй ТОЛЬКО по прямой ссылке; "
+                   "если ссылки нет — найди через deep_search и добавь найденную ссылку. Не путай с send_message (это другому человеку по имени).")
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": (text or "")[:1000]},
@@ -508,6 +562,8 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result, _m = await _show_media(user_id, args)
                 if _m:
                     media = _m
+            elif name == "add_to_chat":
+                result = await _add_to_chat(user_id, room, args) if room else "Нет открытого чата, чтобы добавить сообщение."
             elif name == "remember_interest":
                 result = await _add_interest(user_id, args.get("topic", ""))
             elif name == "forget_interest":
