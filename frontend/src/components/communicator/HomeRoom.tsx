@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut } from "@/services/api";
+import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 
 interface Props {
@@ -74,25 +74,35 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
   const [popular, setPopular] = useState<AgentOut[]>([]);
   const [contacts, setContacts] = useState<ContactOut[]>([]);
+  const [feedEvents, setFeedEvents] = useState<FeedEvent[]>([]);
   const [peopleSearch, setPeopleSearch] = useState("");
   const [userResults, setUserResults] = useState<ContactOut[]>([]);
   const [addBusy, setAddBusy] = useState(false);
+
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   useEffect(() => { try { const raw = localStorage.getItem("jinntell_home_collapsed"); if (raw) setCollapsed(new Set(JSON.parse(raw))); } catch { /* noop */ } }, []);
   const toggleCollapse = (k: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); try { localStorage.setItem("jinntell_home_collapsed", JSON.stringify([...n])); } catch { /* noop */ } return n; });
-  const [pinned, setPinned] = useState<Set<number>>(new Set());
 
+  // Закрепления: джинны (id агентов) и люди (id пользователей) — вручную, для «Избранных контактов»
+  const [pinned, setPinned] = useState<Set<number>>(new Set());
+  const [pinnedContacts, setPinnedContacts] = useState<Set<number>>(new Set());
   useEffect(() => {
-    try { const raw = localStorage.getItem("jinntell_pinned"); if (raw) setPinned(new Set(JSON.parse(raw))); } catch { /* noop */ }
+    try { const a = localStorage.getItem("jinntell_pinned"); if (a) setPinned(new Set(JSON.parse(a))); } catch { /* noop */ }
+    try { const c = localStorage.getItem("jinntell_pinned_contacts"); if (c) setPinnedContacts(new Set(JSON.parse(c))); } catch { /* noop */ }
   }, []);
-  const togglePin = (id: number) => {
-    setPinned((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
-      try { localStorage.setItem("jinntell_pinned", JSON.stringify([...n])); } catch { /* noop */ }
-      return n;
-    });
-  };
+  const togglePin = (id: number) => setPinned((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); try { localStorage.setItem("jinntell_pinned", JSON.stringify([...n])); } catch { /* noop */ } return n; });
+  const togglePinContact = (id: number) => setPinnedContacts((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); try { localStorage.setItem("jinntell_pinned_contacts", JSON.stringify([...n])); } catch { /* noop */ } return n; });
+
+  // Клиентский read-state (слой 1): документы просмотрены + отметка «когда смотрел ленту»
+  const [seenDocs, setSeenDocs] = useState<Set<number>>(new Set());
+  const [feedSeenTs, setFeedSeenTs] = useState<number>(0);
+  useEffect(() => {
+    try { const s = localStorage.getItem("jinntell_seen_docs"); if (s) setSeenDocs(new Set(JSON.parse(s))); } catch { /* noop */ }
+    try { const t = localStorage.getItem("jinntell_feed_seen_ts"); if (t) setFeedSeenTs(parseInt(t, 10) || 0); } catch { /* noop */ }
+  }, []);
+  const markDocSeen = (id: number) => setSeenDocs((prev) => { const n = new Set(prev); n.add(id); try { localStorage.setItem("jinntell_seen_docs", JSON.stringify([...n])); } catch { /* noop */ } return n; });
+  const openDoc = (id: number) => { markDocSeen(id); onOpenDigest?.(id); };
+  const openFeed = () => { const now = Date.now(); setFeedSeenTs(now); try { localStorage.setItem("jinntell_feed_seen_ts", String(now)); } catch { /* noop */ } onOpenFeed?.(); };
 
   useEffect(() => {
     let alive = true;
@@ -103,9 +113,9 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
       getContacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
       listDigests().then((r) => { if (alive) setDigests(r.items || []); }).catch(() => {});
       getChannels().then((c) => { if (alive) setAllChannels(c); }).catch(() => {});
+      getFeed().then((l) => { if (alive) setFeedEvents(l); }).catch(() => {});
     };
     loadAll();
-    // обновляемся при изменении избранного/контактов (из Города и др.) и при возврате на вкладку
     window.addEventListener("jinntell_feed_ping", loadAll);
     window.addEventListener("jinntell_favs_change", loadAll);
     const onVis = () => { if (document.visibilityState === "visible") loadAll(); };
@@ -113,8 +123,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     return () => { alive = false; window.removeEventListener("jinntell_feed_ping", loadAll); window.removeEventListener("jinntell_favs_change", loadAll); document.removeEventListener("visibilitychange", onVis); };
   }, []);
 
-
-  // Категоризация «Мои джинны» из избранного
+  // Категоризация «Джинны» из избранного
   const personal = favs.filter((a) => userId && a.owner_id === userId);
   const personalIds = new Set(personal.map((a) => a.id));
   const consultants = favs.filter((a) => a.agent_type === "business" && !personalIds.has(a.id));
@@ -125,8 +134,6 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const recs = recommended.filter((a) => !recIds.has(a.id)).slice(0, 12);
   const recSet = new Set(recs.map((a) => a.id));
   const pops = popular.filter((a) => !recIds.has(a.id) && !recSet.has(a.id)).slice(0, 12);
-
-  // Гости — недавние чаты с джиннами, которых нет в избранном (авто-истечение 12ч — TODO)
   const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)));
 
   useEffect(() => {
@@ -144,21 +151,28 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     try { await addContact(id); const cs = await getContacts(); setContacts(cs); setPeopleSearch(""); setUserResults([]); } catch { /* noop */ } finally { setAddBusy(false); }
   };
 
-  // Непрочитанные из открытых чатов → «живой» кружок джинна
+  // Непрочитанное из открытых чатов
   const unreadByAgent = new Map<number, number>();
   openChats.forEach((c) => { if (c.count && c.count > 0 && c.agentId) unreadByAgent.set(c.agentId, (unreadByAgent.get(c.agentId) || 0) + c.count); });
 
-  const important = favs.filter((a) => pinned.has(a.id));
+  const important = favs.filter((a) => pinned.has(a.id));               // закреплённые джинны
+  const favContacts = contacts.filter((c) => pinnedContacts.has(c.id)); // закреплённые люди
+
+  // ── ВЕРХНИЕ «НОВОСТНЫЕ» ПОЛОСЫ ──
+  const newMsgs = openChats.filter((c) => (c.count || 0) > 0);                              // непрочитанные чаты
+  const newFeedCount = feedEvents.filter((e) => new Date(e.created_at).getTime() > feedSeenTs).length; // свежие события ленты
+  const newDocs = digests.filter((d) => !seenDocs.has(d.id));                               // непросмотренные документы
 
   const agentCircle = (a: AgentOut, small?: boolean) => (
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => togglePin(a.id)} />
   );
-  // Кружок «Гостиной» — удержи, чтобы перенести в «Мои джинны» (иначе пропадёт)
+  const contactCircle = (c: ContactOut) => (
+    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => togglePinContact(c.id)} />
+  );
   const guestAgentCircle = (a: AgentOut) => (
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={async () => { try { await addFavoriteAgent(a.id); window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }} />
   );
 
-  // Сворачиваемый заголовок блока (клик прячет содержимое — экономит место)
   const bigHead = (label: string, k: string, hint?: string) => (
     <button onClick={() => toggleCollapse(k)} className="w-full flex items-baseline justify-between px-1 pt-2 transition-opacity hover:opacity-80">
       <span className="text-[15px] font-extrabold" style={{ color: "var(--text-primary)" }}>
@@ -175,95 +189,124 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
       {hint && !collapsed.has(k) && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{hint}</span>}
     </button>
   );
+  const newHead = (label: string) => (
+    <div className="text-[13px] font-extrabold px-1 pt-1 flex items-center gap-1.5" style={{ color: "var(--accent)" }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />{label}
+    </div>
+  );
 
   return (
     <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
       <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
 
-        {/* ═══════════ СОБЕСЕДНИКИ ═══════════ */}
-        {bigHead("Собеседники", "sob")}
+        {/* ═══════════ ВЕРХ: три «новостные» полосы (просмотрел → исчезает) ═══════════ */}
+        {newMsgs.length > 0 && (<div>
+          {newHead("Новые сообщения")}
+          <Strip title="">{newMsgs.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="💬" badge={c.count} online={c.online} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
+        </div>)}
+
+        {newFeedCount > 0 && (<div>
+          {newHead("Новые ленты")}
+          <Strip title=""><Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" badge={newFeedCount} onClick={openFeed} /></Strip>
+        </div>)}
+
+        {newDocs.length > 0 && (<div>
+          {newHead("Новые документы")}
+          <Strip title="">{newDocs.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" badge={1} onClick={() => openDoc(d.id)} />)}</Strip>
+        </div>)}
+
+        {/* ═══════════ Контакты избранные (вручную: удержи кружок) ═══════════ */}
+        {(important.length + favContacts.length) > 0 && (<div>
+          {newHead("Контакты избранные")}
+          <Strip title="">{[...important.map((a) => agentCircle(a, true)), ...favContacts.map((c) => contactCircle(c))]}</Strip>
+        </div>)}
+
+        {/* ═══════════ КОНТАКТЫ (помощники · джинны · люди) ═══════════ */}
+        {bigHead("Контакты", "sob")}
         {!collapsed.has("sob") && (<>
 
-        {/* Помощники */}
-        <Strip title="Помощники">
-          <Circle label={assistantName} sub="помощник" photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
-          <Circle label="Поток" sub="голос" emoji="🌀" pinned onClick={onOpenFlow} />
-          {personal.map((a) => agentCircle(a))}
-        </Strip>
-
-        {/* Мои джинны (из Города) */}
-        {subHead("Мои джинны", "jinns", "удержи кружок → ⭐")}
-        {!collapsed.has("jinns") && (<>
-        <Strip title="" empty={(important.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
-          {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
-        </Strip>
-        {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
-        {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
-        {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
-        {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
-        </>)}
-
-        {/* Мои контакты */}
-        <div className="text-[13px] font-bold px-1 pt-0.5" style={{ color: "var(--text-primary)" }}>Мои контакты</div>
-        <Strip title="" empty={contacts.length === 0 ? "нет контактов — найди человека ниже" : undefined}>
-          {contacts.map((c) => (
-            <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} onClick={() => onOpenContact?.(c)} />
-          ))}
-        </Strip>
-        <div className="flex gap-2 px-1">
-          <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Найти человека (имя, @username, телефон)…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
-          <button onClick={() => doAddContact(peopleSearch)} disabled={addBusy || peopleSearch.trim().length < 2} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (addBusy || peopleSearch.trim().length < 2) ? 0.5 : 1 }}>Добавить</button>
-        </div>
-        {userResults.filter((u) => !contactIds.has(u.id)).length > 0 && (
-          <div className="flex flex-col gap-1 px-1">
-            {userResults.filter((u) => !contactIds.has(u.id)).slice(0, 8).map((u) => (
-              <div key={u.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] overflow-hidden" style={{ background: `${u.avatar_color || "var(--accent)"}22`, border: `1.5px solid ${u.avatar_color || "var(--accent)"}` }}>{u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" /> : "👤"}</span>
-                <span className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}{u.jinntell_link ? ` · @${u.jinntell_link}` : ""}</span>
-                <button onClick={() => doAddContact(u.jinntell_link || u.phone)} disabled={addBusy} className="text-[12px] font-semibold shrink-0" style={{ color: "var(--accent)" }}>+ добавить</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        </>)}
-
-        {/* ═══════════ ИНФОРМАЦИЯ ═══════════ */}
-        {bigHead("Информация", "info")}
-        {!collapsed.has("info") && (<>
-
-        {/* Потоки (уведомления/предложения/приглашения) */}
-        <Strip title="Потоки">
-          <Circle label="Лента" sub="уведомления" emoji="🔔" color="#5ea0e8" small onClick={onOpenFeed} />
-          <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={onOpenFeed} />
-          <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={onOpenInvites} />
-          <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
-        </Strip>
-
-        {/* Подборки и результаты */}
-        <Strip title="Подборки и результаты" empty={digests.length === 0 ? "скажи помощнику «составь подборку …»" : undefined}>
-          {digests.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" small onClick={() => onOpenDigest?.(d.id)} />)}
-        </Strip>
-
-        {/* Каналы */}
-        {allChannels.length > 0 && (
-          <Strip title="Каналы">
-            {allChannels.map((ch) => <Circle key={ch.agent_id} label={ch.name} sub="канал" color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />)}
+        {subHead("Помощники", "asst")}
+        {!collapsed.has("asst") && (
+          <Strip title="">
+            <Circle label={assistantName} sub="помощник" photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
+            {personal.map((a) => agentCircle(a))}
           </Strip>
         )}
 
+        {subHead("Джинны", "jinns", "удержи кружок → ⭐")}
+        {!collapsed.has("jinns") && (<>
+          <Strip title="" empty={(important.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
+            {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
+          </Strip>
+          {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
+          {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
+          {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
+          {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
         </>)}
 
-        {/* ═══════════ ГОСТИНАЯ (внизу — «полистать/открыть для себя»; гости пропадают, если не перенести) ═══════════ */}
-        {bigHead("Гостиная", "gost", "удержи → в «Мои джинны»")}
+        {subHead("Люди", "ppl", "удержи → в избранные")}
+        {!collapsed.has("ppl") && (<>
+          <Strip title="" empty={contacts.length === 0 ? "нет контактов — найди человека ниже" : undefined}>
+            {contacts.map((c) => contactCircle(c))}
+          </Strip>
+          <div className="flex gap-2 px-1">
+            <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Найти человека (имя, @username, телефон)…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+            <button onClick={() => doAddContact(peopleSearch)} disabled={addBusy || peopleSearch.trim().length < 2} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (addBusy || peopleSearch.trim().length < 2) ? 0.5 : 1 }}>Добавить</button>
+          </div>
+          {userResults.filter((u) => !contactIds.has(u.id)).length > 0 && (
+            <div className="flex flex-col gap-1 px-1">
+              {userResults.filter((u) => !contactIds.has(u.id)).slice(0, 8).map((u) => (
+                <div key={u.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] overflow-hidden" style={{ background: `${u.avatar_color || "var(--accent)"}22`, border: `1.5px solid ${u.avatar_color || "var(--accent)"}` }}>{u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" /> : "👤"}</span>
+                  <span className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}{u.jinntell_link ? ` · @${u.jinntell_link}` : ""}</span>
+                  <button onClick={() => doAddContact(u.jinntell_link || u.phone)} disabled={addBusy} className="text-[12px] font-semibold shrink-0" style={{ color: "var(--accent)" }}>+ добавить</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>)}
+
+        </>)}
+
+        {/* ═══════════ ЛЕНТЫ (архив постоянных лент помощника) ═══════════ */}
+        {bigHead("Ленты", "info")}
+        {!collapsed.has("info") && (
+          <Strip title="">
+            <Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
+            <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
+            <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={onOpenInvites} />
+            <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
+          </Strip>
+        )}
+
+        {/* ═══════════ ДОКУМЕНТЫ (архив всего, что подготовил помощник) ═══════════ */}
+        {bigHead("Документы", "docs")}
+        {!collapsed.has("docs") && (
+          <Strip title="" empty={digests.length === 0 ? "скажи помощнику «составь подборку …»" : undefined}>
+            {digests.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" small onClick={() => openDoc(d.id)} />)}
+          </Strip>
+        )}
+
+        {/* ═══════════ КАНАЛЫ (отдельным блоком; бейджи = новые посты) ═══════════ */}
+        {allChannels.length > 0 && (<>
+          {bigHead("Каналы", "chan")}
+          {!collapsed.has("chan") && (
+            <Strip title="">
+              {allChannels.map((ch) => <Circle key={ch.agent_id} label={ch.name} sub="канал" color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />)}
+            </Strip>
+          )}
+        </>)}
+
+        {/* ═══════════ ГОСТИНАЯ (полистать; гости пропадают, если не перенести) ═══════════ */}
+        {bigHead("Гостиная", "gost", "удержи → в «Джинны»")}
         {!collapsed.has("gost") && (<>
-        {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => guestAgentCircle(a))}</Strip>}
-        {pops.length > 0 && <Strip title="Популярные">{pops.map((a) => guestAgentCircle(a))}</Strip>}
-        {guests.length > 0 && <Strip title="Были недавно">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
-        {(recs.length + pops.length + guests.length) === 0 && <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>}
+          {recs.length > 0 && <Strip title="Рекомендованные">{recs.map((a) => guestAgentCircle(a))}</Strip>}
+          {pops.length > 0 && <Strip title="Популярные">{pops.map((a) => guestAgentCircle(a))}</Strip>}
+          {guests.length > 0 && <Strip title="Были недавно">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>}
+          {(recs.length + pops.length + guests.length) === 0 && <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>}
         </>)}
 
-        {/* ═══════════ Переход в Город — в самом низу ленты (не закреплён на экране) ═══════════ */}
+        {/* Переход в Город — в самом низу */}
         <button onClick={onOpenCity} className="mt-3 rounded-2xl p-4 flex items-center justify-center gap-2 text-sm font-semibold transition-all hover:scale-[1.01]" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
           🏙 Перейти в Город джиннов
         </button>
