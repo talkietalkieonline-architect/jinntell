@@ -211,14 +211,14 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
         {/* ═══════════ ВЕРХ: три «новостные» полосы (просмотрел → исчезает) ═══════════ */}
         {newMsgs.length > 0 && (<div>
-          {newHead("Новые события")}
+          {newHead("Новые сообщения и звонки")}
           <Strip title="">{newMsgs.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="💬" badge={c.count} online={c.online} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
         </div>)}
 
         {(newEvents + newOffers + newInvites) > 0 && (<div>
           {newHead("Новые ленты")}
           <Strip title="">
-            {newEvents > 0 && <Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" badge={newEvents} onClick={openFeed} />}
+            {newEvents > 0 && <Circle label="События" emoji="🔔" color="#5ea0e8" badge={newEvents} onClick={openFeed} />}
             {newOffers > 0 && <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" badge={newOffers} onClick={openFeed} />}
             {newInvites > 0 && <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" badge={newInvites} onClick={openInvitesW} />}
           </Strip>
@@ -286,7 +286,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {bigHead("Ленты", "info")}
         {!collapsed.has("info") && (
           <Strip title="">
-            <Circle label="Лента" sub="события" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
+            <Circle label="События" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
             <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
             <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={openInvitesW} />
             <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
