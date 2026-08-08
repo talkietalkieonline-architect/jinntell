@@ -3,6 +3,16 @@ import { useEffect, useRef, useState } from "react";
 import { ttsBlobUrl, mediaUrl } from "@/services/api";
 import AppBackground from "@/components/communicator/AppBackground";
 
+// Похоже ли услышанное на ЭХО собственной озвучки помощника (доля слов услышанного, встречающихся в его реплике)
+function echoOverlap(heard: string, spoken: string): number {
+  const hw = heard.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  if (!hw.length) return 1;
+  const sw = new Set(spoken.toLowerCase().split(/\s+/).filter(Boolean));
+  let hit = 0;
+  for (const w of hw) if (sw.has(w)) hit++;
+  return hit / hw.length;
+}
+
 export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assistantName, assistantPhoto, voiceId }: {
   onExit: () => void;
   onSend: (text: string) => void;
@@ -19,6 +29,8 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
   const spokenRef = useRef<string>(lastReply || "");
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
+  const assistantNameRef = useRef(assistantName);
+  assistantNameRef.current = assistantName;
   // Анти-эхо: пока помощник озвучивает — НЕ слушаем (иначе микрофон слышит TTS и зацикливается)
   const speakingRef = useRef(false);
   const finalRef = useRef("");
@@ -34,19 +46,42 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
     const rec = new (SR as unknown as { new (): SpeechRecognition })();
     rec.lang = "ru-RU"; rec.continuous = true; rec.interimResults = true;
     rec.onresult = (e: SpeechRecognitionEvent) => {
-      if (speakingRef.current) return; // анти-эхо: игнорируем ввод во время озвучки
-      let interim = "";
+      let interim = "", newFinal = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) {
-          const seg = r[0].transcript.trim();
-          if (seg) finalRef.current = (finalRef.current ? finalRef.current + " " : "") + seg;
-        } else {
-          interim += r[0].transcript;
-        }
+        if (r.isFinal) { const seg = r[0].transcript.trim(); if (seg) newFinal += (newFinal ? " " : "") + seg; }
+        else interim += r[0].transcript;
       }
+
+      // ── BARGE-IN: помощник ГОВОРИТ — можно перебить по имени / «стоп» / продолжив речь ──
+      if (speakingRef.current) {
+        const heard = (newFinal + " " + interim).trim();
+        if (!heard) return;
+        const low = heard.toLowerCase();
+        const name = (assistantNameRef.current || "").toLowerCase().trim();
+        const hasName = !!name && low.includes(name);
+        const hasStop = /(^|\s)(стоп|хватит|подожди|замолчи|отмена|тихо)(\s|$)/.test(low);
+        const isEcho = echoOverlap(low, (spokenRef.current || "")) > 0.5; // помощник слышит себя
+        // «продолжил говорить»: содержательная фраза, не эхо (>=2 слов)
+        const userSpeech = !isEcho && newFinal.trim().split(/\s+/).filter(Boolean).length >= 2;
+        if (hasName || hasStop || userSpeech) {
+          try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп озвучки
+          speakingRef.current = false;
+          setStatus("listening");
+          finalRef.current = "";
+          // команда после имени; чистое «стоп» — просто прервать (без отправки)
+          let cmd = newFinal.trim();
+          if (name && cmd.toLowerCase().includes(name)) cmd = cmd.slice(cmd.toLowerCase().indexOf(name) + name.length).replace(/^[\s,.!?:;-]+/, "").trim();
+          if (hasStop) cmd = cmd.replace(/\b(стоп|хватит|подожди|замолчи|отмена|тихо)\b/gi, "").trim();
+          setCaption(cmd);
+          if (cmd) { finalRef.current = cmd; if (sendTimerRef.current) clearTimeout(sendTimerRef.current); sendTimerRef.current = setTimeout(() => { const p = finalRef.current.trim(); finalRef.current = ""; if (p) { setCaption(""); onSendRef.current(p); } }, 900); }
+        }
+        return;
+      }
+
+      // ── Обычный режим (помощник молчит) ──
+      if (newFinal) finalRef.current = (finalRef.current ? finalRef.current + " " : "") + newFinal;
       setCaption((finalRef.current + " " + interim).trim());
-      // Дебаунс: отправляем цельную фразу после паузы (гасит фрагментацию и дубли)
       if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
       sendTimerRef.current = setTimeout(() => {
         const phrase = finalRef.current.trim();
@@ -132,7 +167,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
         </div>
 
         <div className="text-sm mt-12 min-h-[44px] text-center px-8 leading-relaxed" style={{ color: "var(--text-secondary)", maxWidth: 520 }}>
-          {status === "speaking" ? (caption + " · нажми, чтобы прервать") : (caption || "Слушаю…")}
+          {status === "speaking" ? (caption || `перебей: скажи «${assistantName}», «стоп» или просто говори · или тапни`) : (caption || "Слушаю…")}
         </div>
       </div>
 
