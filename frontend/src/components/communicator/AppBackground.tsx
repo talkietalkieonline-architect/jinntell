@@ -99,6 +99,7 @@ export default function AppBackground({ override }: { override?: string } = {}) 
   const [mounted, setMounted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inkCanvasRef = useRef<HTMLCanvasElement>(null);
+  const imgCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -270,6 +271,81 @@ export default function AppBackground({ override }: { override?: string } = {}) 
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, [bg.kind, anim, animSpeed]);
 
+  // Оживление своей картинки — лёгкая «жидкая рябь» (WebGL, вместо старого Ken Burns)
+  useEffect(() => {
+    if (bg.kind !== "image" || !anim || !customBg) return;
+    const canvas = imgCanvasRef.current;
+    if (!canvas) return;
+    const gl = (canvas.getContext("webgl") || canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
+    if (!gl) return;
+    let raf = 0; let cancelled = false;
+
+    const vsrc = "attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}";
+    const fsrc = [
+      "precision highp float;",
+      "uniform vec2 uRes;uniform vec2 uImg;uniform float uTime;uniform sampler2D uTex;",
+      "float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}",
+      "float noise(vec2 p){vec2 i=floor(p),f=fract(p);float a=hash(i),b=hash(i+vec2(1.0,0.0)),c=hash(i+vec2(0.0,1.0)),d=hash(i+vec2(1.0,1.0));vec2 u=f*f*(3.0-2.0*f);return mix(a,b,u.x)+(c-a)*u.y*(1.0-u.x)+(d-b)*u.x*u.y;}",
+      "float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<5;i++){v+=a*noise(p);p*=2.0;a*=0.5;}return v;}",
+      "void main(){vec2 uv=gl_FragCoord.xy/uRes.xy;",
+      "vec2 ratio=vec2(min((uRes.x/uRes.y)/(uImg.x/uImg.y),1.0),min((uRes.y/uRes.x)/(uImg.y/uImg.x),1.0));",
+      "vec2 uvc=vec2(uv.x*ratio.x+(1.0-ratio.x)*0.5,uv.y*ratio.y+(1.0-ratio.y)*0.5);",
+      "float t=uTime*0.12;",
+      "vec2 d=vec2(fbm(uvc*3.0+vec2(0.0,t)),fbm(uvc*3.0+vec2(4.0,-t)))-0.5;",
+      "vec3 col=texture2D(uTex,uvc+d*0.012).rgb;",
+      "gl_FragColor=vec4(col,1.0);}",
+    ].join("\n");
+    const compile = (type: number, src: string) => { const sh = gl.createShader(type)!; gl.shaderSource(sh, src); gl.compileShader(sh); return sh; };
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsrc));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsrc));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const uRes = gl.getUniformLocation(prog, "uRes");
+    const uImg = gl.getUniformLocation(prog, "uImg");
+    const uTime = gl.getUniformLocation(prog, "uTime");
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.uniform2f(uImg, img.naturalWidth || 1, img.naturalHeight || 1);
+      const resize = () => { const w = window.innerWidth, h = window.innerHeight; canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); gl.uniform2f(uRes, w, h); };
+      resize();
+      window.addEventListener("resize", resize);
+      let last = 0; let clock = 0; let prevT = performance.now();
+      const loop = (tm: number) => {
+        raf = requestAnimationFrame(loop);
+        if (document.hidden) { prevT = tm; return; }
+        if (tm - last < 1000 / 30) return;
+        last = tm;
+        clock += ((tm - prevT) / 1000) * animSpeed; prevT = tm;
+        gl.uniform1f(uTime, clock);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      };
+      raf = requestAnimationFrame(loop);
+      cleanupResize = () => window.removeEventListener("resize", resize);
+    };
+    let cleanupResize = () => {};
+    img.src = customBg;
+    return () => { cancelled = true; cancelAnimationFrame(raf); cleanupResize(); };
+  }, [bg.kind, anim, animSpeed, customBg]);
+
   const baseStyle = bg.kind === "stars"
     ? "radial-gradient(circle at 50% 30%,#0b1020,#05060c)"
     : bg.kind === "dust"
@@ -298,7 +374,10 @@ export default function AppBackground({ override }: { override?: string } = {}) 
       />
       {bg.kind === "image" && (
         <>
-          <div className={`absolute inset-0${anim ? " ken-burns" : ""}`} style={{ backgroundImage: `url(${customBg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+          {/* статичный фолбэк (виден, если WebGL недоступен) */}
+          <div className="absolute inset-0" style={{ backgroundImage: `url(${customBg})`, backgroundSize: "cover", backgroundPosition: "center" }} />
+          {/* «жидкая рябь» поверх — если анимация включена */}
+          {anim && <canvas ref={imgCanvasRef} className="absolute inset-0" style={{ width: "100%", height: "100%" }} />}
           <div className="absolute inset-0" style={{ background: theme === "dark" ? "rgba(8,10,20,0.34)" : "rgba(246,243,233,0.20)" }} />
         </>
       )}
