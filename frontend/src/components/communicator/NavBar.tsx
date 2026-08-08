@@ -2,7 +2,7 @@
 import { useRef, useEffect, useState } from "react";
 import { mediaUrl, type Presence } from "@/services/api";
 
-export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean; frame?: string | null };
+export type OpenChat = { room: string; agentId: number; name: string; color: string; photo?: string | null; count?: number; online?: boolean; frame?: string | null; ts?: number };
 
 /** Подпись присутствия для шапки DM: «в сети» / «был(а) N назад». */
 function presenceLabel(p?: Presence | null): { text: string; online: boolean } {

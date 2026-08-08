@@ -227,7 +227,7 @@ export default function Home() {
             const idx = prev.findIndex((c) => c.room === pinged);
             if (idx < 0) { syncRef.current?.(); return prev; }
             const isViewing = pinged === roomRef.current && viewRef.current === "chat";
-            const c = { ...prev[idx], count: isViewing ? 0 : (prev[idx].count || 0) + 1 };
+            const c = { ...prev[idx], count: isViewing ? 0 : (prev[idx].count || 0) + 1, ts: Date.now() };
             return [c, ...prev.filter((x) => x.room !== pinged)];
           });
         } else {
@@ -266,7 +266,9 @@ export default function Home() {
     const uid = getUserId();
     const r = uid ? `agent-${agentId}-u${uid}` : `agent-${agentId}`;
     setOpenChats((prev) =>
-      prev.some((c) => c.room === r) ? prev : [...prev, { room: r, agentId, name: meta?.name || "Джинн", color: meta?.color || "#6c7bff" }]
+      prev.some((c) => c.room === r)
+        ? prev.map((c) => (c.room === r ? { ...c, ts: Date.now() } : c))
+        : [...prev, { room: r, agentId, name: meta?.name || "Джинн", color: meta?.color || "#6c7bff", ts: Date.now() }]
     );
     setRoom(r);
     setView("chat");
@@ -356,7 +358,7 @@ export default function Home() {
     const uid = getUserId();
     if (!uid) return;
     const r = dmRoom(uid, c.id);
-    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null, online: c.is_online, frame: c.avatar_frame || null }]));
+    setOpenChats((prev) => (prev.some((x) => x.room === r) ? prev.map((x) => (x.room === r ? { ...x, ts: Date.now() } : x)) : [...prev, { room: r, agentId: 0, name: c.display_name, color: c.avatar_color || "#6c7bff", photo: c.avatar_url || null, online: c.is_online, frame: c.avatar_frame || null, ts: Date.now() }]));
     setRoom(r);
     setView("chat");
     setAgentsOpen(false);

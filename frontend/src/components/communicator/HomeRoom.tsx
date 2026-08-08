@@ -153,7 +153,8 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const recs = recommended.filter((a) => !recIds.has(a.id)).slice(0, 12);
   const recSet = new Set(recs.map((a) => a.id));
   const pops = popular.filter((a) => !recIds.has(a.id) && !recSet.has(a.id)).slice(0, 12);
-  const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)));
+  // «Были недавно»: чаты с джиннами не из избранного, тронутые за последние 12 ч (авто-истечение)
+  const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)) && !!c.ts && (Date.now() - c.ts) < 12 * 3600 * 1000);
 
   useEffect(() => {
     const q = peopleSearch.trim();
