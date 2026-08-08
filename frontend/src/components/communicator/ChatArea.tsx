@@ -391,8 +391,8 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
           const src = raw.startsWith("blob:") || raw.startsWith("data:") ? raw : mediaUrl(raw);
           if (msg.mediaType === "voice") return <VoiceMessage src={src} mine={!userSide} />;
           if (msg.mediaType === "image") return <img src={src} alt="" className="rounded-lg mb-2 max-w-full cursor-zoom-in" style={{ maxHeight: "240px", objectFit: "cover" }} onClick={() => setLightbox({ src, type: "image" })} />;
-          if (msg.mediaType === "note") return <video src={src} controls autoPlay muted loop playsInline className="mb-2" style={{ width: 220, height: 220, objectFit: "cover", borderRadius: 24 }} onClick={() => setLightbox({ src, type: "video" })} />;
-          if (msg.mediaType === "video") return <video src={src} controls playsInline className="rounded-lg mb-2 max-w-full" style={{ maxHeight: "240px" }} />;
+          if (msg.mediaType === "note") return <video src={src} controls autoPlay muted loop playsInline className="mb-2" style={{ width: 220, height: 220, objectFit: "cover", borderRadius: 24 }} onLoadedMetadata={(e) => { e.currentTarget.playbackRate = getPlaySpeed(); }} onPlay={(e) => { e.currentTarget.playbackRate = getPlaySpeed(); }} onClick={() => setLightbox({ src, type: "video" })} />;
+          if (msg.mediaType === "video") return <video src={src} controls playsInline className="rounded-lg mb-2 max-w-full" style={{ maxHeight: "240px" }} onLoadedMetadata={(e) => { e.currentTarget.playbackRate = getPlaySpeed(); }} onPlay={(e) => { e.currentTarget.playbackRate = getPlaySpeed(); }} />;
           return null;
         })()}
 
@@ -466,7 +466,7 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
           {lightbox.type === "image" ? (
             <img src={lightbox.src} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
           ) : (
-            <video src={lightbox.src} controls autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "100%" }} />
+            <video src={lightbox.src} controls autoPlay playsInline onLoadedMetadata={(e) => { e.currentTarget.playbackRate = getPlaySpeed(); }} onPlay={(e) => { e.currentTarget.playbackRate = getPlaySpeed(); }} style={{ maxWidth: "100%", maxHeight: "100%" }} />
           )}
           <button onClick={() => setLightbox(null)} className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center text-white text-lg" style={{ background: "rgba(255,255,255,0.15)" }}>✕</button>
         </div>
