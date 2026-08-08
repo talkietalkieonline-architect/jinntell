@@ -84,7 +84,7 @@ function shaderEnabled(): boolean {
   try { return localStorage.getItem("jinntell_shader_off") !== "1"; } catch { return true; }
 }
 
-export default function AppBackground() {
+export default function AppBackground({ override }: { override?: string } = {}) {
   const [bgId, setBgId] = useState("soft");
   const [theme, setTheme] = useState("light");
   const [anim, setAnim] = useState(true);
@@ -102,7 +102,8 @@ export default function AppBackground() {
       try { const sp = parseFloat(localStorage.getItem("jinntell_anim_speed") || "1"); setAnimSpeed(isNaN(sp) ? 1 : sp); } catch { setAnimSpeed(1); }
       try { setAnimPalette(localStorage.getItem("jinntell_anim_palette") || ""); } catch { setAnimPalette(""); }
       let id = "";
-      try { id = localStorage.getItem("jinntell_bg") || ""; } catch { id = ""; }
+      if (override) { id = override; }
+      else { try { id = localStorage.getItem("jinntell_bg") || ""; } catch { id = ""; } }
       const found = BACKGROUNDS.find((b) => b.id === id);
       // фон должен подходить теме (для custom — любой)
       if (id !== "custom-image" && (!found || (t !== "custom" && found.theme !== t))) id = defaultBgFor(t);
@@ -123,7 +124,8 @@ export default function AppBackground() {
       window.removeEventListener("jinntell_theme_change", read);
       window.removeEventListener("jinntell_anim_change", read);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [override]);
 
   const customBg = typeof window !== "undefined" ? (localStorage.getItem("jinntell_custom_bg") || "") : "";
   const bg: BgPreset = (bgId === "custom-image" && customBg)

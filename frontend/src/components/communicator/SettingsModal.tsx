@@ -53,6 +53,8 @@ export default function SettingsModal({
   const [currentTheme, setCurrentTheme] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_theme") || "light" : "light"));
   const [customAccent, setCustomAccent] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_accent") || "#6c7bff" : "#6c7bff"));
   const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
+  const [flowBg, setFlowBg] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_flow_bg") || "" : ""));
+  const setFlow = (id: string) => { setFlowBg(id); try { if (id) localStorage.setItem("jinntell_flow_bg", id); else localStorage.removeItem("jinntell_flow_bg"); } catch { /* noop */ } };
   const [customBg, setCustomBg] = useState("");
   const [avatarFrame, setAvatarFrame] = useState("");
   const [bgUploading, setBgUploading] = useState(false);
@@ -832,6 +834,22 @@ const _av = user.assistant_voice || "ermil";
                   className="rounded-xl overflow-hidden transition-all" style={{ border: bgId === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
                   <div className="h-12 w-full" style={{ background: b.preview }} />
                   <div className="text-[10px] py-1 text-center" style={{ color: bgId === b.id ? "var(--accent)" : "var(--text-muted)" }}>{b.name}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* ── Поток: свой фон голосового окна ── */}
+            <h3 className="text-sm font-medium mb-1 mt-6" style={{ color: "var(--text-primary)" }}>Фон Потока</h3>
+            <p className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>Отдельный фон для голосового окна (иначе — как общий).</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setFlow("")} className="rounded-xl overflow-hidden transition-all" style={{ border: !flowBg ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
+                <div className="h-12 w-full flex items-center justify-center" style={{ background: "var(--bg-glass)" }}><span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Как общий</span></div>
+                <div className="text-[10px] py-1 text-center" style={{ color: !flowBg ? "var(--accent)" : "var(--text-muted)" }}>Как общий</div>
+              </button>
+              {backgroundsForTheme(currentTheme).map((b) => (
+                <button key={b.id} onClick={() => setFlow(b.id)} className="rounded-xl overflow-hidden transition-all" style={{ border: flowBg === b.id ? "2px solid var(--accent)" : "1px solid var(--bg-glass-border)" }}>
+                  <div className="h-12 w-full" style={{ background: b.preview }} />
+                  <div className="text-[10px] py-1 text-center" style={{ color: flowBg === b.id ? "var(--accent)" : "var(--text-muted)" }}>{b.name}</div>
                 </button>
               ))}
             </div>

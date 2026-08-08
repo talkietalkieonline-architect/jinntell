@@ -138,7 +138,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
   return (
     <div className="fixed inset-0 animate-fade-in" style={{ zIndex: 90, background: "var(--bg-deep, #0a0e18)" }}>
       {/* Непрозрачный фон из системы фонов чата */}
-      <AppBackground />
+      <AppBackground override={(typeof window !== "undefined" && localStorage.getItem("jinntell_flow_bg")) || undefined} />
       {/* Лёгкий скрим для читаемости текста поверх фона */}
       <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(8,10,16,0.30)" }} />
 
