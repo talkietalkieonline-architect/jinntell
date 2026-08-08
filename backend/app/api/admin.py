@@ -1233,7 +1233,7 @@ INTEGRATION_KEYS = [
 
 EMBEDDING_CONFIG = [
     {"key": "EMBEDDING_PROVIDER", "label": "Провайдер эмбеддингов", "options": ["yandex", "gemini", "openai", "jina"]},
-    {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (для Gemini/OpenAI/Jina из РФ)", "options": None},
+    {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (зарубежные LLM/эмбеддинги из РФ: OpenRouter, Gemini, Groq, Jina). Формат: http://user:pass@host:port", "options": None},
     {"key": "WEB_SEARCH_PROVIDER", "label": "Провайдер веб-поиска помощника", "options": ["off", "tavily", "brave"]},
 ]
 

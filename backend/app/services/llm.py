@@ -12,6 +12,27 @@ import httpx
 
 from app.core.config import settings
 
+
+async def _get_setting(name: str, default: str = "") -> str:
+    """Настройка из settings_store с фолбэком."""
+    try:
+        from app.services.settings_store import get_setting
+        v = await get_setting(name)
+        if v:
+            return v
+    except Exception:
+        pass
+    return default
+
+
+async def _llm_client(timeout: float = 30.0) -> "httpx.AsyncClient":
+    """HTTP-клиент LLM; через OUTBOUND_PROXY, если задан (зарубежные провайдеры из РФ: OpenRouter/Gemini/Groq)."""
+    proxy = await _get_setting("OUTBOUND_PROXY")
+    if proxy:
+        return httpx.AsyncClient(timeout=timeout, proxy=proxy)
+    return httpx.AsyncClient(timeout=timeout)
+
+
 # Системный промпт Помощника (по умолчанию, перекрывается Redis)
 ASSISTANT_SYSTEM_PROMPT = """Ты — персональный AI-помощник платформы JinnTell.
 JinnTell — это AI-first коммуникационная платформа, где пользователи общаются с AI-агентами голосом и текстом.
@@ -213,7 +234,7 @@ async def _call_gemini(messages: list, model: str, api_key: str, max_tokens: int
         else:
             role = "user" if m["role"] == "user" else "model"
             contents.append({"role": role, "parts": [{"text": m["content"]}]})
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with await _llm_client(30.0) as client:
         body = {"contents": contents, "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}}
         if system_text:
             body["systemInstruction"] = {"parts": [{"text": system_text}]}
@@ -230,7 +251,7 @@ async def _call_gemini(messages: list, model: str, api_key: str, max_tokens: int
 
 
 async def _call_groq(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with await _llm_client(30.0) as client:
         r = await client.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -277,7 +298,7 @@ def _prepare_openrouter_messages(messages: list, model: str) -> list:
 async def _call_openrouter(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     """OpenRouter — агрегатор LLM. Авто-fallback на другие бесплатные модели при 429."""
     models_to_try = [model] + [m for m in OPENROUTER_FREE_MODELS if m != model]
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with await _llm_client(30.0) as client:
         for try_model in models_to_try:
             prepared = _prepare_openrouter_messages(messages, try_model)
             r = await client.post(
