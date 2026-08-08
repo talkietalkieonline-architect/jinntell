@@ -13,11 +13,11 @@ function echoOverlap(heard: string, spoken: string): number {
   return hit / hw.length;
 }
 
-export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assistantName, assistantPhoto, voiceId }: {
+export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assistantName, assistantPhoto, voiceId }: {
   onExit: () => void;
   onSend: (text: string) => void;
   lastReply: string;
-  lastMedia?: { url: string; type: string } | null;
+  mediaList?: { url: string; type: string }[];
   assistantName: string;
   assistantPhoto?: string | null;
   voiceId?: string;
@@ -25,6 +25,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
   const [now, setNow] = useState<Date | null>(null);
   const [status, setStatus] = useState<"idle" | "listening" | "speaking">("listening");
   const [caption, setCaption] = useState("");
+  const [viewer, setViewer] = useState<number | null>(null);  // индекс медиа в полноэкранном просмотре
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const spokenRef = useRef<string>(lastReply || "");
   const onSendRef = useRef(onSend);
@@ -171,29 +172,45 @@ export default function FlowScreen({ onExit, onSend, lastReply, lastMedia, assis
         </div>
       </div>
 
-      {/* Медиа «из дымки» снизу: помощник показывает картинку/видео */}
-      {lastMedia?.url && (
-        <div
-          key={lastMedia.url}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute left-0 right-0 bottom-0 flex justify-center animate-fade-in"
-          style={{ zIndex: 2, paddingBottom: 24, pointerEvents: "auto" }}
-        >
-          <div
-            className="absolute left-0 right-0 bottom-0 pointer-events-none"
-            style={{ height: 220, background: "linear-gradient(to top, rgba(8,10,16,0.72), transparent)" }}
-          />
-          <div className="relative rounded-2xl overflow-hidden" style={{ maxWidth: "78%", maxHeight: 260, boxShadow: "0 12px 48px rgba(0,0,0,0.5)", border: "1px solid var(--bg-glass-border)" }}>
-            {(() => {
-              const raw = lastMedia.url;
-              const src = raw.startsWith("blob:") || raw.startsWith("data:") ? raw : mediaUrl(raw);
-              return lastMedia.type === "video" ? (
-                <video src={src} controls playsInline style={{ maxWidth: "100%", maxHeight: 260, display: "block" }} />
-              ) : (
-                <img src={src} alt="" style={{ maxWidth: "100%", maxHeight: 260, display: "block", objectFit: "contain" }} />
+      {/* Медиа-галерея «из дымки» снизу — меньше нижней половины, по краям виден фон; тап → полноэкран */}
+      {mediaList && mediaList.length > 0 && (
+        <div onClick={(e) => e.stopPropagation()} className="absolute left-0 right-0 bottom-0 animate-fade-in" style={{ zIndex: 2, pointerEvents: "auto" }}>
+          <div className="absolute left-0 right-0 bottom-0 pointer-events-none" style={{ height: 200, background: "linear-gradient(to top, rgba(8,10,16,0.75), transparent)" }} />
+          <div className="relative flex gap-2 overflow-x-auto no-scrollbar justify-center px-4" style={{ paddingBottom: 26 }}>
+            {mediaList.map((m, i) => {
+              const src = m.url.startsWith("blob:") || m.url.startsWith("data:") ? m.url : mediaUrl(m.url);
+              return (
+                <button key={i} onClick={() => setViewer(i)} className="rounded-xl overflow-hidden shrink-0 transition-transform hover:scale-[1.03]" style={{ width: 126, height: 126, border: "1px solid var(--bg-glass-border)", boxShadow: "0 10px 36px rgba(0,0,0,0.5)" }}>
+                  {m.type === "video"
+                    ? <video src={src} muted playsInline className="w-full h-full" style={{ objectFit: "cover" }} />
+                    : <img src={src} alt="" className="w-full h-full" style={{ objectFit: "cover" }} />}
+                </button>
               );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Полноэкранный просмотр со слайдером */}
+      {viewer !== null && mediaList && mediaList[viewer] && (
+        <div className="fixed inset-0 flex items-center justify-center animate-fade-in" style={{ zIndex: 130, background: "rgba(0,0,0,0.92)" }} onClick={() => setViewer(null)}>
+          <button onClick={(e) => { e.stopPropagation(); setViewer(null); }} className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center text-white text-lg" style={{ background: "rgba(255,255,255,0.15)" }}>✕</button>
+          {mediaList.length > 1 && (
+            <button onClick={(e) => { e.stopPropagation(); setViewer((v) => (v === null ? v : (v - 1 + mediaList.length) % mediaList.length)); }} className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-white text-2xl" style={{ background: "rgba(255,255,255,0.15)" }}>‹</button>
+          )}
+          {mediaList.length > 1 && (
+            <button onClick={(e) => { e.stopPropagation(); setViewer((v) => (v === null ? v : (v + 1) % mediaList.length)); }} className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-white text-2xl" style={{ background: "rgba(255,255,255,0.15)" }}>›</button>
+          )}
+          <div onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const m = mediaList[viewer];
+              const src = m.url.startsWith("blob:") || m.url.startsWith("data:") ? m.url : mediaUrl(m.url);
+              return m.type === "video"
+                ? <video src={src} controls autoPlay playsInline style={{ maxWidth: "94vw", maxHeight: "88vh" }} />
+                : <img src={src} alt="" style={{ maxWidth: "94vw", maxHeight: "88vh", objectFit: "contain" }} />;
             })()}
           </div>
+          {mediaList.length > 1 && <div className="absolute bottom-5 left-0 right-0 text-center text-white/70 text-xs">{viewer + 1} / {mediaList.length}</div>}
         </div>
       )}
     </div>

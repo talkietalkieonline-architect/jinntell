@@ -813,7 +813,7 @@ export default function Home() {
           onExit={() => { const r = flowReturnRef.current; setRoom(r.room || assistantRoom); setView(r.view === "flow" ? "feed" : r.view); }}
           onSend={(t) => handleSend(t)}
           lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
-          lastMedia={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") { return mm.mediaUrl ? { url: mm.mediaUrl, type: mm.mediaType || "image" } : null; } } return null; })()}
+          mediaList={(() => { const out: { url: string; type: string }[] = []; for (let i = messages.length - 1; i >= 0 && out.length < 8; i--) { const mm = messages[i]; if (mm.mediaUrl) out.unshift({ url: mm.mediaUrl, type: mm.mediaType || "image" }); } return out; })()}
           assistantName={assistantName}
           assistantPhoto={assistantPhoto}
           voiceId={user?.assistant_voice}
