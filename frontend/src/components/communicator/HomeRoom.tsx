@@ -90,12 +90,23 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   // Закрепления: джинны (id агентов) и люди (id пользователей) — вручную, для «Избранных контактов»
   const [pinned, setPinned] = useState<Set<number>>(new Set());
   const [pinnedContacts, setPinnedContacts] = useState<Set<number>>(new Set());
+  // Кастомные списки (семья/работа): {id, name, members:[{kind,id}]}
+  type ListMember = { kind: "agent" | "contact"; id: number };
+  type UserList = { id: string; name: string; members: ListMember[] };
+  const [lists, setLists] = useState<UserList[]>([]);
+  const [menuFor, setMenuFor] = useState<{ kind: "agent" | "contact"; id: number; name: string } | null>(null);
+  const [newListName, setNewListName] = useState("");
   useEffect(() => {
     try { const a = localStorage.getItem("jinntell_pinned"); if (a) setPinned(new Set(JSON.parse(a))); } catch { /* noop */ }
     try { const c = localStorage.getItem("jinntell_pinned_contacts"); if (c) setPinnedContacts(new Set(JSON.parse(c))); } catch { /* noop */ }
+    try { const l = localStorage.getItem("jinntell_lists"); if (l) setLists(JSON.parse(l)); } catch { /* noop */ }
   }, []);
   const togglePin = (id: number) => setPinned((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); try { localStorage.setItem("jinntell_pinned", JSON.stringify([...n])); } catch { /* noop */ } return n; });
   const togglePinContact = (id: number) => setPinnedContacts((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); try { localStorage.setItem("jinntell_pinned_contacts", JSON.stringify([...n])); } catch { /* noop */ } return n; });
+  const saveLists = (ls: UserList[]) => { setLists(ls); try { localStorage.setItem("jinntell_lists", JSON.stringify(ls)); } catch { /* noop */ } };
+  const inList = (listId: string, kind: "agent" | "contact", id: number) => !!lists.find((l) => l.id === listId)?.members.some((m) => m.kind === kind && m.id === id);
+  const toggleMember = (listId: string, kind: "agent" | "contact", id: number) => saveLists(lists.map((l) => l.id !== listId ? l : { ...l, members: inList(listId, kind, id) ? l.members.filter((m) => !(m.kind === kind && m.id === id)) : [...l.members, { kind, id }] }));
+  const addToNewList = (name: string, kind: "agent" | "contact", id: number) => { const nm = name.trim(); if (!nm) return; saveLists([...lists, { id: "l" + Date.now(), name: nm, members: [{ kind, id }] }]); };
 
   // Клиентский read-state (слой 1): документы просмотрены + отметка «когда смотрел ленту»
   const [seenDocs, setSeenDocs] = useState<Set<number>>(new Set());
@@ -174,10 +185,10 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const newDocs = digests.filter((d) => !seenDocs.has(d.id));                               // непросмотренные документы
 
   const agentCircle = (a: AgentOut, small?: boolean) => (
-    <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => togglePin(a.id)} />
+    <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => setMenuFor({ kind: "agent", id: a.id, name: a.name })} />
   );
   const contactCircle = (c: ContactOut) => (
-    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => togglePinContact(c.id)} />
+    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => setMenuFor({ kind: "contact", id: c.id, name: c.display_name })} />
   );
   const guestAgentCircle = (a: AgentOut) => (
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={async () => { try { await addFavoriteAgent(a.id); window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }} />
@@ -234,6 +245,19 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           {newHead("Контакты избранные")}
           <Strip title="">{[...important.map((a) => agentCircle(a, true)), ...favContacts.map((c) => contactCircle(c))]}</Strip>
         </div>)}
+
+        {/* ═══════════ Кастомные списки (семья/работа) — удержи кружок → «В список» ═══════════ */}
+        {lists.filter((l) => l.members.length > 0).map((l) => (
+          <div key={l.id}>
+            <div className="text-[13px] font-bold px-1 pt-1" style={{ color: "var(--text-primary)" }}>📁 {l.name}</div>
+            <Strip title="">
+              {l.members.map((m) => {
+                if (m.kind === "agent") { const a = favs.find((x) => x.id === m.id); return a ? agentCircle(a, true) : null; }
+                const c = contacts.find((x) => x.id === m.id); return c ? contactCircle(c) : null;
+              })}
+            </Strip>
+          </div>
+        ))}
 
         {/* ═══════════ КОНТАКТЫ (помощники · джинны · люди) ═══════════ */}
         {bigHead("Контакты", "sob")}
@@ -325,6 +349,33 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           🏙 Перейти в Город джиннов
         </button>
       </div>
+
+      {/* Меню кружка (удержание): важное + списки */}
+      {menuFor && (
+        <div className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center animate-fade-in" style={{ background: "rgba(0,0,0,0.5)" }} onClick={() => setMenuFor(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[420px] rounded-t-2xl sm:rounded-2xl p-4" style={{ background: "var(--panel-bg, #12121a)", border: "1px solid var(--bg-glass-border)" }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-bold truncate" style={{ color: "var(--text-primary)" }}>{menuFor.name}</h3>
+              <button onClick={() => setMenuFor(null)} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>✕</button>
+            </div>
+            <button onClick={() => { if (menuFor.kind === "agent") togglePin(menuFor.id); else togglePinContact(menuFor.id); }} className="w-full text-left px-3 py-2.5 rounded-xl mb-2 flex items-center gap-2" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>
+              <span>⭐</span><span>{(menuFor.kind === "agent" ? pinned.has(menuFor.id) : pinnedContacts.has(menuFor.id)) ? "Убрать из важных" : "В важные"}</span>
+            </button>
+            <div className="text-[11px] uppercase tracking-wider mb-1 px-1" style={{ color: "var(--text-muted)" }}>Списки</div>
+            <div className="flex flex-col gap-1">
+              {lists.map((l) => (
+                <button key={l.id} onClick={() => toggleMember(l.id, menuFor.kind, menuFor.id)} className="w-full text-left px-3 py-2 rounded-xl flex items-center gap-2" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>
+                  <span>{inList(l.id, menuFor.kind, menuFor.id) ? "✅" : "📁"}</span><span className="flex-1 truncate">{l.name}</span>
+                </button>
+              ))}
+              <div className="flex gap-2 mt-1">
+                <input value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="Новый список: семья, работа…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                <button onClick={() => { if (menuFor && newListName.trim()) { addToNewList(newListName, menuFor.kind, menuFor.id); setNewListName(""); } }} disabled={!newListName.trim()} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: newListName.trim() ? 1 : 0.5 }}>Создать</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
