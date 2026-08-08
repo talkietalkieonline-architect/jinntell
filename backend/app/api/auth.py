@@ -245,11 +245,15 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
 # =====================================
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(body: ForgotPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Запрос кода восстановления на email"""
     email = body.email.strip().lower()
     if not email:
         raise HTTPException(400, "Введите email")
+    ip = _client_ip(request)
+    if not await _rate_hit(f"rl:forgot:ip:{ip}", 15, 3600) or not await _rate_hit(f"rl:forgot:email:{email}", 5, 3600):
+        await _sec_event("security.ratelimit", f"forgot:{email}")
+        raise HTTPException(429, _TOO_MANY)
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -276,9 +280,13 @@ async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depend
 
 
 @router.post("/reset-password", response_model=TokenResponse)
-async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def reset_password(body: ResetPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Сброс пароля по коду из email"""
     email = body.email.strip().lower()
+    ip = _client_ip(request)
+    if not await _rate_hit(f"rl:reset:ip:{ip}", 20, 3600) or not await _rate_hit(f"rl:reset:email:{email}", 10, 3600):
+        await _sec_event("security.ratelimit", f"reset:{email}")
+        raise HTTPException(429, _TOO_MANY)
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
@@ -560,11 +568,18 @@ async def oauth_telegram(
 # =====================================
 
 @router.post("/send-sms", response_model=SendSMSResponse)
-async def send_sms(body: SendSMSRequest, db: AsyncSession = Depends(get_db)):
+async def send_sms(body: SendSMSRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Отправить SMS-код (legacy, оставлено для совместимости)"""
     from app.services.sms import send_sms_code
 
     phone = _normalize_phone(body.phone)
+    ip = _client_ip(request)
+    if not await _rate_hit(f"rl:sms:ip:{ip}", 15, 3600):
+        await _sec_event("security.ratelimit", f"sms-ip:{ip}")
+        raise HTTPException(429, _TOO_MANY)
+    if not await _rate_hit(f"rl:sms:phone:{phone}", 3, 600):
+        await _sec_event("security.ratelimit", f"sms:{phone}")
+        raise HTTPException(429, _TOO_MANY)
     code = "".join([str(random.randint(0, 9)) for _ in range(settings.SMS_CODE_LENGTH)])
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.SMS_CODE_EXPIRE_MINUTES)
 
@@ -588,9 +603,12 @@ async def send_sms(body: SendSMSRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/verify-sms", response_model=TokenResponse)
-async def verify_sms(body: VerifySMSRequest, db: AsyncSession = Depends(get_db)):
+async def verify_sms(body: VerifySMSRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Проверить SMS-код (legacy)"""
     phone = _normalize_phone(body.phone)
+    if not await _rate_hit(f"rl:vsms:phone:{phone}", 10, 600):
+        await _sec_event("security.ratelimit", f"vsms:{phone}")
+        raise HTTPException(429, _TOO_MANY)
     result = await db.execute(select(User).where(User.phone == phone))
     user = result.scalar_one_or_none()
 
@@ -601,6 +619,7 @@ async def verify_sms(body: VerifySMSRequest, db: AsyncSession = Depends(get_db))
     if user.sms_code != body.code:
         raise HTTPException(400, "Неверный код")
 
+    await _rate_reset(f"rl:vsms:phone:{phone}")
     user.is_verified = True
     user.sms_code = None
     user.sms_code_expires = None
