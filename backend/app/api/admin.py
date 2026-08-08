@@ -1235,6 +1235,7 @@ EMBEDDING_CONFIG = [
     {"key": "EMBEDDING_PROVIDER", "label": "Провайдер эмбеддингов", "options": ["yandex", "gemini", "openai", "jina"]},
     {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (зарубежные LLM/эмбеддинги из РФ: OpenRouter, Gemini, Groq, Jina). Формат: http://user:pass@host:port", "options": None},
     {"key": "WEB_SEARCH_PROVIDER", "label": "Провайдер веб-поиска помощника", "options": ["off", "tavily", "brave"]},
+    {"key": "STT_PROVIDER", "label": "Распознавание речи (STT): yandex — SpeechKit (тот же ключ), off — выключить", "options": ["yandex", "off"]},
 ]
 
 

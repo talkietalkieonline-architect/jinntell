@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     YANDEX_SPEECHKIT_API_KEY: str = ""
     YANDEX_SPEECHKIT_FOLDER_ID: str = ""
     YANDEX_SPEECHKIT_URL: str = "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize"
+    # STT (распознавание речи) — провайдер переключается в админке
+    STT_PROVIDER: str = "yandex"
     SELF_TTS_URL: str = ""
     SELF_TTS_API_KEY: str = ""
     SELF_TTS_MODEL: str = "gptsovits"

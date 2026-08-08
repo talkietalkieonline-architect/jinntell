@@ -26,6 +26,7 @@ from app.api.contractor_auth import router as contractor_auth_router
 from app.api.contractor_agents import router as contractor_agents_router
 from app.api.rag import router as rag_router
 from app.api.tts import router as tts_router
+from app.api.stt import router as stt_router
 from app.api.feed import router as feed_router
 from app.api.rooms import router as rooms_router
 from app.api.contacts import router as contacts_router
@@ -102,6 +103,7 @@ app.include_router(contractor_auth_router)
 app.include_router(contractor_agents_router)
 app.include_router(rag_router)
 app.include_router(tts_router)
+app.include_router(stt_router)
 app.include_router(feed_router)
 app.include_router(rooms_router)
 app.include_router(contacts_router)
