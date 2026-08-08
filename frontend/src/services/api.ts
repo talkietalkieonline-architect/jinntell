@@ -230,6 +230,7 @@ export interface AgentOut {
   scope?: string;
   city?: string | null;
   is_paid?: boolean;
+  corporate?: boolean;
 }
 
 export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }

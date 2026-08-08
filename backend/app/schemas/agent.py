@@ -24,6 +24,7 @@ class AgentOut(BaseModel):
     rating_count: int
     greeting: Optional[str] = None
     owner_id: Optional[int] = None
+    corporate: bool = False
     tts_enabled: bool = False
     video_enabled: bool = False
     video_mode: str = "bubble"

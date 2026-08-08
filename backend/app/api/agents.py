@@ -121,12 +121,19 @@ async def my_agents(
 
 @router.get("/favorites", response_model=list[AgentOut])
 async def list_favorites(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Избранные джинны пользователя."""
-    res = await db.execute(
-        select(Agent).join(UserFavorite, UserFavorite.agent_id == Agent.id)
-        .where(UserFavorite.user_id == user.id, Agent.is_active == True)
-    )
-    return [AgentOut.model_validate(a) for a in res.scalars().all()]
+    """Избранные джинны пользователя + корпоративные (где пользователь в списке доступа)."""
+    fav_ids = set((await db.execute(select(UserFavorite.agent_id).where(UserFavorite.user_id == user.id))).scalars().all())
+    acc_ids = set((await db.execute(select(AgentAccess.agent_id).where(AgentAccess.user_id == user.id))).scalars().all())
+    ids = fav_ids | acc_ids
+    if not ids:
+        return []
+    res = await db.execute(select(Agent).where(Agent.id.in_(ids), Agent.is_active == True))
+    out = []
+    for a in res.scalars().all():
+        ao = AgentOut.model_validate(a)
+        ao.corporate = a.id in acc_ids  # авто-тег «Корпоративные» — пользователь в списке доступа
+        out.append(ao)
+    return out
 
 
 @router.post("/favorites/{agent_id}")

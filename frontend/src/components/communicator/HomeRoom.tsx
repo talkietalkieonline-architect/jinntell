@@ -145,9 +145,11 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   // Категоризация «Джинны» из избранного
   const personal = favs.filter((a) => userId && a.owner_id === userId);
   const personalIds = new Set(personal.map((a) => a.id));
-  const consultants = favs.filter((a) => a.agent_type === "business" && !personalIds.has(a.id));
-  const specialists = favs.filter((a) => a.agent_type === "specialist" && !personalIds.has(a.id));
-  const grouped = new Set([...personal, ...consultants, ...specialists].map((a) => a.id));
+  const corpSet = new Set(favs.filter((a) => a.corporate).map((a) => a.id));
+  const corporate = favs.filter((a) => corpSet.has(a.id) && !personalIds.has(a.id));
+  const consultants = favs.filter((a) => a.agent_type === "business" && !personalIds.has(a.id) && !corpSet.has(a.id));
+  const specialists = favs.filter((a) => a.agent_type === "specialist" && !personalIds.has(a.id) && !corpSet.has(a.id));
+  const grouped = new Set([...personal, ...corporate, ...consultants, ...specialists].map((a) => a.id));
   const others = favs.filter((a) => !grouped.has(a.id));
   const recIds = new Set(favs.map((a) => a.id));
   const recs = recommended.filter((a) => !recIds.has(a.id)).slice(0, 12);
@@ -274,10 +276,11 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
         {subHead("Джинны", "jinns", "удержи кружок → ⭐")}
         {!collapsed.has("jinns") && (<>
-          <Strip title="" empty={(important.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
+          <Strip title="" empty={(important.length + corporate.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
             {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
           </Strip>
           {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
+          {corporate.length > 0 && <Strip title="🏢 Корпоративные">{corporate.map((a) => agentCircle(a, true))}</Strip>}
           {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
           {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
           {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
