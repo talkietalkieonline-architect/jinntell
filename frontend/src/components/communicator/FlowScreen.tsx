@@ -26,6 +26,13 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   const [status, setStatus] = useState<"idle" | "listening" | "speaking">("listening");
   const [caption, setCaption] = useState("");
   const [viewer, setViewer] = useState<number | null>(null);  // индекс медиа в полноэкранном просмотре
+  const [mediaHidden, setMediaHidden] = useState(false);      // принудительно/авто убрано из Потока
+  const [mediaFade, setMediaFade] = useState(false);          // плавное растворение
+  const [mediaMenu, setMediaMenu] = useState<{ url: string; type: string } | null>(null);  // долгое нажатие
+  const mediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mediaSigRef = useRef<string>("");
+  const mediaLpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mediaLpFiredRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const spokenRef = useRef<string>(lastReply || "");
   const onSendRef = useRef(onSend);
@@ -182,6 +189,52 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   };
   useEffect(() => () => { if (lpTimerRef.current) clearTimeout(lpTimerRef.current); }, []);
 
+  // Медиа в Потоке — эфемерное: показать при новом, само раствориться через 10с (или замениться следующим)
+  const mediaSig = (mediaList && mediaList.length) ? (mediaList[mediaList.length - 1].url + ":" + mediaList.length) : "";
+  useEffect(() => {
+    if (!mediaSig) return;
+    if (mediaSig === mediaSigRef.current) return;  // не новое — не перезапускаем
+    mediaSigRef.current = mediaSig;
+    setMediaHidden(false); setMediaFade(false);
+    if (mediaTimerRef.current) clearTimeout(mediaTimerRef.current);
+    mediaTimerRef.current = setTimeout(() => {
+      setMediaFade(true);
+      mediaTimerRef.current = setTimeout(() => setMediaHidden(true), 700);
+    }, 10000);
+    return () => { if (mediaTimerRef.current) clearTimeout(mediaTimerRef.current); };
+  }, [mediaSig]);
+  const dismissMedia = () => { if (mediaTimerRef.current) clearTimeout(mediaTimerRef.current); setMediaFade(true); setTimeout(() => setMediaHidden(true), 300); };
+
+  // Долгое нажатие на картинку → меню (сохранить/копировать)
+  const startMediaLp = (m: { url: string; type: string }) => {
+    mediaLpFiredRef.current = false;
+    if (mediaLpTimerRef.current) clearTimeout(mediaLpTimerRef.current);
+    mediaLpTimerRef.current = setTimeout(() => { mediaLpFiredRef.current = true; setMediaMenu(m); try { if (navigator.vibrate) navigator.vibrate(20); } catch { /* noop */ } }, 550);
+  };
+  const cancelMediaLp = () => { if (mediaLpTimerRef.current) { clearTimeout(mediaLpTimerRef.current); mediaLpTimerRef.current = null; } };
+  const resolveSrc = (u: string) => (u.startsWith("blob:") || u.startsWith("data:") ? u : mediaUrl(u));
+  const saveMedia = async (m: { url: string; type: string }) => {
+    try {
+      const src = resolveSrc(m.url);
+      const a = document.createElement("a");
+      a.href = src; a.download = src.split("/").pop() || (m.type === "video" ? "video.mp4" : "image.jpg");
+      a.target = "_blank"; document.body.appendChild(a); a.click(); a.remove();
+    } catch { /* noop */ }
+    setMediaMenu(null);
+  };
+  const copyMedia = async (m: { url: string; type: string }) => {
+    const src = resolveSrc(m.url);
+    try {
+      if (m.type !== "video" && navigator.clipboard && "write" in navigator.clipboard) {
+        const blob = await (await fetch(src)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+      } else {
+        await navigator.clipboard.writeText(src);
+      }
+    } catch { try { await navigator.clipboard.writeText(src); } catch { /* noop */ } }
+    setMediaMenu(null);
+  };
+
   const hh = now ? now.getHours().toString().padStart(2, "0") : "--";
   const mm = now ? now.getMinutes().toString().padStart(2, "0") : "--";
 
@@ -238,9 +291,10 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       </div>
 
       {/* Медиа «из дымки» снизу — меньше нижней половины, по краям виден фон. Одно медиа = крупно; несколько = ряд миниатюр (тап → полноэкран) */}
-      {mediaList && mediaList.length > 0 && (
-        <div onClick={(e) => e.stopPropagation()} className="absolute left-0 right-0 bottom-0 animate-fade-in" style={{ zIndex: 2, pointerEvents: "auto" }}>
+      {mediaList && mediaList.length > 0 && !mediaHidden && (
+        <div onClick={(e) => e.stopPropagation()} className="absolute left-0 right-0 bottom-0 animate-fade-in" style={{ zIndex: 2, pointerEvents: "auto", opacity: mediaFade ? 0 : 1, transition: "opacity 0.7s ease" }}>
           <div className="absolute left-0 right-0 bottom-0 pointer-events-none" style={{ height: 240, background: "linear-gradient(to top, rgba(8,10,16,0.75), transparent)" }} />
+          <button onClick={dismissMedia} title="Убрать из Потока" className="absolute right-3 flex items-center justify-center w-8 h-8 rounded-full text-white text-sm" style={{ top: -6, background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.2)", zIndex: 3 }}>✕</button>
           {mediaList.length === 1 ? (
             <div className="relative flex justify-center px-4" style={{ paddingBottom: 26 }}>
               {(() => {
@@ -250,7 +304,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
                   <div className="rounded-2xl overflow-hidden" style={{ maxWidth: "78%", maxHeight: "44vh", boxShadow: "0 12px 48px rgba(0,0,0,0.5)", border: "1px solid var(--bg-glass-border)" }}>
                     {m.type === "video"
                       ? <video src={src} controls playsInline style={{ maxWidth: "100%", maxHeight: "44vh", display: "block" }} />
-                      : <img src={src} alt="" onClick={() => setViewer(0)} className="cursor-zoom-in" style={{ maxWidth: "100%", maxHeight: "44vh", display: "block", objectFit: "contain" }} />}
+                      : <img src={src} alt="" onClick={() => { if (mediaLpFiredRef.current) { mediaLpFiredRef.current = false; return; } setViewer(0); }} onPointerDown={() => startMediaLp(m)} onPointerUp={cancelMediaLp} onPointerLeave={cancelMediaLp} className="cursor-zoom-in select-none" style={{ maxWidth: "100%", maxHeight: "44vh", display: "block", objectFit: "contain" }} />}
                   </div>
                 );
               })()}
@@ -260,7 +314,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
               {mediaList.map((m, i) => {
                 const src = m.url.startsWith("blob:") || m.url.startsWith("data:") ? m.url : mediaUrl(m.url);
                 return (
-                  <button key={i} onClick={() => setViewer(i)} className="rounded-xl overflow-hidden shrink-0 transition-transform hover:scale-[1.03]" style={{ width: 126, height: 126, border: "1px solid var(--bg-glass-border)", boxShadow: "0 10px 36px rgba(0,0,0,0.5)" }}>
+                  <button key={i} onClick={() => { if (mediaLpFiredRef.current) { mediaLpFiredRef.current = false; return; } setViewer(i); }} onPointerDown={() => startMediaLp(m)} onPointerUp={cancelMediaLp} onPointerLeave={cancelMediaLp} className="rounded-xl overflow-hidden shrink-0 transition-transform hover:scale-[1.03] select-none" style={{ width: 126, height: 126, border: "1px solid var(--bg-glass-border)", boxShadow: "0 10px 36px rgba(0,0,0,0.5)" }}>
                     {m.type === "video"
                       ? <video src={src} muted playsInline className="w-full h-full" style={{ objectFit: "cover" }} />
                       : <img src={src} alt="" className="w-full h-full" style={{ objectFit: "cover" }} />}
@@ -282,16 +336,25 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
           {mediaList.length > 1 && (
             <button onClick={(e) => { e.stopPropagation(); setViewer((v) => (v === null ? v : (v + 1) % mediaList.length)); }} className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-white text-2xl" style={{ background: "rgba(255,255,255,0.15)" }}>›</button>
           )}
-          <div onClick={(e) => e.stopPropagation()}>
-            {(() => {
-              const m = mediaList[viewer];
-              const src = m.url.startsWith("blob:") || m.url.startsWith("data:") ? m.url : mediaUrl(m.url);
-              return m.type === "video"
-                ? <video src={src} controls autoPlay playsInline style={{ maxWidth: "94vw", maxHeight: "88vh" }} />
-                : <img src={src} alt="" style={{ maxWidth: "94vw", maxHeight: "88vh", objectFit: "contain" }} />;
-            })()}
-          </div>
+          {(() => {
+            const m = mediaList[viewer];
+            const src = m.url.startsWith("blob:") || m.url.startsWith("data:") ? m.url : mediaUrl(m.url);
+            return m.type === "video"
+              ? <div onClick={(e) => e.stopPropagation()}><video src={src} controls autoPlay playsInline style={{ maxWidth: "94vw", maxHeight: "88vh" }} /></div>
+              : <img src={src} alt="" onClick={() => setViewer(null)} style={{ maxWidth: "94vw", maxHeight: "88vh", objectFit: "contain", cursor: "zoom-out" }} />;
+          })()}
           {mediaList.length > 1 && <div className="absolute bottom-5 left-0 right-0 text-center text-white/70 text-xs">{viewer + 1} / {mediaList.length}</div>}
+        </div>
+      )}
+
+      {/* Меню долгого нажатия по медиа */}
+      {mediaMenu && (
+        <div className="fixed inset-0 flex items-end justify-center animate-fade-in" style={{ zIndex: 140, background: "rgba(0,0,0,0.5)" }} onClick={() => setMediaMenu(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[420px] rounded-t-2xl p-3 mb-0" style={{ background: "var(--panel-bg, #12121a)", border: "1px solid var(--bg-glass-border)" }}>
+            <button onClick={() => saveMedia(mediaMenu)} className="w-full text-left px-4 py-3 rounded-xl text-sm flex items-center gap-3" style={{ color: "var(--text-primary)" }}>💾 Сохранить</button>
+            <button onClick={() => copyMedia(mediaMenu)} className="w-full text-left px-4 py-3 rounded-xl text-sm flex items-center gap-3" style={{ color: "var(--text-primary)" }}>📋 Копировать</button>
+            <button onClick={() => setMediaMenu(null)} className="w-full text-left px-4 py-3 rounded-xl text-sm flex items-center gap-3" style={{ color: "var(--text-muted)" }}>Отмена</button>
+          </div>
         </div>
       )}
     </div>

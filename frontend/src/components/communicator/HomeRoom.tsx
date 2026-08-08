@@ -220,7 +220,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   );
 
   return (
-    <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: bottomPad + 12 }}>
+    <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: `calc(${bottomPad + 12}px + env(safe-area-inset-bottom, 0px) + 16px)` }}>
       <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
 
         {/* ═══════════ ВЕРХ: три «новостные» полосы (просмотрел → исчезает) ═══════════ */}
