@@ -316,6 +316,35 @@ input::placeholder {
   50% { transform: scaleY(1.7); opacity: 1; }
 }
 
+/* 🧞 Пасхалка «потри лампу» — облачко дыма и джинн из лампы */
+.genie-smoke { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+.genie-puff {
+  position: absolute; bottom: 30%; left: 50%;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, #fff) 0%, transparent 70%);
+  opacity: 0; will-change: transform, opacity;
+  animation: geniePuff 2.2s ease-out forwards;
+}
+.genie-puff-1 { animation-delay: 0s; }
+.genie-puff-2 { animation-delay: 0.18s; width: 46px; height: 46px; }
+.genie-puff-3 { animation-delay: 0.34s; width: 74px; height: 74px; }
+.genie-emoji {
+  position: absolute; bottom: 26%; font-size: 56px; opacity: 0;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.4));
+  animation: genieRise 2.4s cubic-bezier(0.22,0.8,0.3,1) forwards;
+}
+@keyframes geniePuff {
+  0% { transform: translate(-50%, 0) scale(0.3); opacity: 0; }
+  30% { opacity: 0.85; }
+  100% { transform: translate(-50%, -70px) scale(2.4); opacity: 0; }
+}
+@keyframes genieRise {
+  0% { transform: translateY(20px) scale(0.4); opacity: 0; }
+  25% { opacity: 1; }
+  70% { transform: translateY(-18px) scale(1.05); opacity: 1; }
+  100% { transform: translateY(-28px) scale(1); opacity: 0; }
+}
+
 /* Оживление загруженной картинки — медленный «Ken Burns» (зум + панорама) */
 .ken-burns {
   animation: kenBurns 28s ease-in-out infinite alternate;

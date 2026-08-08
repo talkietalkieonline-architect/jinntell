@@ -133,6 +133,55 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     setCaption("");
   };
 
+  // 🧞 Пасхалка «потри лампу»: долгое нажатие на волну → помощник «выходит из лампы» с пожеланием
+  const [genie, setGenie] = useState(false);
+  const lpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lpFiredRef = useRef(false);
+  const WISHES = [
+    "Ты потёр лампу — и желания уже сбываются, просто не сразу. Сегодня будет хороший день.",
+    "Три желания? Начни с одного: сделай сегодня один маленький шаг к большому.",
+    "Секрет джиннов: удача любит тех, кто уже в пути. А ты в пути.",
+    "Загадай желание. А я пока напомню: ты сильнее, чем думаешь.",
+    "Пыль веков осела — впереди чистый лист. Пиши смело.",
+    "Джинн кивает: сегодня стоит написать тому, о ком давно думаешь.",
+    "Маленькая магия дня: улыбнись первым. Работает безотказно.",
+    "Глубокий вдох — и ты справишься со всем, что задумал на сегодня.",
+  ];
+  const speakLine = (text: string) => {
+    setCaption(text);
+    setStatus("speaking");
+    try { audioRef.current?.pause(); } catch { /* noop */ }
+    speakingRef.current = true;
+    finalRef.current = "";
+    (async () => {
+      try {
+        const url = await ttsBlobUrl(text, voiceId || "ermil");
+        if (url) {
+          const a = new Audio(url); audioRef.current = a;
+          const done = () => { setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 600); };
+          a.onended = done; a.onerror = done;
+          await a.play();
+        } else { setStatus("listening"); speakingRef.current = false; }
+      } catch { setStatus("listening"); speakingRef.current = false; }
+    })();
+  };
+  const rubLamp = () => {
+    lpFiredRef.current = true;
+    setGenie(true);
+    setTimeout(() => setGenie(false), 2400);
+    try { if (navigator.vibrate) navigator.vibrate(30); } catch { /* noop */ }
+    speakLine(WISHES[Math.floor(Math.random() * WISHES.length)]);
+  };
+  const startLongPress = () => {
+    lpFiredRef.current = false;
+    if (lpTimerRef.current) clearTimeout(lpTimerRef.current);
+    lpTimerRef.current = setTimeout(rubLamp, 700);
+  };
+  const cancelLongPress = () => {
+    if (lpTimerRef.current) { clearTimeout(lpTimerRef.current); lpTimerRef.current = null; }
+  };
+  useEffect(() => () => { if (lpTimerRef.current) clearTimeout(lpTimerRef.current); }, []);
+
   const hh = now ? now.getHours().toString().padStart(2, "0") : "--";
   const mm = now ? now.getMinutes().toString().padStart(2, "0") : "--";
 
@@ -144,13 +193,29 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(8,10,16,0.30)" }} />
 
       {/* Контент поверх фона (z-1). Пустое место ловит тап-прерывание */}
-      <div onClick={interrupt} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
+      <div onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } interrupt(); }} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
         <button onClick={(e) => { e.stopPropagation(); onExit(); }} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
         <div className="text-6xl font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3 }}>{hh}:{mm}</div>
         <div className="text-[12px] mb-12 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
 
-        {/* Центр: аватар помощника (фото в покое) → вибрирующая волна во время речи */}
-        <div className="flex items-center justify-center cursor-pointer relative" style={{ width: 200, height: 200 }} title="Нажми, чтобы прервать">
+        {/* Центр: аватар помощника (фото в покое) → вибрирующая волна во время речи. Долгое нажатие = «потри лампу» */}
+        <div
+          className="flex items-center justify-center cursor-pointer relative"
+          style={{ width: 200, height: 200 }}
+          title="Нажми, чтобы прервать"
+          onPointerDown={startLongPress}
+          onPointerUp={cancelLongPress}
+          onPointerLeave={cancelLongPress}
+          onPointerCancel={cancelLongPress}
+        >
+          {genie && (
+            <div className="genie-smoke" aria-hidden>
+              <span className="genie-puff genie-puff-1" />
+              <span className="genie-puff genie-puff-2" />
+              <span className="genie-puff genie-puff-3" />
+              <span className="genie-emoji">🧞</span>
+            </div>
+          )}
           {status === "speaking" ? (
             <div className="flow-wave">
               {Array.from({ length: 9 }).map((_, i) => <span key={i} className="flow-wave-bar" style={{ animationDelay: `${i * 0.09}s` }} />)}
