@@ -25,6 +25,7 @@ const WAVE_BARS = Array.from({ length: 20 }, (_, i) => {
 });
 
 let _ttsAudio: HTMLAudioElement | null = null;
+let _playingMsgId: string | number | null = null;  // какое сообщение сейчас озвучивается (для кнопки Стоп у облачка)
 /** Озвучка через сервер (Yandex SpeechKit) с анти-эхо событиями и фолбэком */
 function ttsVoice(sender?: string): string {
   if (sender === "agent") return "ermil"; // голос агента — следующим шагом
@@ -32,9 +33,10 @@ function ttsVoice(sender?: string): string {
   return localStorage.getItem("jinntell_assistant_voice") || "ermil";
 }
 
-async function playServerTTS(text: string, voice: string = "ermil", emotion: string = "neutral") {
+async function playServerTTS(text: string, voice: string = "ermil", emotion: string = "neutral", id: string | number | null = null) {
   try { _ttsAudio?.pause(); } catch {}
   _ttsAudio = null;
+  _playingMsgId = id;
   window.dispatchEvent(new Event("jinntell_tts_start"));
   const url = await ttsBlobUrl(text, voice, emotion);
   if (!url) {
@@ -317,6 +319,16 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
   const [showAsVoice, setShowAsVoice] = useState(!!msg.isVoice);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; type: string } | null>(null);
+  // Озвучивается ли ИМЕННО это сообщение (кнопка «прослушать» → «стоп»)
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  useEffect(() => {
+    const onStart = () => setTtsPlaying(_playingMsgId === msg.id);
+    const onEnd = () => setTtsPlaying(false);
+    window.addEventListener("jinntell_tts_start", onStart);
+    window.addEventListener("jinntell_tts_end", onEnd);
+    return () => { window.removeEventListener("jinntell_tts_start", onStart); window.removeEventListener("jinntell_tts_end", onEnd); };
+  }, [msg.id]);
+  const toggleTTS = () => { if (ttsPlaying) { stopAllTTS(); } else { playServerTTS(msg.text, ttsVoice(msg.sender), "neutral", msg.id); } };
   const longPressRef = useRef<NodeJS.Timeout | null>(null);
   const touchPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -386,17 +398,21 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
         {/* Кнопки: прослушать + голосовое/текст */}
         {msg.text && (
           <div className="mt-1.5 flex items-center justify-end gap-2.5">
-            {/* Прослушать */}
+            {/* Прослушать ↔ Стоп (у самого облачка) */}
             <button
-              className="opacity-40 hover:opacity-80 transition-opacity"
-              style={{ color: "var(--text-muted)" }}
-              title="Прослушать"
-              onClick={() => { playServerTTS(msg.text, ttsVoice(msg.sender)); }}
+              className="hover:opacity-100 transition-opacity"
+              style={{ color: ttsPlaying ? "var(--accent)" : "var(--text-muted)", opacity: ttsPlaying ? 1 : 0.4 }}
+              title={ttsPlaying ? "Стоп" : "Прослушать"}
+              onClick={toggleTTS}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              </svg>
+              {ttsPlaying ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                </svg>
+              )}
             </button>
 
             {/* Переключатель: голосовое ↔ текст */}
@@ -492,19 +508,10 @@ export default function ChatArea({
   const userScrolledUp = useRef(false);
   const lastMsgCount = useRef(0);
   const prevMsgCountRef = useRef(messages.length);
-  const [speaking, setSpeaking] = useState(false);
   useEffect(() => {
-    const on = () => setSpeaking(true);
-    const off = () => setSpeaking(false);
     const stop = () => stopAllTTS();
-    window.addEventListener("jinntell_tts_start", on);
-    window.addEventListener("jinntell_tts_end", off);
     window.addEventListener("jinntell_stop", stop);
-    return () => {
-      window.removeEventListener("jinntell_tts_start", on);
-      window.removeEventListener("jinntell_tts_end", off);
-      window.removeEventListener("jinntell_stop", stop);
-    };
+    return () => window.removeEventListener("jinntell_stop", stop);
   }, []);
   const programmaticScrollRef = useRef(false);
 
@@ -560,7 +567,7 @@ export default function ChatArea({
       if (msg.sender !== "user" && msg.text) {
         const v = msg.sender === "agent" ? (agentInfo?.tts_voice_id || "ermil") : ttsVoice(msg.sender);
         const emo = msg.sender === "agent" ? (agentInfo?.tts_emotion || "neutral") : "neutral";
-        playServerTTS(msg.text, v, emo);
+        playServerTTS(msg.text, v, emo, msg.id);
       }
     }
   }, [messages, autoSpeak]);
@@ -589,11 +596,6 @@ export default function ChatArea({
 
   return (
     <>
-    {speaking && (
-      <button onClick={() => stopAllTTS()} title="Остановить озвучку" className="fixed left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold animate-fade-in" style={{ bottom: bottomPad + 8, zIndex: 60, background: "var(--accent)", color: "var(--bg-deep)", boxShadow: "0 4px 20px rgba(0,0,0,0.35)" }}>
-        <span style={{ fontSize: 13 }}>⏹</span> Стоп
-      </button>
-    )}
     {searchOpen && (
       <div className="absolute left-0 right-0 flex justify-center px-4" style={{ top: topPad + 6, zIndex: 30 }}>
         <div className="flex items-center gap-2 rounded-xl px-3 py-2 w-full max-w-[620px]" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)" }}>

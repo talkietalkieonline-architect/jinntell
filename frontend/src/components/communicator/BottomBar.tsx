@@ -318,14 +318,22 @@ export default function BottomBar({
     if (!SR) return;
     const r = new (SR as unknown as { new(): SpeechRecognition })();
     r.lang = "ru-RU"; r.continuous = true; r.interimResults = true;
-    const base = inputText ? inputText.trim() + " " : "";
+    // Накапливаем ТОЛЬКО новые результаты (resultIndex) + гасим повторы (частый баг Android STT — дубли слов)
+    let acc = inputText ? inputText.trim() + " " : "";
+    let lastSeg = "";
     r.onresult = (event: SpeechRecognitionEvent) => {
-      let full = base, interim = "";
-      for (let i = 0; i < event.results.length; i++) {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const res = event.results[i];
-        if (res.isFinal) full += res[0].transcript + " "; else interim += res[0].transcript;
+        const seg = res[0].transcript;
+        if (res.isFinal) {
+          const t = seg.trim();
+          if (t && t !== lastSeg) { acc += t + " "; lastSeg = t; }
+        } else {
+          interim += seg;
+        }
       }
-      setInputText((full + interim).replace(/\s+/g, " ").trimStart());
+      setInputText((acc + interim).replace(/\s+/g, " ").trimStart());
     };
     r.onend = () => { setDictating(false); dictRef.current = null; };
     r.onerror = () => { setDictating(false); };
@@ -390,6 +398,7 @@ export default function BottomBar({
         background: "transparent",
         borderTop: "none",
         zIndex: 40,
+        paddingBottom: "max(10px, env(safe-area-inset-bottom))",
       }}
     >
       {/* Скрытый file input */}
