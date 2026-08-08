@@ -1359,6 +1359,19 @@ export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: str
   }
   return res.json();
 }
+// Распознавание речи: аудио-запись → текст (серверный STT, провайдер в админке)
+export async function sttRecognize(audio: Blob): Promise<string> {
+  const token = getToken();
+  const f = new FormData();
+  f.append("file", audio, "voice.webm");
+  const res = await fetch(`${API_BASE}/api/stt`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: f });
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ApiError(res.status, b.detail || "Ошибка распознавания");
+  }
+  const data = await res.json();
+  return (data.text || "").trim();
+}
 export async function uploadBackgroundImage(file: File): Promise<{ bg_url: string }> {
   const token = getToken();
   file = await compressImage(file, 1600, 0.85);

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { sttRecognize } from "@/services/api";
 
 /** Состояния микрофона */
 type MicState = "off" | "on" | "always" | "mute";
@@ -310,38 +311,41 @@ export default function BottomBar({
     return () => { clearTimeout(timer); document.removeEventListener("click", close); };
   }, [showMediaMenu]);
 
-  // === ✍️ Набор голосом: распознавание речи → в ПОЛЕ ВВОДА (потом отправляешь ▶; прослушивание = голос помощника слушателя) ===
+  // === ✍️ Набор голосом: ЗАПИСЬ → серверный STT (Yandex, качество несравнимо лучше браузерного) → в ПОЛЕ ВВОДА ===
   const [dictating, setDictating] = useState(false);
-  const dictRef = useRef<SpeechRecognition | null>(null);
-  const startDictation = useCallback(() => {
-    const SR = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
-    if (!SR) return;
-    const r = new (SR as unknown as { new(): SpeechRecognition })();
-    r.lang = "ru-RU"; r.continuous = true; r.interimResults = true;
-    // Накапливаем ТОЛЬКО новые результаты (resultIndex) + гасим повторы (частый баг Android STT — дубли слов)
-    let acc = inputText ? inputText.trim() + " " : "";
-    let lastSeg = "";
-    r.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        const seg = res[0].transcript;
-        if (res.isFinal) {
-          const t = seg.trim();
-          if (t && t !== lastSeg) { acc += t + " "; lastSeg = t; }
-        } else {
-          interim += seg;
-        }
-      }
-      setInputText((acc + interim).replace(/\s+/g, " ").trimStart());
-    };
-    r.onend = () => { setDictating(false); dictRef.current = null; };
-    r.onerror = () => { setDictating(false); };
-    try { r.start(); dictRef.current = r; setDictating(true); } catch { /* noop */ }
-  }, [inputText]);
+  const [dictBusy, setDictBusy] = useState(false);
+  const dictStreamRef = useRef<MediaStream | null>(null);
+  const dictRecRef = useRef<MediaRecorder | null>(null);
+  const dictChunksRef = useRef<Blob[]>([]);
+  const startDictation = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      dictStreamRef.current = stream;
+      const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+      let mime = ""; for (const t of types) { if (MediaRecorder.isTypeSupported?.(t)) { mime = t; break; } }
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      dictChunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size) dictChunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        dictStreamRef.current?.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(dictChunksRef.current, { type: rec.mimeType || "audio/webm" });
+        setDictating(false);
+        if (blob.size < 800) return;
+        setDictBusy(true);
+        try {
+          const text = await sttRecognize(blob);
+          if (text) setInputText((prev) => ((prev ? prev.trim() + " " : "") + text).trimStart());
+        } catch { /* noop */ }
+        setDictBusy(false);
+      };
+      rec.start();
+      dictRecRef.current = rec;
+      setDictating(true);
+    } catch { setDictating(false); }
+  }, [setInputText]);
   const stopDictation = useCallback(() => {
-    const r = dictRef.current; if (r) { try { r.stop(); } catch { /* noop */ } }
-    setDictating(false);
+    const rec = dictRecRef.current;
+    if (rec && rec.state !== "inactive") { try { rec.stop(); } catch { /* noop */ } }
   }, []);
 
   // === 🎙 Голосовое сообщение (реальный звук): зажать-записать-отпустить. Запись стартует на нажатии — без гонки. ===
@@ -458,7 +462,7 @@ export default function BottomBar({
 
               {/* Поле ввода — всегда видно */}
               <input ref={inputRef} type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder={dictating ? "🎙 говорите…" : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
+                placeholder={dictBusy ? "…распознаю" : dictating ? "🎙 говорите… (тап — стоп)" : "Сообщение…"} className="flex-1 bg-transparent outline-none text-sm min-w-0"
                 style={{ color: "var(--text-primary)", caretColor: "var(--accent)" }} />
 
               {/* Правая группа: ▶ отправить (если текст) · ✍️ набор голосом (в текст) · 🎙 голосовое (мой голос) */}
@@ -468,12 +472,14 @@ export default function BottomBar({
                 </button>
               ) : (
                 <>
-                  {/* ✍️ Набор голосом → в текст (тап — начать/остановить) */}
-                  <button onClick={dictating ? stopDictation : startDictation} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110" style={{ background: dictating ? "var(--accent)" : "var(--bg-glass-hover)", color: dictating ? "var(--bg-deep)" : "var(--accent)" }} title="Набор голосом (в текст)">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="2" y="7" width="20" height="12" rx="2" /><path d="M6 11h.01M10 11h.01M14 11h.01M18 11h.01M6 15h12" /></svg>
+                  {/* ✍️ Набор голосом → в текст (тап — начать/остановить, распознаёт сервер) */}
+                  <button onClick={dictBusy ? undefined : (dictating ? stopDictation : startDictation)} disabled={dictBusy} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110" style={{ background: dictating ? "var(--accent)" : "var(--bg-glass-hover)", color: dictating ? "var(--bg-deep)" : "var(--accent)", opacity: dictBusy ? 0.6 : 1 }} title="Набор голосом (в текст)">
+                    {dictBusy
+                      ? <svg width="16" height="16" viewBox="0 0 24 24" className="animate-spin" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg>
+                      : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><rect x="2" y="7" width="20" height="12" rx="2" /><path d="M6 11h.01M10 11h.01M14 11h.01M18 11h.01M6 15h12" /></svg>}
                   </button>
                   {/* 🎙 Голосовое — реальный голос (зажать-записать-отпустить) */}
-                  {!dictating && (
+                  {!dictating && !dictBusy && (
                     <button onPointerDown={() => startRec()} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-all hover:scale-110 select-none" style={{ background: "var(--bg-glass-hover)", color: "var(--accent)", touchAction: "none" }} title="Голосовое — зажми и говори (твой голос)">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><path d="M12 19v4" /></svg>
                     </button>
