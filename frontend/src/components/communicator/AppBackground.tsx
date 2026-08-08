@@ -7,7 +7,7 @@ export interface BgPreset {
   id: string;
   name: string;
   theme: "light" | "dark";
-  kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust" | "shader" | "image";
+  kind: "gradient" | "anim-gradient" | "stars" | "lava" | "dust" | "shader" | "image" | "ink";
   shader?: "mesh" | "waves" | "dots";
   css?: string;
   preview: string;
@@ -43,6 +43,7 @@ export const BACKGROUNDS: BgPreset[] = [
   { id: "dots-d", name: "Точки", theme: "dark", kind: "shader", shader: "dots", preview: "radial-gradient(circle,#2a124e,#0a0e18)" },
   { id: "stars", name: "Звёзды", theme: "dark", kind: "stars", preview: "radial-gradient(circle,#0b1020,#05060c)" },
   { id: "lava", name: "Лава-лампа", theme: "dark", kind: "lava", preview: "linear-gradient(160deg,#2a124e,#0d3226)" },
+  { id: "ink", name: "Чернила в воде", theme: "dark", kind: "ink", preview: "radial-gradient(circle at 40% 35%,#3a2d6e,#0a0e18 70%)" },
   { id: "dust", name: "Золотая пыль", theme: "dark", kind: "dust", preview: "radial-gradient(circle,#15110a,#0a0a0a)" },
 ];
 
@@ -97,6 +98,7 @@ export default function AppBackground({ override }: { override?: string } = {}) 
   const [animPalette, setAnimPalette] = useState("");
   const [mounted, setMounted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inkCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -183,12 +185,99 @@ export default function AppBackground({ override }: { override?: string } = {}) 
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, [bg.kind, anim, animSpeed]);
 
+  // «Чернила в воде» — процедурный WebGL-фон (домен-варпинг fbm). GPU, лёгкий, без зависимостей.
+  useEffect(() => {
+    if (bg.kind !== "ink") return;
+    const canvas = inkCanvasRef.current;
+    if (!canvas) return;
+    const gl = (canvas.getContext("webgl") || canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
+    if (!gl) return;
+
+    // Акцентный цвет из темы → подсветка чернильных нитей (fallback — золото)
+    const parseColor = (s: string): [number, number, number] => {
+      s = (s || "").trim();
+      const m = s.match(/^#([0-9a-f]{6})$/i);
+      if (m) { const n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+      const r = s.match(/rgba?\(([^)]+)\)/i);
+      if (r) { const p = r[1].split(",").map((x) => parseFloat(x)); return [(p[0] || 0) / 255, (p[1] || 0) / 255, (p[2] || 0) / 255]; }
+      return [0.85, 0.65, 0.2];
+    };
+    let glow: [number, number, number] = [0.85, 0.65, 0.2];
+    try { glow = parseColor(getComputedStyle(document.documentElement).getPropertyValue("--accent")); } catch { /* noop */ }
+
+    const vsrc = "attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}";
+    const fsrc = [
+      "precision highp float;",
+      "uniform vec2 uRes;uniform float uTime;uniform vec3 uWater;uniform vec3 uInk;uniform vec3 uGlow;",
+      "float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}",
+      "float noise(vec2 p){vec2 i=floor(p),f=fract(p);float a=hash(i),b=hash(i+vec2(1.0,0.0)),c=hash(i+vec2(0.0,1.0)),d=hash(i+vec2(1.0,1.0));vec2 u=f*f*(3.0-2.0*f);return mix(a,b,u.x)+(c-a)*u.y*(1.0-u.x)+(d-b)*u.x*u.y;}",
+      "float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<6;i++){v+=a*noise(p);p*=2.0;a*=0.5;}return v;}",
+      "void main(){vec2 uv=gl_FragCoord.xy/uRes.xy;uv.x*=uRes.x/uRes.y;float t=uTime*0.05;",
+      "vec2 q=vec2(fbm(uv*3.0+vec2(0.0,t)),fbm(uv*3.0+vec2(5.2,1.3)+t));",
+      "vec2 r=vec2(fbm(uv*3.0+4.0*q+vec2(1.7,9.2)-t*0.6),fbm(uv*3.0+4.0*q+vec2(8.3,2.8)+t*0.4));",
+      "float f=fbm(uv*3.0+4.0*r);",
+      "float ink=smoothstep(0.35,0.78,f);",
+      "vec3 col=mix(uWater,uInk,ink);",
+      "float fil=smoothstep(0.55,0.62,f)*(1.0-smoothstep(0.62,0.74,f));",
+      "col+=uGlow*fil*0.55;",
+      "vec2 c=gl_FragCoord.xy/uRes.xy-0.5;col*=1.0-dot(c,c)*0.6;",
+      "gl_FragColor=vec4(col,1.0);}",
+    ].join("\n");
+    const compile = (type: number, src: string) => {
+      const sh = gl.createShader(type)!;
+      gl.shaderSource(sh, src); gl.compileShader(sh);
+      return sh;
+    };
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsrc));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsrc));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, "p");
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const uRes = gl.getUniformLocation(prog, "uRes");
+    const uTime = gl.getUniformLocation(prog, "uTime");
+    gl.uniform3f(gl.getUniformLocation(prog, "uWater"), 0.02, 0.03, 0.07);
+    gl.uniform3f(gl.getUniformLocation(prog, "uInk"), 0.16, 0.11, 0.34);
+    gl.uniform3f(gl.getUniformLocation(prog, "uGlow"), glow[0], glow[1], glow[2]);
+
+    const resize = () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      canvas.width = w; canvas.height = h;
+      gl.viewport(0, 0, w, h);
+      gl.uniform2f(uRes, w, h);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    let raf = 0; let last = 0; let clock = 0; let prevT = performance.now();
+    const frame = (paint: boolean) => { gl.uniform1f(uTime, clock); gl.drawArrays(gl.TRIANGLES, 0, 3); void paint; };
+    if (!anim) { clock = 8; frame(true); return () => { window.removeEventListener("resize", resize); }; }
+    const loop = (t: number) => {
+      raf = requestAnimationFrame(loop);
+      if (document.hidden) { prevT = t; return; }
+      if (t - last < 1000 / 30) return;
+      last = t;
+      clock += ((t - prevT) / 1000) * animSpeed; prevT = t;
+      frame(true);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, [bg.kind, anim, animSpeed]);
+
   const baseStyle = bg.kind === "stars"
     ? "radial-gradient(circle at 50% 30%,#0b1020,#05060c)"
     : bg.kind === "dust"
       ? "radial-gradient(circle at 50% 40%,#14110a,#08080a)"
       : bg.kind === "lava"
         ? "linear-gradient(160deg,#160f26,#0a0e1a)"
+      : bg.kind === "ink"
+        ? "radial-gradient(circle at 40% 35%,#12102a,#05060c 75%)"
         : bg.kind === "shader"
           ? (bg.theme === "dark" ? "#0a0e18" : "#eef1f6")
           : bg.css;
@@ -230,6 +319,12 @@ export default function AppBackground({ override }: { override?: string } = {}) 
         </>
       )}
       {(bg.kind === "stars" || bg.kind === "dust") && <canvas ref={canvasRef} className="absolute inset-0" />}
+      {bg.kind === "ink" && (
+        <>
+          <canvas ref={inkCanvasRef} className="absolute inset-0" style={{ width: "100%", height: "100%" }} />
+          <div className="absolute inset-0" style={{ background: "rgba(6,8,16,0.30)" }} />
+        </>
+      )}
       {bg.kind === "lava" && anim && (
         <>
           <div className="lava-blob" style={{ background: "radial-gradient(circle,#d4622a,transparent 62%)", left: "4%", top: "8%", animationDelay: "0s" }} />
