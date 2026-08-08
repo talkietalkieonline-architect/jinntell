@@ -26,6 +26,9 @@ const WAVE_BARS = Array.from({ length: 20 }, (_, i) => {
 
 let _ttsAudio: HTMLAudioElement | null = null;
 let _playingMsgId: string | number | null = null;  // какое сообщение сейчас озвучивается (для кнопки Стоп у облачка)
+const SPEEDS = [1, 1.5, 2];
+function getPlaySpeed(): number { try { return parseFloat(localStorage.getItem("jinntell_play_speed") || "1") || 1; } catch { return 1; } }
+function setPlaySpeed(v: number) { try { localStorage.setItem("jinntell_play_speed", String(v)); } catch { /* noop */ } }
 /** Озвучка через сервер (Yandex SpeechKit) с анти-эхо событиями и фолбэком */
 function ttsVoice(sender?: string): string {
   if (sender === "agent") return "ermil"; // голос агента — следующим шагом
@@ -44,6 +47,7 @@ async function playServerTTS(text: string, voice: string = "ermil", emotion: str
     if (synth) {
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = "ru-RU";
+      utt.rate = getPlaySpeed();
       utt.onend = () => window.dispatchEvent(new Event("jinntell_tts_end"));
       utt.onerror = () => window.dispatchEvent(new Event("jinntell_tts_end"));
       synth.speak(utt);
@@ -53,6 +57,7 @@ async function playServerTTS(text: string, voice: string = "ermil", emotion: str
     return;
   }
   const audio = new Audio(url);
+  audio.playbackRate = getPlaySpeed();
   _ttsAudio = audio;
   const done = () => { window.dispatchEvent(new Event("jinntell_tts_end")); try { URL.revokeObjectURL(url); } catch {} };
   audio.onended = done;
@@ -74,12 +79,14 @@ function VoiceMessage({ src }: { src: string; mine?: boolean }) {
   const [playing, setPlaying] = useState(false);
   const [cur, setCur] = useState(0);
   const [dur, setDur] = useState(0);
-  const toggle = () => { const a = audioRef.current; if (!a) return; if (a.paused) a.play().catch(() => {}); else a.pause(); };
+  const [speed, setSpeed] = useState(getPlaySpeed());
+  const toggle = () => { const a = audioRef.current; if (!a) return; if (a.paused) { a.playbackRate = speed; a.play().catch(() => {}); } else a.pause(); };
+  const cycleSpeed = () => { const nx = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]; setSpeed(nx); if (audioRef.current) audioRef.current.playbackRate = nx; setPlaySpeed(nx); };
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const BARS = 26;
   const progress = dur > 0 ? cur / dur : 0;
   return (
-    <div className="flex items-center gap-2 py-0.5 mb-1" style={{ minWidth: 170 }}>
+    <div className="flex items-center gap-2 py-0.5 mb-1" style={{ minWidth: 190 }}>
       <button onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
         {playing ? "❚❚" : "▶"}
       </button>
@@ -91,11 +98,12 @@ function VoiceMessage({ src }: { src: string; mine?: boolean }) {
         })}
       </div>
       <span className="text-[10px] tabular-nums shrink-0" style={{ color: "var(--text-muted)" }}>{fmt(playing || cur ? cur : dur)}</span>
+      <button onClick={cycleSpeed} title="Скорость" className="text-[10px] font-bold shrink-0 px-1.5 py-0.5 rounded-md" style={{ color: "var(--accent)", background: "var(--bg-glass-hover)" }}>{speed}×</button>
       <audio
         ref={audioRef}
         src={src}
         preload="metadata"
-        onPlay={() => setPlaying(true)}
+        onPlay={(e) => { setPlaying(true); e.currentTarget.playbackRate = speed; }}
         onPause={() => setPlaying(false)}
         onEnded={() => { setPlaying(false); setCur(0); }}
         onTimeUpdate={(e) => setCur(e.currentTarget.currentTime)}
