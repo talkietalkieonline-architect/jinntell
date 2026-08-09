@@ -235,6 +235,101 @@ async def admin_set_global_blocklist(body: dict = Body(...), admin: User = Depen
     return {"ok": True}
 
 
+# ============ ДИСПЕТЧЕРСКАЯ: баланс/расходы + арендованное железо ============
+
+async def _eff_key(name: str) -> str:
+    """Эффективный ключ: из админки (app_settings), иначе из .env/config."""
+    from app.services.settings_store import get_setting
+    from app.core.config import settings as _s
+    return (await get_setting(name)) or (getattr(_s, name, "") or "")
+
+
+@router.get("/balances")
+async def admin_balances(admin: User = Depends(get_admin_user)):
+    """Баланс/остатки по провайдерам. Где есть API — тянем цифру, где нет — ссылка на кабинет."""
+    import httpx
+    out = []
+
+    # DeepSeek — работает из РФ напрямую
+    ds_key = await _eff_key("DEEPSEEK_API_KEY")
+    if ds_key:
+        try:
+            async with httpx.AsyncClient(timeout=15) as c:
+                r = await c.get("https://api.deepseek.com/user/balance",
+                                headers={"Authorization": f"Bearer {ds_key}", "Accept": "application/json"})
+            if r.status_code == 200:
+                infos = (r.json() or {}).get("balance_infos") or []
+                if infos:
+                    b = infos[0]
+                    out.append({"provider": "deepseek", "label": "DeepSeek", "status": "ok",
+                                "value": b.get("total_balance"), "unit": b.get("currency", ""),
+                                "detail": "остаток на счёте"})
+                else:
+                    out.append({"provider": "deepseek", "label": "DeepSeek", "status": "ok", "value": "0", "unit": "", "detail": "нет данных о балансе"})
+            else:
+                out.append({"provider": "deepseek", "label": "DeepSeek", "status": "error", "detail": f"HTTP {r.status_code}"})
+        except Exception as e:
+            out.append({"provider": "deepseek", "label": "DeepSeek", "status": "error", "detail": str(e)[:120]})
+    else:
+        out.append({"provider": "deepseek", "label": "DeepSeek", "status": "na", "detail": "нет ключа", "cabinet_url": "https://platform.deepseek.com/usage"})
+
+    # OpenRouter — только через прокси (гео-блок РФ)
+    or_key = await _eff_key("OPENROUTER_API_KEY")
+    if or_key:
+        try:
+            from app.services.llm import _llm_client
+            async with await _llm_client(15) as c:
+                r = await c.get("https://openrouter.ai/api/v1/credits",
+                                headers={"Authorization": f"Bearer {or_key}"})
+            if r.status_code == 200:
+                d = (r.json() or {}).get("data") or {}
+                total = d.get("total_credits") or 0
+                used = d.get("total_usage") or 0
+                out.append({"provider": "openrouter", "label": "OpenRouter", "status": "ok",
+                            "value": round(float(total) - float(used), 4), "unit": "$",
+                            "detail": f"кредиты (истрачено ${used})"})
+            else:
+                out.append({"provider": "openrouter", "label": "OpenRouter", "status": "error",
+                            "detail": f"HTTP {r.status_code} — нужен прокси (OUTBOUND_PROXY)"})
+        except Exception as e:
+            out.append({"provider": "openrouter", "label": "OpenRouter", "status": "error", "detail": f"нужен прокси? {str(e)[:80]}"})
+    else:
+        out.append({"provider": "openrouter", "label": "OpenRouter", "status": "na", "detail": "нет ключа", "cabinet_url": "https://openrouter.ai/credits"})
+
+    # Провайдеры без простого API баланса — ссылка на кабинет
+    out.append({"provider": "yandex", "label": "Yandex Cloud", "status": "cabinet",
+                "detail": "нужен billing-SA для авто; пока — кабинет", "cabinet_url": "https://console.yandex.cloud/billing"})
+    out.append({"provider": "gemini", "label": "Gemini (Google)", "status": "cabinet", "detail": "по биллингу Google Cloud", "cabinet_url": "https://console.cloud.google.com/billing"})
+    out.append({"provider": "groq", "label": "Groq", "status": "cabinet", "detail": "лимиты в кабинете", "cabinet_url": "https://console.groq.com/settings/billing"})
+    out.append({"provider": "tavily", "label": "Tavily", "status": "cabinet", "detail": "квота в кабинете", "cabinet_url": "https://app.tavily.com/"})
+    return {"balances": out}
+
+
+@router.get("/hardware")
+async def admin_get_hardware(admin: User = Depends(get_admin_user)):
+    """Реестр арендованного железа (JSON-список из настроек)."""
+    from app.services.settings_store import get_setting
+    raw = (await get_setting("RENTED_HARDWARE")) or "[]"
+    try:
+        items = json.loads(raw)
+        if not isinstance(items, list):
+            items = []
+    except Exception:
+        items = []
+    return {"items": items}
+
+
+@router.post("/hardware")
+async def admin_set_hardware(body: dict = Body(...), admin: User = Depends(get_admin_user)):
+    """Сохранить весь реестр железа (body.items = [...])."""
+    from app.services.settings_store import set_setting
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise HTTPException(400, "items должен быть списком")
+    await set_setting("RENTED_HARDWARE", json.dumps(items, ensure_ascii=False))
+    return {"ok": True, "count": len(items)}
+
+
 @router.get("/security-report")
 async def admin_security_report(
     hours: int = Query(24),

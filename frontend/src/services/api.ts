@@ -1552,6 +1552,18 @@ export function adminGetGlobalBlocklist(): Promise<{ raw: string }> {
 export function adminSetGlobalBlocklist(raw: string): Promise<{ ok: boolean }> {
   return apiFetch("/api/admin/global-blocklist", { method: "POST", body: JSON.stringify({ raw }) });
 }
+// Диспетчерская: баланс/расходы + арендованное железо
+export interface BalanceItem { provider: string; label: string; status: string; value?: string | number; unit?: string; detail?: string; cabinet_url?: string; }
+export function adminGetBalances(): Promise<{ balances: BalanceItem[] }> {
+  return apiFetch("/api/admin/balances");
+}
+export interface HardwareItem { id?: string; name: string; provider?: string; ip?: string; purpose?: string; cost?: string; currency?: string; status?: string; note?: string; }
+export function adminGetHardware(): Promise<{ items: HardwareItem[] }> {
+  return apiFetch("/api/admin/hardware");
+}
+export function adminSetHardware(items: HardwareItem[]): Promise<{ ok: boolean; count: number }> {
+  return apiFetch("/api/admin/hardware", { method: "POST", body: JSON.stringify({ items }) });
+}
 export function getActivityLog(params: { user_id?: number; action?: string; actor?: string; hours?: number; limit?: number } = {}): Promise<{ total: number; items: ActivityItem[] }> {
   const q = new URLSearchParams();
   if (params.user_id) q.set("user_id", String(params.user_id));

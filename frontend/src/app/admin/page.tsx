@@ -51,6 +51,11 @@ import {
   type ActivityItem,
   adminGetGlobalBlocklist,
   adminSetGlobalBlocklist,
+  adminGetBalances,
+  adminGetHardware,
+  adminSetHardware,
+  type BalanceItem,
+  type HardwareItem,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
 
@@ -59,7 +64,7 @@ import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
    Управление агентами, пользователями, статистика
    ══════════════════════════════════════════════════════════════ */
 
-type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities" | "activity";
+type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities" | "activity" | "dispatch";
 
 const AGENT_TYPES = [
   { id: "", label: "Все" },
@@ -79,6 +84,12 @@ export default function AdminPage() {
   const router = useRouter();
   const { isLoggedIn, isAdmin, user } = useAuth();
   const [tab, setTab] = useState<Tab>("agents");
+
+  // Диспетчерская
+  const [balances, setBalances] = useState<BalanceItem[]>([]);
+  const [balLoading, setBalLoading] = useState(false);
+  const [hardware, setHardware] = useState<HardwareItem[]>([]);
+  const [hwSaving, setHwSaving] = useState(false);
 
   // Agents state
   const [agents, setAgents] = useState<AgentDetailOut[]>([]);
@@ -266,6 +277,18 @@ export default function AdminPage() {
     try { setEmbConfig(await adminGetEmbeddingConfig()); } catch {}
   }, []);
 
+  const loadDispatch = useCallback(async () => {
+    setBalLoading(true);
+    try { setBalances((await adminGetBalances()).balances); } catch {}
+    setBalLoading(false);
+    try { setHardware((await adminGetHardware()).items); } catch {}
+  }, []);
+  const saveHardware = useCallback(async (items: HardwareItem[]) => {
+    setHwSaving(true);
+    try { await adminSetHardware(items); setHardware(items); } catch {}
+    setHwSaving(false);
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
     const load = async () => {
@@ -278,9 +301,10 @@ export default function AdminPage() {
       if (tab === "integrations") { await loadIntegrations(); await loadModels(); }
       if (tab === "cities") await loadCities();
       if (tab === "activity") await loadActivity();
+      if (tab === "dispatch") await loadDispatch();
     };
     load();
-  }, [tab, isAdmin, loadAgents, loadCoreAgents, loadContractors, loadUsers, loadSystemInfo, loadStats, loadIntegrations]);
+  }, [tab, isAdmin, loadAgents, loadCoreAgents, loadContractors, loadUsers, loadSystemInfo, loadStats, loadIntegrations, loadDispatch]);
 
   // Actions
   const handleCreate = async () => {
@@ -433,6 +457,7 @@ export default function AdminPage() {
             { id: "agents" as Tab, label: "Агенты", icon: "🤖" },
             { id: "core_agents" as Tab, label: "Core-агенты", icon: "⚙️" },
             { id: "contractors" as Tab, label: "Контрагенты", icon: "🏢" },
+            { id: "dispatch" as Tab, label: "Диспетчерская", icon: "🎛️" },
             { id: "users" as Tab, label: "Пользователи", icon: "👥" },
             { id: "system" as Tab, label: "Система", icon: "🖥️" },
             { id: "stats" as Tab, label: "Статистика", icon: "📊" },
@@ -1424,6 +1449,77 @@ export default function AdminPage() {
               ) : (
                 <p className="text-gray-500">Загрузка...</p>
               )}
+            </div>
+          )}
+
+          {/* ═══ ДИСПЕТЧЕРСКАЯ ═══ */}
+          {tab === "dispatch" && (
+            <div className="space-y-8">
+              {/* Баланс/расходы */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-white">💰 Баланс / расходы</h2>
+                  <button onClick={loadDispatch} className="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:text-white">↻ Обновить</button>
+                </div>
+                {balLoading ? <p className="text-gray-500 text-sm">Загружаю…</p> : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {balances.map((b) => {
+                      const c = b.status === "ok" ? "border-green-700/50" : b.status === "error" ? "border-red-700/50" : "border-gray-700";
+                      return (
+                        <div key={b.provider} className={`rounded-xl border ${c} bg-gray-900/60 p-4`}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-white">{b.label}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${b.status === "ok" ? "bg-green-900/50 text-green-300" : b.status === "error" ? "bg-red-900/50 text-red-300" : "bg-gray-800 text-gray-400"}`}>{b.status}</span>
+                          </div>
+                          {b.status === "ok" ? (
+                            <div className="mt-2 text-2xl font-bold text-white">{b.value} <span className="text-sm font-normal text-gray-400">{b.unit}</span></div>
+                          ) : null}
+                          {b.detail && <div className="mt-1 text-xs text-gray-400">{b.detail}</div>}
+                          {b.cabinet_url && <a href={b.cabinet_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-blue-400 hover:underline">Открыть кабинет →</a>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="mt-2 text-[11px] text-gray-500">DeepSeek/OpenRouter тянем по API; Yandex/Gemini/Groq/Tavily — ссылка на кабинет (у них нет простого API баланса). OpenRouter требует прокси.</p>
+              </div>
+
+              {/* Арендованное железо */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-white">🖥️ Арендованное железо</h2>
+                  <div className="flex gap-2">
+                    <button onClick={() => setHardware([...hardware, { name: "", provider: "", ip: "", purpose: "", cost: "", currency: "₽/мес", status: "active", note: "" }])} className="text-xs px-3 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:text-white">+ Коробка</button>
+                    <button onClick={() => saveHardware(hardware)} disabled={hwSaving} className="text-xs px-3 py-1.5 rounded-lg bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50">{hwSaving ? "Сохраняю…" : "💾 Сохранить"}</button>
+                  </div>
+                </div>
+                {hardware.length === 0 ? (
+                  <p className="text-gray-500 text-sm">Пока нет коробок. «+ Коробка» → заполни → «Сохранить». Своего железа нет — тут будет заграничный VPS (прокси + SearXNG).</p>
+                ) : (
+                  <div className="space-y-2">
+                    {hardware.map((h, i) => {
+                      const upd = (field: keyof HardwareItem, val: string) => setHardware(hardware.map((x, j) => j === i ? { ...x, [field]: val } : x));
+                      return (
+                        <div key={i} className="rounded-xl border border-gray-700 bg-gray-900/60 p-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                          <input value={h.name || ""} onChange={(e) => upd("name", e.target.value)} placeholder="Название (напр. proxy-eu)" className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                          <input value={h.provider || ""} onChange={(e) => upd("provider", e.target.value)} placeholder="Провайдер (Aeza…)" className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                          <input value={h.ip || ""} onChange={(e) => upd("ip", e.target.value)} placeholder="IP" className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                          <input value={h.purpose || ""} onChange={(e) => upd("purpose", e.target.value)} placeholder="Назначение (proxy+SearXNG)" className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                          <input value={h.cost || ""} onChange={(e) => upd("cost", e.target.value)} placeholder="Стоимость" className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                          <input value={h.currency || ""} onChange={(e) => upd("currency", e.target.value)} placeholder="₽/мес" className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none" />
+                          <select value={h.status || "active"} onChange={(e) => upd("status", e.target.value)} className="bg-gray-800 rounded-lg px-2 py-1.5 text-sm text-white outline-none">
+                            <option value="active">🟢 активна</option>
+                            <option value="planned">🟡 планируется</option>
+                            <option value="off">⚫ выключена</option>
+                          </select>
+                          <button onClick={() => setHardware(hardware.filter((_, j) => j !== i))} className="text-xs px-2 py-1.5 rounded-lg bg-red-900/40 text-red-300 hover:bg-red-900/70">Удалить</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="mt-2 text-[11px] text-gray-500">Реестр ведётся вручную. Позже сюда подключим авто-мониторинг (beszel) и джинна-по-железу.</p>
+              </div>
             </div>
           )}
 
