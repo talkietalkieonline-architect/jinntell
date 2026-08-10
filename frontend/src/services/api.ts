@@ -46,6 +46,7 @@ async function apiFetch<T>(
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
+    cache: "no-store",  // API-ответы (профиль и пр.) НЕ кэшируем — иначе после сохранения читается старое
     ...options,
     headers,
   });
