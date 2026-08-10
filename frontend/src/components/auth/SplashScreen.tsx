@@ -38,23 +38,26 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     <div
       className="fixed inset-0 flex flex-col items-center justify-center"
       style={{
-        background: "var(--bg-deep, #0a0a0a)",
+        background: "radial-gradient(125% 90% at 50% 42%, #1d160c 0%, #14110b 45%, #0a0908 100%)",
         zIndex: 200,
         opacity: fade ? 0 : 1,
         pointerEvents: fade ? "none" : "auto",
         transition: "opacity 0.7s ease",
         WebkitTransition: "opacity 0.7s ease",
-      }}
+        ["--accent-bright" as string]: "#e6bd57",
+        ["--text-muted" as string]: "#a49d90",
+      } as React.CSSProperties}
     >
-      {/* Свечение за логотипом */}
+      {/* Золотое свечение за логотипом */}
       <div
         className="absolute rounded-full"
         style={{
-          width: "300px",
-          height: "300px",
-          background: "radial-gradient(circle, var(--accent-glow, rgba(212,168,67,0.4)) 0%, transparent 70%)",
+          width: "min(60vh, 460px)",
+          height: "min(60vh, 460px)",
+          background: "radial-gradient(circle, rgba(224,179,74,0.5) 0%, rgba(224,179,74,0.12) 38%, transparent 70%)",
           filter: "blur(60px)",
           WebkitFilter: "blur(60px)",
+          opacity: 0.8,
         }}
       />
 

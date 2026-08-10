@@ -259,8 +259,8 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
       disabled={disabled}
       className="w-full py-3.5 rounded-xl text-sm font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
       style={{
-        background: disabled ? "var(--bg-glass-border)" : "var(--accent)",
-        color: disabled ? "var(--text-muted)" : "var(--bg-deep)",
+        background: disabled ? "rgba(217,165,52,0.18)" : "var(--accent)",
+        color: disabled ? "var(--text-secondary)" : "var(--bg-deep)",
         cursor: disabled ? "default" : "pointer",
       }}
     >
@@ -311,15 +311,30 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
   return (
     <div
       className="fixed inset-0 flex items-center justify-center p-6"
-      style={{ background: "var(--bg-deep)", zIndex: 150 }}
+      style={{
+        zIndex: 150,
+        background: "radial-gradient(125% 90% at 50% 6%, #1d160c 0%, #14110b 42%, #0a0908 100%)",
+        // Премиальный тёмно-тёплый мир входа — токены переопределены локально (наследуются вниз)
+        ["--bg-deep" as string]: "#0a0908",
+        ["--bg-glass" as string]: "rgba(255,255,255,0.05)",
+        ["--bg-glass-border" as string]: "rgba(255,255,255,0.12)",
+        ["--bg-glass-hover" as string]: "rgba(255,255,255,0.1)",
+        ["--text-primary" as string]: "#f4efe6",
+        ["--text-secondary" as string]: "#cfc8ba",
+        ["--text-muted" as string]: "#a49d90",
+        ["--accent" as string]: "#d9a534",
+        ["--accent-bright" as string]: "#e6bd57",
+        ["--accent-glow" as string]: "rgba(224,179,74,0.6)",
+      } as React.CSSProperties}
     >
-      {/* Свечение */}
+      {/* Золотое свечение за логотипом */}
       <div
-        className="absolute rounded-full"
+        className="absolute rounded-full pointer-events-none"
         style={{
-          width: "400px", height: "400px",
-          background: "radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)",
-          filter: "blur(80px)", opacity: 0.3,
+          width: "min(70vh, 560px)", height: "min(70vh, 560px)",
+          top: "50%", left: "50%", transform: "translate(-50%, -58%)",
+          background: "radial-gradient(circle, rgba(224,179,74,0.5) 0%, rgba(224,179,74,0.12) 38%, transparent 70%)",
+          filter: "blur(70px)", opacity: 0.75,
         }}
       />
 
