@@ -322,29 +322,10 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             JinnTell
           </span>
           <span className="text-xs uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>
-            Город джиннов
+            Джинны подскажут
           </span>
         </div>
 
-        {showIntro && (
-          <div className="flex flex-col gap-4 mb-2 animate-fade-in">
-            <div className="rounded-2xl p-5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-              <h2 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Привет! Это JinnTell 👋</h2>
-              <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                Новый способ общаться с информацией и всей сетью — голосом и текстом. Личный ИИ-помощник понимает вас с полуслова, сам зовёт нужных специалистов и приносит готовый ответ. Никаких лишних приложений — просто спросите.
-              </p>
-            </div>
-            <button onClick={dismissIntro} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
-              Зарегистрироваться
-            </button>
-            <label className="flex items-center gap-2 justify-center text-xs cursor-pointer select-none" style={{ color: "var(--text-muted)" }}>
-              <input type="checkbox" checked={dontShowIntro} onChange={(e) => setDontShowIntro(e.target.checked)} />
-              Больше не показывать
-            </label>
-          </div>
-        )}
-
-        {!showIntro && (<>
         {/* Переключатель Пользователь / Бизнес */}
         <div className="flex gap-1 mb-5 p-1 rounded-xl" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
           {([{ id: "user", label: "Пользователь" }, { id: "business", label: "Бизнес" }] as const).map((m) => (
@@ -508,8 +489,30 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             </button>
           </div>
         )}
-        </>)}
       </div>
+
+      {/* Приветственный попап поверх экрана (лого гаснет за затемнением) */}
+      {showIntro && (
+        <div className="fixed inset-0 flex items-center justify-center p-6 animate-fade-in" style={{ zIndex: 200, background: "rgba(4,6,12,0.74)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+          <div className="relative w-full max-w-sm rounded-3xl p-6" style={{ background: "var(--bg-elevated, #14141c)", border: "1px solid var(--bg-glass-border)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}>
+            <div className="text-center mb-4">
+              <div className="text-2xl font-bold" style={{ color: "var(--accent-bright)" }}>JinnTell</div>
+              <div className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>Джинны подскажут</div>
+            </div>
+            <h2 className="text-lg font-semibold mb-2 text-center" style={{ color: "var(--text-primary)" }}>Привет! 👋</h2>
+            <p className="text-sm leading-relaxed text-center mb-5" style={{ color: "var(--text-secondary)" }}>
+              Новый способ общаться с информацией и всей сетью — голосом и текстом. Личный ИИ-помощник понимает вас с полуслова, сам зовёт нужных специалистов и приносит готовый ответ. Никаких лишних приложений — просто спросите.
+            </p>
+            <button onClick={dismissIntro} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90 mb-3" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+              Зарегистрироваться
+            </button>
+            <label className="flex items-center gap-2 justify-center text-xs cursor-pointer select-none" style={{ color: "var(--text-muted)" }}>
+              <input type="checkbox" checked={dontShowIntro} onChange={(e) => setDontShowIntro(e.target.checked)} />
+              Больше не показывать
+            </label>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

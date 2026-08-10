@@ -3,7 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
-  title: "JinnTell — Город джиннов",
+  title: "JinnTell — Джинны подскажут",
   description: "Экосистема голосового общения с ИИ-агентами",
   viewport: {
     width: "device-width",

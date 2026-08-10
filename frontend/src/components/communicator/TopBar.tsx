@@ -44,7 +44,7 @@ export default function TopBar({
           className="text-2xl font-bold tracking-tight"
           style={{ color: "var(--text-primary)" }}
         >
-          Город джиннов
+          Джинны подскажут
         </h1>
       </div>
 
