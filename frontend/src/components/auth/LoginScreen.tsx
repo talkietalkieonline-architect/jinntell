@@ -52,6 +52,14 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
     if (dontShowIntro) { try { localStorage.setItem("jinntell_intro_hidden", "1"); } catch { /* noop */ } }
     setAccountMode("user"); setStep("register"); setError(""); setShowIntro(false);
   };
+  // Попап для бизнеса (появляется при переходе на вкладку «Бизнес»)
+  const [showBizIntro, setShowBizIntro] = useState(false);
+  const [dontShowBizIntro, setDontShowBizIntro] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem("jinntell_intro_biz_hidden") !== "1") setShowBizIntro(true); } catch { /* noop */ } }, []);
+  const dismissBizIntro = () => {
+    if (dontShowBizIntro) { try { localStorage.setItem("jinntell_intro_biz_hidden", "1"); } catch { /* noop */ } }
+    setShowBizIntro(false);
+  };
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -508,6 +516,29 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             </button>
             <label className="flex items-center gap-2 justify-center text-xs cursor-pointer select-none" style={{ color: "#a49d90" }}>
               <input type="checkbox" checked={dontShowIntro} onChange={(e) => setDontShowIntro(e.target.checked)} style={{ accentColor: "#d9a534" }} />
+              Больше не показывать
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Приветственный попап для бизнеса — зачем сервис компании */}
+      {accountMode === "business" && showBizIntro && !showIntro && (
+        <div className="fixed inset-0 flex items-center justify-center p-6 animate-fade-in" style={{ zIndex: 200, background: "rgba(4,6,12,0.74)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+          <div className="relative w-full max-w-sm rounded-3xl p-6" style={{ background: "#15151e", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}>
+            <div className="text-center mb-4">
+              <div className="text-2xl font-bold" style={{ color: "#e0b34a" }}>JinnTell</div>
+              <div className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "#8f887b" }}>для бизнеса</div>
+            </div>
+            <h2 className="text-lg font-semibold mb-2 text-center" style={{ color: "#f2ede3" }}>Ваш ИИ-джинн работает 24/7 🏢</h2>
+            <p className="text-sm leading-relaxed text-center mb-5" style={{ color: "#c3bdb0" }}>
+              Дайте компании собственного джинна. Он знает ваши товары, цены и документы, отвечает клиентам голосом и текстом, ведёт переговоры и доводит до сделки — без выходных и очередей. А кабинет — это новый канал к аудитории: живые диалоги, аналитика переговоров и память о каждом клиенте. Не бот, которого строят месяцами, — представитель бренда в сети с первого дня.
+            </p>
+            <button onClick={dismissBizIntro} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90 mb-3" style={{ background: "#d9a534", color: "#161311" }}>
+              Войти в кабинет
+            </button>
+            <label className="flex items-center gap-2 justify-center text-xs cursor-pointer select-none" style={{ color: "#a49d90" }}>
+              <input type="checkbox" checked={dontShowBizIntro} onChange={(e) => setDontShowBizIntro(e.target.checked)} style={{ accentColor: "#d9a534" }} />
               Больше не показывать
             </label>
           </div>
