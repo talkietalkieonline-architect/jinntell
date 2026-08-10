@@ -499,9 +499,9 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
               <div className="text-2xl font-bold" style={{ color: "#e0b34a" }}>JinnTell</div>
               <div className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "#8f887b" }}>Джинны подскажут</div>
             </div>
-            <h2 className="text-lg font-semibold mb-2 text-center" style={{ color: "#f2ede3" }}>Привет! 👋</h2>
+            <h2 className="text-lg font-semibold mb-2 text-center" style={{ color: "#f2ede3" }}>Привет! Вы на JinnTell 👋</h2>
             <p className="text-sm leading-relaxed text-center mb-5" style={{ color: "#c3bdb0" }}>
-              Новый способ общаться с информацией и всей сетью — голосом и текстом. Личный ИИ-помощник понимает вас с полуслова, сам зовёт нужных специалистов и приносит готовый ответ. Никаких лишних приложений — просто спросите.
+              Здесь поиск превращается в разговор. Просто скажите, что нужно, — а ваш личный ИИ-помощник поймёт с полуслова: сам позовёт нужных джиннов-специалистов, соберёт ответ и покажет результат прямо на экране. Ни вкладок, ни форм, ни десятка приложений — только вы и живой диалог с сетью.
             </p>
             <button onClick={dismissIntro} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90 mb-3" style={{ background: "#d9a534", color: "#161311" }}>
               Зарегистрироваться
