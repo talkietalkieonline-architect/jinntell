@@ -91,6 +91,8 @@ export default function SettingsModal({
   const [trDirect, setTrDirect] = useState(50);
   const [trFormal, setTrFormal] = useState(40);
   const [trExpr, setTrExpr] = useState(30);        // раскрепощённость (насколько «в образе»)
+  const [trFlirt, setTrFlirt] = useState(0);       // флирт / обаяние
+  const [trEmotion, setTrEmotion] = useState(50);  // эмоциональность
   const [trCharacter, setTrCharacter] = useState(""); // образ помощника (напр. «Санта», «пират»)
   const [trInit, setTrInit] = useState("reactive");
   const [wakeEnabled, setWakeEnabled] = useState(
@@ -161,7 +163,7 @@ const _av = user.assistant_voice || "ermil";
       setAssistantVoice(_av);
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
       setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
-      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); if (_t.humor_level != null) setTrHumorLvl(_t.humor_level); if (_t.warmth != null) setTrWarmth(_t.warmth); if (_t.directness != null) setTrDirect(_t.directness); if (_t.formality != null) setTrFormal(_t.formality); if (_t.expressiveness != null) setTrExpr(_t.expressiveness); setTrCharacter(_t.character || ""); } catch { /* noop */ } setTrInit(user.assistant_initiative || "reactive");
+      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); if (_t.humor_level != null) setTrHumorLvl(_t.humor_level); if (_t.warmth != null) setTrWarmth(_t.warmth); if (_t.directness != null) setTrDirect(_t.directness); if (_t.formality != null) setTrFormal(_t.formality); if (_t.expressiveness != null) setTrExpr(_t.expressiveness); if (_t.flirt != null) setTrFlirt(_t.flirt); if (_t.emotionality != null) setTrEmotion(_t.emotionality); setTrCharacter(_t.character || ""); } catch { /* noop */ } setTrInit(user.assistant_initiative || "reactive");
       setCustomBg(user.custom_bg_url || "");
       setAvatarFrame(user.avatar_frame || "");
     }
@@ -264,7 +266,7 @@ const _av = user.assistant_voice || "ermil";
         assistant_name: assistantName || "Джим",
         assistant_gender: assistantGender,
         assistant_voice: assistantVoice,
-        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji, humor_level: trHumorLvl, warmth: trWarmth, directness: trDirect, formality: trFormal, expressiveness: trExpr, character: trCharacter.trim() || undefined }),
+        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji, humor_level: trHumorLvl, warmth: trWarmth, directness: trDirect, formality: trFormal, expressiveness: trExpr, flirt: trFlirt, emotionality: trEmotion, character: trCharacter.trim() || undefined }),
         assistant_initiative: trInit || undefined,
         assistant_age: assistantAge ? parseInt(assistantAge) : undefined,
       } as Partial<UserProfile>);
@@ -662,7 +664,7 @@ const _av = user.assistant_voice || "ermil";
               {/* Характер (тонкая настройка, Interstellar) */}
               <div>
                 <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Характер помощника</label>
-                {[{ k: "humor", label: "Юмор", v: trHumorLvl, set: setTrHumorLvl }, { k: "warmth", label: "Теплота", v: trWarmth, set: setTrWarmth }, { k: "direct", label: "Прямота", v: trDirect, set: setTrDirect }, { k: "formal", label: "Формальность", v: trFormal, set: setTrFormal }, { k: "expr", label: "Раскрепощённость", v: trExpr, set: setTrExpr }].map((sl) => (
+                {[{ k: "humor", label: "Юмор", v: trHumorLvl, set: setTrHumorLvl }, { k: "warmth", label: "Теплота", v: trWarmth, set: setTrWarmth }, { k: "direct", label: "Прямота", v: trDirect, set: setTrDirect }, { k: "formal", label: "Формальность", v: trFormal, set: setTrFormal }, { k: "expr", label: "Раскрепощённость", v: trExpr, set: setTrExpr }, { k: "emotion", label: "Эмоциональность", v: trEmotion, set: setTrEmotion }, { k: "flirt", label: "Флирт", v: trFlirt, set: setTrFlirt }].map((sl) => (
                   <div key={sl.k} className="mb-2">
                     <div className="flex justify-between text-[11px] mb-0.5" style={{ color: "var(--text-muted)" }}><span>{sl.label}</span><span>{sl.v}</span></div>
                     <input type="range" min="0" max="100" value={sl.v} onChange={(e) => sl.set(Number(e.target.value))} className="w-full" style={{ accentColor: "var(--accent)" }} />
