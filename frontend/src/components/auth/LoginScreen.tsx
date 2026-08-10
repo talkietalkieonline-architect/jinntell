@@ -519,11 +519,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
         <div onClick={closeIntro} className="fixed inset-0 flex items-center justify-center p-6 animate-fade-in" style={{ zIndex: 200, background: "rgba(4,6,12,0.74)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
           <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-sm rounded-3xl p-6" style={{ background: "#15151e", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}>
             <button onClick={closeIntro} aria-label="Закрыть" className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-lg" style={{ background: "rgba(255,255,255,0.08)", color: "#c3bdb0" }}>✕</button>
-            <div className="text-center mb-4">
-              <div className="text-2xl font-bold" style={{ color: "#e0b34a" }}>JinnTell</div>
-              <div className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "#8f887b" }}>Джинны подскажут</div>
-            </div>
-            <h2 className="text-lg font-semibold mb-2 text-center" style={{ color: "#f2ede3" }}>Привет! Вы на JinnTell 👋</h2>
+            <h2 className="text-lg font-semibold mb-2 text-center mt-1" style={{ color: "#f2ede3" }}>Привет! Вы на JinnTell 👋</h2>
             <p className="text-sm leading-relaxed text-center mb-5" style={{ color: "#c3bdb0" }}>
               Здесь поиск превращается в разговор. Просто скажите, что нужно, — а ваш личный ИИ-помощник поймёт с полуслова: сам позовёт нужных джиннов-специалистов, соберёт ответ и покажет результат прямо на экране. Ни вкладок, ни форм, ни десятка приложений — только вы и живой диалог с сетью.
             </p>
@@ -548,11 +544,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
         <div onClick={dismissBizIntro} className="fixed inset-0 flex items-center justify-center p-6 animate-fade-in" style={{ zIndex: 200, background: "rgba(4,6,12,0.74)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
           <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-sm rounded-3xl p-6" style={{ background: "#15151e", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}>
             <button onClick={dismissBizIntro} aria-label="Закрыть" className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-lg" style={{ background: "rgba(255,255,255,0.08)", color: "#c3bdb0" }}>✕</button>
-            <div className="text-center mb-4">
-              <div className="text-2xl font-bold" style={{ color: "#e0b34a" }}>JinnTell</div>
-              <div className="text-[11px] uppercase tracking-[0.3em]" style={{ color: "#8f887b" }}>для бизнеса</div>
-            </div>
-            <h2 className="text-lg font-semibold mb-2 text-center" style={{ color: "#f2ede3" }}>Ваш ИИ-джинн работает 24/7 🏢</h2>
+            <h2 className="text-lg font-semibold mb-2 text-center mt-1" style={{ color: "#f2ede3" }}>Ваш ИИ-джинн работает 24/7 🏢</h2>
             <p className="text-sm leading-relaxed text-center mb-5" style={{ color: "#c3bdb0" }}>
               Дайте компании собственного джинна. Он знает ваши товары, цены и документы, отвечает клиентам голосом и текстом, ведёт переговоры и доводит до сделки — без выходных и очередей. А кабинет — это новый канал к аудитории: живые диалоги, аналитика переговоров и память о каждом клиенте. Не бот, которого строят месяцами, — представитель бренда в сети с первого дня.
             </p>
