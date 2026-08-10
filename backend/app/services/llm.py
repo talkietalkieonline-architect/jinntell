@@ -264,7 +264,9 @@ async def _call_groq(messages: list, model: str, api_key: str, max_tokens: int =
 
 
 OPENROUTER_FREE_MODELS = [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
     "openai/gpt-oss-120b:free",
     "google/gemma-4-31b-it:free",
     "deepseek/deepseek-v4-flash:free",

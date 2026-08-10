@@ -1324,6 +1324,10 @@ INTEGRATION_KEYS = [
     {"key": "JINA_API_KEY", "label": "Jina — API-ключ"},
     {"key": "TAVILY_API_KEY", "label": "Веб-поиск: Tavily — API-ключ (бесплатный тариф ~1000/мес)"},
     {"key": "BRAVE_API_KEY", "label": "Веб-поиск: Brave Search — API-ключ (альтернатива Tavily)"},
+    # Генерация видео (агрегаторы — один ключ = много моделей)
+    {"key": "HIGGSFIELD_API_KEY", "label": "Генерация видео: Higgsfield — API-ключ (хостит Seedance/Kling/Veo/Hailuo и др., MCP без ключа тоже есть)"},
+    {"key": "FAL_API_KEY", "label": "Генерация видео: fal.ai — API-ключ (мультимодельный, Seedance/Kling/Veo/Wan…)"},
+    {"key": "REPLICATE_API_KEY", "label": "Генерация видео: Replicate — API-ключ (open-source: Wan, LTX, CogVideoX)"},
 ]
 
 EMBEDDING_CONFIG = [
@@ -1331,6 +1335,9 @@ EMBEDDING_CONFIG = [
     {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (зарубежные LLM/эмбеддинги из РФ: OpenRouter, Gemini, Groq, Jina). Формат: http://user:pass@host:port", "options": None},
     {"key": "WEB_SEARCH_PROVIDER", "label": "Провайдер веб-поиска помощника", "options": ["off", "tavily", "brave"]},
     {"key": "STT_PROVIDER", "label": "Распознавание речи (STT): yandex — SpeechKit (тот же ключ), off — выключить", "options": ["yandex", "off"]},
+    # Генерация видео — провайдер и модель (ключи выше; ключи собираем позже)
+    {"key": "VIDEO_GEN_PROVIDER", "label": "Генерация видео: провайдер/агрегатор", "options": ["off", "higgsfield", "fal", "replicate", "runway", "self-host"]},
+    {"key": "VIDEO_GEN_MODEL", "label": "Генерация видео: модель (лидер — Seedance 2.0; open-source для self-host — Wan/LTX)", "options": ["seedance-2", "veo-3.1", "kling-3", "sora", "hailuo", "runway-gen4", "luma", "wan-2.7", "ltx-2.3", "cogvideox"]},
 ]
 
 
