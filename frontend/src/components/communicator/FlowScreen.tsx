@@ -26,11 +26,12 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   const [status, setStatus] = useState<"idle" | "listening" | "speaking">("listening");
   const [caption, setCaption] = useState("");
   const [viewer, setViewer] = useState<number | null>(null);  // индекс медиа в полноэкранном просмотре
-  const [mediaHidden, setMediaHidden] = useState(false);      // принудительно/авто убрано из Потока
+  const [mediaHidden, setMediaHidden] = useState(true);       // старт скрытым: не показываем медиа, что было до открытия Потока
   const [mediaFade, setMediaFade] = useState(false);          // плавное растворение
   const [mediaMenu, setMediaMenu] = useState<{ url: string; type: string } | null>(null);  // долгое нажатие
   const mediaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaSigRef = useRef<string>("");
+  const mediaMountRef = useRef(false);
   const mediaLpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaLpFiredRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -61,7 +62,8 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         else interim += r[0].transcript;
       }
 
-      // ── BARGE-IN: помощник ГОВОРИТ — можно перебить по имени / «стоп» / продолжив речь ──
+      // ── BARGE-IN: помощник ГОВОРИТ — перебить можно ТОЛЬКО по имени или «стоп» ──
+      // (триггер «продолжил речь» УБРАН: из-за эха микрофон слышал собственный TTS и помощник продолжал сам с собой)
       if (speakingRef.current) {
         const heard = (newFinal + " " + interim).trim();
         if (!heard) return;
@@ -69,10 +71,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const name = (assistantNameRef.current || "").toLowerCase().trim();
         const hasName = !!name && low.includes(name);
         const hasStop = /(^|\s)(стоп|хватит|подожди|замолчи|отмена|тихо)(\s|$)/.test(low);
-        const isEcho = echoOverlap(low, (spokenRef.current || "")) > 0.5; // помощник слышит себя
-        // «продолжил говорить»: содержательная фраза, не эхо (>=2 слов)
-        const userSpeech = !isEcho && newFinal.trim().split(/\s+/).filter(Boolean).length >= 2;
-        if (hasName || hasStop || userSpeech) {
+        if (hasName || hasStop) {
           try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп озвучки
           speakingRef.current = false;
           setStatus("listening");
@@ -94,7 +93,8 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       sendTimerRef.current = setTimeout(() => {
         const phrase = finalRef.current.trim();
         finalRef.current = "";
-        if (phrase && !speakingRef.current) { setCaption(""); onSendRef.current(phrase); }
+        // не отправляем, если это эхо только что озвученного ответа (микрофон услышал сам TTS)
+        if (phrase && !speakingRef.current && echoOverlap(phrase.toLowerCase(), (spokenRef.current || "")) <= 0.5) { setCaption(""); onSendRef.current(phrase); }
       }, 900);
     };
     rec.onend = () => { try { rec.start(); } catch { /* уже запущено */ } };
@@ -122,7 +122,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         if (cancelled) { speakingRef.current = false; return; }
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          const done = () => { setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 600); };
+          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1200); };
           a.onended = done;
           a.onerror = done;
           await a.play();
@@ -165,7 +165,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const url = await ttsBlobUrl(text, voiceId || "ermil");
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          const done = () => { setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 600); };
+          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1200); };
           a.onended = done; a.onerror = done;
           await a.play();
         } else { setStatus("listening"); speakingRef.current = false; }
@@ -192,6 +192,8 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   // Медиа в Потоке — эфемерное: показать при новом, само раствориться через 10с (или замениться следующим)
   const mediaSig = (mediaList && mediaList.length) ? (mediaList[mediaList.length - 1].url + ":" + mediaList.length) : "";
   useEffect(() => {
+    // Первый прогон (открытие Потока): запоминаем стартовое состояние и НЕ показываем — картинка из истории не должна висеть
+    if (!mediaMountRef.current) { mediaMountRef.current = true; mediaSigRef.current = mediaSig; return; }
     if (!mediaSig) return;
     if (mediaSig === mediaSigRef.current) return;  // не новое — не перезапускаем
     mediaSigRef.current = mediaSig;
