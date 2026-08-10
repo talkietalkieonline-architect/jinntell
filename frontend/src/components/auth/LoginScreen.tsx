@@ -44,6 +44,14 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
   const [compact, setCompact] = useState(false);  // «запомненный номер»: показываем только поле пароля
   const [bizLogin, setBizLogin] = useState("");
   const [bizPassword, setBizPassword] = useState("");
+  // Приветственная плашка перед регистрацией (с галочкой «больше не показывать»)
+  const [showIntro, setShowIntro] = useState(false);
+  const [dontShowIntro, setDontShowIntro] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem("jinntell_intro_hidden") !== "1") setShowIntro(true); } catch { /* noop */ } }, []);
+  const dismissIntro = () => {
+    if (dontShowIntro) { try { localStorage.setItem("jinntell_intro_hidden", "1"); } catch { /* noop */ } }
+    setAccountMode("user"); setStep("register"); setError(""); setShowIntro(false);
+  };
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -318,6 +326,25 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
           </span>
         </div>
 
+        {showIntro && (
+          <div className="flex flex-col gap-4 mb-2 animate-fade-in">
+            <div className="rounded-2xl p-5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <h2 className="text-lg font-semibold mb-2" style={{ color: "var(--text-primary)" }}>Привет! Это JinnTell 👋</h2>
+              <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                Новый способ общаться с информацией и всей сетью — голосом и текстом. Личный ИИ-помощник понимает вас с полуслова, сам зовёт нужных специалистов и приносит готовый ответ. Никаких лишних приложений — просто спросите.
+              </p>
+            </div>
+            <button onClick={dismissIntro} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+              Зарегистрироваться
+            </button>
+            <label className="flex items-center gap-2 justify-center text-xs cursor-pointer select-none" style={{ color: "var(--text-muted)" }}>
+              <input type="checkbox" checked={dontShowIntro} onChange={(e) => setDontShowIntro(e.target.checked)} />
+              Больше не показывать
+            </label>
+          </div>
+        )}
+
+        {!showIntro && (<>
         {/* Переключатель Пользователь / Бизнес */}
         <div className="flex gap-1 mb-5 p-1 rounded-xl" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
           {([{ id: "user", label: "Пользователь" }, { id: "business", label: "Бизнес" }] as const).map((m) => (
@@ -481,6 +508,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             </button>
           </div>
         )}
+        </>)}
       </div>
     </div>
   );
