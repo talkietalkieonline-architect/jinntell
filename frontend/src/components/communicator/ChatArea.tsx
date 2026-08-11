@@ -364,12 +364,12 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
   return (
     <>
       <div
-        className="rounded-2xl px-3.5 py-2 leading-relaxed select-text"
+        className="rounded-2xl px-3.5 py-2.5 leading-relaxed select-text whitespace-pre-wrap break-words"
         style={{
           background: userSide ? "var(--bubble-user)" : "var(--bubble-agent)",
           border: "1px solid var(--bubble-border)",
           color: "var(--text-primary)",
-          fontSize: "0.8125rem",
+          fontSize: "0.875rem",
           opacity: msg.context ? 0.7 : 1,
           borderBottomLeftRadius: userSide ? "6px" : undefined,
           borderBottomRightRadius: !userSide ? "6px" : undefined,
