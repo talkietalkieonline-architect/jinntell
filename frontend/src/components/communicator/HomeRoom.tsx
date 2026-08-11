@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 import { FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
@@ -32,12 +32,13 @@ function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, o
 }) {
   const src = photo ? (photo.startsWith("http") || photo.startsWith("data:") || photo.startsWith("blob:") ? photo : mediaUrl(photo)) : null;
   const d = small ? 44 : 56;
+  const lpFiredRef = useRef(false);
   let lp: ReturnType<typeof setTimeout> | null = null;
   return (
     <button
-      onClick={onClick}
+      onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } onClick?.(); }}
       onContextMenu={(e) => { if (onLongPress) { e.preventDefault(); onLongPress(); } }}
-      onTouchStart={() => { if (onLongPress) lp = setTimeout(onLongPress, 550); }}
+      onTouchStart={() => { if (onLongPress) { lpFiredRef.current = false; lp = setTimeout(() => { lpFiredRef.current = true; onLongPress(); }, 550); } }}
       onTouchEnd={() => { if (lp) clearTimeout(lp); }}
       onTouchMove={() => { if (lp) clearTimeout(lp); }}
       className="flex flex-col items-center gap-1 shrink-0 transition-transform hover:scale-105"
