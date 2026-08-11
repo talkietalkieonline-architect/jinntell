@@ -2,6 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
+import { FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
 
 interface Props {
   topPad: number;
@@ -25,8 +26,8 @@ interface Props {
 }
 
 // Кружок (джинн/человек/коллекция): аватар + подпись; варианты — закреплён, платный, малый, онлайн, счётчик
-function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, online, star, onClick, onLongPress }: {
-  label: string; sub?: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; star?: boolean; onClick?: () => void; onLongPress?: () => void;
+function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, online, star, frame, onClick, onLongPress }: {
+  label: string; sub?: string; photo?: string | null; color?: string; emoji?: string; pinned?: boolean; badge?: number; paid?: boolean; small?: boolean; online?: boolean; star?: boolean; frame?: string | null; onClick?: () => void; onLongPress?: () => void;
 }) {
   const src = photo ? (photo.startsWith("http") || photo.startsWith("data:") || photo.startsWith("blob:") ? photo : mediaUrl(photo)) : null;
   const d = small ? 44 : 56;
@@ -43,7 +44,7 @@ function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, o
     >
       <div className="relative" style={{ width: d, height: d }}>
         {/* сам круг — только он обрезает картинку; бейджи ниже вынесены НАРУЖУ (не обрезаются) */}
-        <div className="w-full h-full rounded-full flex items-center justify-center overflow-hidden" style={{ border: (badge && badge > 0) ? "2px solid var(--accent)" : pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)", boxShadow: (badge && badge > 0) ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)" : undefined }}>
+        <div className="w-full h-full rounded-full flex items-center justify-center overflow-hidden" style={{ border: (badge && badge > 0) ? "2px solid var(--accent)" : pinned ? "2px solid var(--accent)" : `2px solid ${color || "var(--bg-glass-border)"}`, background: color ? `${color}22` : "var(--bg-glass)", boxShadow: [(badge && badge > 0) ? "0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent)" : "", frameRing(frame) || ""].filter(Boolean).join(", ") || undefined }}>
           {src ? <img src={src} alt="" className="w-full h-full object-cover" /> : <span style={{ fontSize: small ? 16 : 20 }}>{emoji || "💬"}</span>}
         </div>
         {!!badge && badge > 0 && <span className="absolute inset-0 rounded-full animate-ping pointer-events-none" style={{ boxShadow: "0 0 0 2px var(--accent)", opacity: 0.35 }} />}
@@ -51,6 +52,7 @@ function Circle({ label, sub, photo, color, emoji, pinned, badge, paid, small, o
         {paid && <span className="absolute -bottom-0.5 -right-0.5 w-[16px] h-[16px] rounded-full flex items-center justify-center text-[9px]" style={{ background: "#e8b84a", color: "#1a1400", zIndex: 2 }}>₽</span>}
         {star && <span className="absolute -top-1 -left-1 text-[11px]" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.5))", zIndex: 2 }}>⭐</span>}
         {online && <span className="absolute bottom-0 left-0 w-[11px] h-[11px] rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)", zIndex: 2 }} />}
+        <FrameDeco frame={frame} size={d} />
       </div>
       <span className="text-[10px] leading-tight truncate w-full text-center" style={{ color: "var(--text-secondary)" }}>{label}</span>
       {sub && <span className="text-[9px] leading-tight truncate w-full text-center -mt-0.5" style={{ color: "var(--text-muted)" }}>{sub}</span>}
@@ -191,7 +193,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => setMenuFor({ kind: "agent", id: a.id, name: a.name })} />
   );
   const contactCircle = (c: ContactOut) => (
-    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => setMenuFor({ kind: "contact", id: c.id, name: c.display_name })} />
+    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} frame={c.avatar_frame} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => setMenuFor({ kind: "contact", id: c.id, name: c.display_name })} />
   );
   const guestAgentCircle = (a: AgentOut) => (
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={async () => { try { await addFavoriteAgent(a.id); window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }} />
@@ -221,7 +223,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
   return (
     <div className="absolute inset-0 overflow-y-auto flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: `calc(${bottomPad + 12}px + env(safe-area-inset-bottom, 0px) + 16px)` }}>
-      <div className="w-full max-w-[620px] px-4 flex flex-col gap-3.5">
+      <div className="w-full max-w-[620px] px-5 flex flex-col gap-3.5">
 
         {/* ═══════════ ВЕРХ: три «новостные» полосы (просмотрел → исчезает) ═══════════ */}
         {newMsgs.length > 0 && (<div>

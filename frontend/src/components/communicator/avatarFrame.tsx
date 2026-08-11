@@ -35,7 +35,9 @@ export function FrameDeco({ frame, size }: { frame?: string | null; size: number
   return (
     <>
       {f.emojis.slice(0, 3).map((e, i) => (
-        <span key={i} style={{ position: "absolute", fontSize: fs, lineHeight: 1, pointerEvents: "none", zIndex: 3, ...pos[i] }}>{e}</span>
+        <span key={i} style={{ position: "absolute", pointerEvents: "none", zIndex: 3, ...pos[i] }}>
+          <span className="frame-deco-item" style={{ display: "inline-block", fontSize: fs, lineHeight: 1, animationDelay: `${i * 0.5}s` }}>{e}</span>
+        </span>
       ))}
     </>
   );

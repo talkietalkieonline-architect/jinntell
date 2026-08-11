@@ -304,8 +304,8 @@ const _av = user.assistant_voice || "ermil";
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Заголовок */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Заголовок — липкий, чтобы ✕ всегда был виден при прокрутке */}
+        <div className="sticky top-0 z-10 flex items-center justify-between mb-4 -mx-6 -mt-6 px-6 pt-6 pb-3" style={{ background: "var(--panel-bg)" }}>
           <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
             Центр Управления
           </h2>
@@ -460,7 +460,7 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Рамка аватара · видят другие</label>
+                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>🌸 Оформление кружка (анимация) · видят другие</label>
                 <div className="flex flex-wrap gap-2">
                   {AVATAR_FRAMES.map((fr) => (
                     <button key={fr.id || "none"} onClick={() => { setAvatarFrame(fr.id); updateMe({ avatar_frame: fr.id } as Partial<UserProfile>).catch(() => {}); }} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass)", color: avatarFrame === fr.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{fr.label}</button>
@@ -534,7 +534,7 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
-                {saving ? "Сохранение..." : "Сохранить"}
+                {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
             </div>
           </div>
@@ -729,7 +729,7 @@ const _av = user.assistant_voice || "ermil";
               {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
 
               <button onClick={handleSaveAssistant} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
-                {saving ? "Сохранение..." : "Сохранить"}
+                {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
             </div>
           </div>

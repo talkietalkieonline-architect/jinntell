@@ -316,6 +316,13 @@ input::placeholder {
   50% { transform: scaleY(1.7); opacity: 1; }
 }
 
+/* Анимированный декор рамки аватара (идея Маши) — лёгкое покачивание цветочков/сердечек */
+.frame-deco-item { animation: frameFloat 2.8s ease-in-out infinite; will-change: transform; }
+@keyframes frameFloat {
+  0%, 100% { transform: translateY(0) rotate(-7deg) scale(1); }
+  50% { transform: translateY(-2px) rotate(7deg) scale(1.14); }
+}
+
 /* 🧞 Пасхалка «потри лампу» — облачко дыма и джинн из лампы */
 .genie-smoke { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
 .genie-puff {
