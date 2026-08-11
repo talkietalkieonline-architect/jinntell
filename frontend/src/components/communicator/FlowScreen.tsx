@@ -42,6 +42,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   assistantNameRef.current = assistantName;
   // Анти-эхо: пока помощник озвучивает — НЕ слушаем (иначе микрофон слышит TTS и зацикливается)
   const speakingRef = useRef(false);
+  const stopUntilRef = useRef(0);  // до этого времени НЕ озвучивать (после «стоп»/тапа) — чтобы не «дозаговаривать»
   const finalRef = useRef("");
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -70,9 +71,10 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const low = heard.toLowerCase();
         const name = (assistantNameRef.current || "").toLowerCase().trim();
         const hasName = !!name && low.includes(name);
-        const hasStop = /(^|\s)(стоп|хватит|подожди|замолчи|отмена|тихо)(\s|$)/.test(low);
+        const hasStop = /(стоп|стой|хватит|замолч|тихо|отмена)/.test(low);
         if (hasName || hasStop) {
           try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп озвучки
+          stopUntilRef.current = Date.now() + 3500;  // не «дозаговаривать» сразу после стопа
           speakingRef.current = false;
           setStatus("listening");
           finalRef.current = "";
@@ -110,6 +112,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     const text = (lastReply || "").trim();
     if (!text || text === spokenRef.current) return;
     spokenRef.current = text;
+    if (Date.now() < stopUntilRef.current) { setStatus("listening"); return; }  // после «стоп»/тапа — НЕ заговариваем очередную реплику
     setCaption(text);
     setStatus("speaking");
     try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп предыдущего — без наложения
@@ -122,7 +125,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         if (cancelled) { speakingRef.current = false; return; }
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1200); };
+          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1600); };
           a.onended = done;
           a.onerror = done;
           await a.play();
@@ -134,6 +137,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
 
   const interrupt = () => {
     try { audioRef.current?.pause(); } catch { /* noop */ }
+    stopUntilRef.current = Date.now() + 3500;  // тап = стоп: не заговаривать сразу снова
     speakingRef.current = false;
     finalRef.current = "";
     setStatus("listening");
@@ -165,7 +169,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const url = await ttsBlobUrl(text, voiceId || "ermil");
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1200); };
+          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1600); };
           a.onended = done; a.onerror = done;
           await a.play();
         } else { setStatus("listening"); speakingRef.current = false; }
