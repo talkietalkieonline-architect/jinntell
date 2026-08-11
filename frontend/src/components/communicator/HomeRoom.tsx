@@ -66,7 +66,7 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   return (
     <div>
       {title && <div className="text-[11px] uppercase tracking-[0.12em] mb-1.5 px-1 font-semibold" style={{ color: "var(--text-muted)" }}>{title}</div>}
-      <div className="flex gap-2.5 overflow-x-auto pb-1.5 home-strip" style={{ scrollbarWidth: "none" }}>
+      <div className="flex gap-2.5 overflow-x-auto pt-2 pb-1.5 pr-1 home-strip" style={{ scrollbarWidth: "none" }}>
         {children}
         {empty && <span className="text-[11px] self-center px-2" style={{ color: "var(--text-muted)", opacity: 0.6 }}>{empty}</span>}
       </div>
