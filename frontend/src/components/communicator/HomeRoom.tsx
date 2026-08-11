@@ -18,6 +18,7 @@ interface Props {
   onOpenContact?: (c: { id: number; display_name: string; avatar_color?: string | null; avatar_url?: string | null; is_online?: boolean; avatar_frame?: string | null }) => void;
   onOpenChat?: (room: string) => void;
   onOpenActions?: () => void;
+  onOpenSettings?: (section?: string) => void;
   onOpenDigest?: (id: number) => void;
   onOpenInvites?: () => void;
   onCreateJinn?: () => void;
@@ -72,7 +73,7 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   );
 }
 
-export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenDigest, onOpenInvites, onCreateJinn, onOpenFeed, onOpenCity }: Props) {
+export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenSettings, onOpenDigest, onOpenInvites, onCreateJinn, onOpenFeed, onOpenCity }: Props) {
   const [digests, setDigests] = useState<{ id: number; query: string; created_at: string }[]>([]);
   const [allChannels, setAllChannels] = useState<ChannelUnread[]>([]);
   const [favs, setFavs] = useState<AgentOut[]>([]);
@@ -271,7 +272,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {subHead("Помощники", "asst")}
         {!collapsed.has("asst") && (
           <Strip title="">
-            <Circle label={assistantName} sub="помощник" photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} />
+            <Circle label={assistantName} sub="помощник" photo={assistantPhoto} emoji="🧞" pinned onClick={onOpenAssistant} onLongPress={() => onOpenSettings?.("Настройки Помощника")} />
             {personal.map((a) => agentCircle(a))}
           </Strip>
         )}

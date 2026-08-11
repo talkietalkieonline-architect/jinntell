@@ -848,6 +848,7 @@ export default function Home() {
           onOpenFeed={() => setFeedOpen(true)}
           onOpenCity={() => setCityOpen(true)}
           onCreateJinn={async () => { try { const a = await createMyJinn(); if (a) openAgentChat(a.id, { name: a.name, color: a.color }); } catch { setCommandHint("Не удалось создать джинна"); } }}
+          onOpenSettings={(sec) => { setSettingsSection(sec ?? null); setSettingsOpen(true); }}
         />
       ) : (
         <ChatArea
