@@ -37,7 +37,7 @@ export default function RootLayout({
           }
         `}</style>
       </head>
-      <body style={{ background: "#0a0a0a", minHeight: "100vh", minWidth: "100vw" }}>
+      <body style={{ background: "var(--bg-deep, #f6f1e6)", minHeight: "100vh", overflowX: "hidden" }}>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

@@ -29,12 +29,38 @@ const VOICES = [
 
 const SECTIONS = [
   "Настройки пользователя",
+  "Настройка интересов",
+  "Настройки персонажа",
   "Настройки действий",
   "Настройки Помощника",
   "Настройка интерфейса",
 ];
 
-const INTEREST_TOPICS = ["Космос", "Технологии", "Спорт", "Кино", "Музыка", "Игры", "Бизнес", "Здоровье", "Путешествия", "Мода", "Наука", "Авто", "Кулинария", "Искусство", "Финансы", "Психология", "Образование", "Литература", "История", "Природа", "Животные", "Фотография", "Саморазвитие", "Дизайн", "Стартапы", "Дом и уют", "Дети", "Театр", "Языки", "Юмор", "Новости", "Недвижимость"];
+const SECTION_META: Record<string, { icon: string; desc: string }> = {
+  "Настройки пользователя": { icon: "👤", desc: "Профиль, вход, баланс" },
+  "Настройка интересов": { icon: "🎯", desc: "Темы, которые тебе приносить" },
+  "Настройки персонажа": { icon: "🎭", desc: "Ваш представитель в Городе" },
+  "Настройки действий": { icon: "🔔", desc: "Что вам могут показывать джинны" },
+  "Настройки Помощника": { icon: "🧞", desc: "Имя, характер, голос" },
+  "Настройка интерфейса": { icon: "🎨", desc: "Тема, фон, кружки, размер текста" },
+};
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className="relative shrink-0 rounded-full transition-all cursor-pointer"
+      style={{ width: 44, height: 26, background: on ? "var(--accent)" : "var(--bg-glass-border)" }}
+    >
+      <span className="absolute rounded-full transition-all" style={{ top: 3, width: 20, height: 20, background: "#fff", left: on ? 21 : 3, boxShadow: "0 1px 4px rgba(0,0,0,0.25)" }} />
+    </button>
+  );
+}
+
+const INTEREST_TOPICS = ["Космос", "Технологии", "ИИ и агенты", "Наука", "Квантовая физика", "Астрономия", "Биология", "Медицина", "Экология", "Спорт", "Фитнес", "Бег", "Йога", "Автоспорт", "Кино", "Сериалы", "Аниме", "Музыка", "Концерты", "Игры", "Настолки", "Бизнес", "Стартапы", "Маркетинг", "Финансы", "Инвестиции", "Криптовалюты", "Экономика", "Программирование", "Гаджеты", "Дизайн", "Фотография", "Искусство", "Театр", "Литература", "Философия", "История", "Психология", "Саморазвитие", "Образование", "Языки", "Здоровье", "Кулинария", "Рецепты", "Кофе", "Вино", "Путешествия", "Горы и туризм", "Море", "Авто", "Мотоциклы", "Мода", "Красота", "Дом и уют", "Садоводство", "Природа", "Животные", "Дети", "Недвижимость", "Право", "Политика", "Мировые новости", "Локальные события", "Юмор", "Мемы", "Подкасты"];
 
 export default function SettingsModal({
   isOpen,
@@ -296,7 +322,7 @@ const _av = user.assistant_voice || "ermil";
       <div className="absolute inset-0 bg-black/60" />
 
       <div
-        className="relative w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl p-6"
+        className="relative w-full max-w-md sm:max-w-lg lg:max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl p-6"
         style={{
           background: "var(--panel-bg)",
           border: "1px solid var(--panel-border)",
@@ -306,8 +332,8 @@ const _av = user.assistant_voice || "ermil";
       >
         {/* Заголовок — липкий, чтобы ✕ всегда был виден при прокрутке */}
         <div className="sticky top-0 z-10 flex items-center justify-between mb-4 -mx-6 -mt-6 px-6 pt-6 pb-3" style={{ background: "var(--panel-bg)" }}>
-          <h2 className="text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            Центр Управления
+          <h2 className="text-lg font-semibold flex items-center gap-2 min-w-0" style={{ color: "var(--text-primary)" }}>
+            {activeSection ? (<><span className="text-xl">{SECTION_META[activeSection]?.icon}</span><span className="truncate">{activeSection}</span></>) : "Настройки"}
           </h2>
           <button
             onClick={onClose}
@@ -324,20 +350,27 @@ const _av = user.assistant_voice || "ermil";
 
         {/* === ГЛАВНОЕ МЕНЮ === */}
         {activeSection === null && (
-          <div className="flex flex-col gap-1">
-            {SECTIONS.map((section) => (
-              <button
-                key={section}
-                onClick={() => { setActiveSection(section); setError(""); setSaved(false); }}
-                className="flex items-center justify-between px-4 py-3.5 rounded-xl text-left text-sm transition-all"
-                style={{ color: "var(--text-primary)", background: "transparent" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-glass-hover)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                {section}
-                <span style={{ color: "var(--text-muted)" }}>›</span>
-              </button>
-            ))}
+          <div className="flex flex-col gap-2">
+            {SECTIONS.map((section) => {
+              const m = SECTION_META[section];
+              return (
+                <button
+                  key={section}
+                  onClick={() => { setActiveSection(section); setError(""); setSaved(false); }}
+                  className="flex items-center gap-3 px-3 py-3 rounded-2xl text-left transition-all"
+                  style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-glass-hover)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg-glass)")}
+                >
+                  <span className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)" }}>{m?.icon ?? "•"}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium" style={{ color: "var(--text-primary)" }}>{section}</span>
+                    <span className="block text-[11px] mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>{m?.desc}</span>
+                  </span>
+                  <span className="text-lg" style={{ color: "var(--text-muted)" }}>›</span>
+                </button>
+              );
+            })}
 
             <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--bg-glass-border)" }}>
               <button
@@ -361,13 +394,13 @@ const _av = user.assistant_voice || "ermil";
         {/* === ПЕРСОНАЛЬНЫЕ ДАННЫЕ === */}
         {activeSection === "Настройки пользователя" && (
           <div>
-            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               ‹ Назад
             </button>
-            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
 
-            <div className="flex flex-col gap-3">
-              <div className="text-[11px] uppercase tracking-widest font-semibold mb-2" style={{ color: "var(--accent)" }}>Официальные данные</div>
+            <div className="flex flex-col gap-4">
+              <div className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: "var(--accent)" }}>Официальные данные</div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Имя</label>
@@ -423,7 +456,9 @@ const _av = user.assistant_voice || "ermil";
                 <button onClick={handleChangePassword} disabled={pwSaving || !newPw} className="mt-2 w-full py-2 rounded-xl text-[13px] font-medium transition-all hover:opacity-90 disabled:opacity-50" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)", color: "var(--accent)" }}>{pwSaving ? "Сохранение…" : (user?.has_password ? "Сменить пароль" : "Задать пароль")}</button>
               </div>
 
-              <div className="text-[11px] uppercase tracking-widest font-semibold mb-2 mt-3 pt-3" style={{ color: "var(--accent)", borderTop: "1px solid var(--bg-glass-border)" }}>Профиль · ваш образ</div>
+              </div>
+              <div className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: "var(--accent)" }}>Профиль · ваш образ</div>
               <div className="flex flex-col items-center gap-2 mb-1">
                 <div style={{ position: "relative", width: 96, height: 96 }}>
                   <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", boxShadow: frameRing(avatarFrame) }}>
@@ -450,36 +485,8 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Образ · как к вам обращаться</label>
-                <div className="flex gap-2">
-                  {[{ id: "", label: "Не указывать" }, { id: "male", label: "Муж." }, { id: "female", label: "Жен." }, { id: "neutral", label: "Нейтр." }].map((g) => (
-                    <button key={g.id || "none"} onClick={() => setPersonaGender(g.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: personaGender === g.id ? "var(--accent)" : "var(--bg-glass)", color: personaGender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${personaGender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
-                  ))}
-                </div>
-                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Публичный образ — может отличаться от реального пола.</p>
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>🌸 Оформление кружка (анимация) · видят другие</label>
-                <div className="flex flex-wrap gap-2">
-                  {AVATAR_FRAMES.map((fr) => (
-                    <button key={fr.id || "none"} onClick={() => { setAvatarFrame(fr.id); updateMe({ avatar_frame: fr.id } as Partial<UserProfile>).catch(() => {}); }} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass)", color: avatarFrame === fr.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{fr.label}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Статус</label>
                 <textarea value={aboutField} onChange={(e) => setAboutField(e.target.value)} placeholder="Ваш статус — коротко о себе или настроение" rows={3} className="w-full px-3 py-2.5 rounded-xl outline-none text-sm resize-none" style={inputStyle} />
-              </div>
-
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Интересы и темы контента</label>
-                <div className="flex flex-wrap gap-2">
-                  {INTEREST_TOPICS.map((t) => { const on = interests.includes(t); return (
-                    <button key={t} onClick={() => setInterests((p) => (on ? p.filter((x) => x !== t) : [...p, t]))} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: on ? "var(--accent)" : "var(--bg-glass)", color: on ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${on ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{t}</button>
-                  ); })}
-                </div>
               </div>
 
               <div>
@@ -513,9 +520,65 @@ const _av = user.assistant_voice || "ermil";
                 <button onClick={async () => { if (confirm("Очистить всё, что помощник запомнил о вас?")) { try { await clearAssistantMemory(); alert("Память помощника очищена"); } catch { /* noop */ } } }} className="mt-2 text-[12px] transition-opacity hover:opacity-70" style={{ color: "var(--text-muted)" }}>🧠 Очистить память помощника</button>
               </div>
 
+              </div>
+              <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
+                {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* === НАСТРОЙКА ИНТЕРЕСОВ === */}
+        {activeSection === "Настройка интересов" && (
+          <div className="animate-fade-in flex flex-col gap-5">
+            <p className="text-[12px]" style={{ color: "var(--text-muted)" }}>Отметь, что тебе интересно — помощник будет приносить релевантные новости, статьи и предложения. Список можно менять в любой момент; помощник и сам добавляет темы, когда замечает их в общении и по твоему чтению.</p>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Мои интересы</label>
+              <div className="flex flex-wrap gap-2">
+                {INTEREST_TOPICS.map((t) => { const on = interests.includes(t); return (
+                  <button key={t} onClick={() => setInterests((p) => (on ? p.filter((x) => x !== t) : [...p, t]))} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: on ? "var(--accent)" : "var(--bg-glass)", color: on ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${on ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{t}</button>
+                ); })}
+              </div>
+            </div>
+            {(() => { let auto: string[] = []; try { const raw = (user as unknown as { assistant_interests?: string })?.assistant_interests; const arr = raw ? JSON.parse(raw) : []; auto = (Array.isArray(arr) ? arr : []).map((x: unknown) => (typeof x === "string" ? x : (x as { topic?: string })?.topic)).filter((x): x is string => !!x); } catch { /* noop */ } auto = auto.filter((t) => !interests.includes(t)); return auto.length > 0 ? (
+              <div>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>✨ Замечено помощником</label>
+                <div className="flex flex-wrap gap-2">
+                  {auto.map((t) => (
+                    <button key={t} onClick={() => setInterests((p) => [...p, t])} title="Помощник заметил этот интерес — тап, чтобы закрепить" className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)", border: "1px dashed var(--accent)" }}>{t} +</button>
+                  ))}
+                </div>
+                <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>Помощник подметил это в общении. Тапни, чтобы закрепить в своих интересах.</p>
+              </div>
+            ) : null; })()}
+            {error && <p className="text-xs text-center" style={{ color: "var(--danger)" }}>{error}</p>}
+            {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
+            <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
+              {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить интересы"}
+            </button>
+          </div>
+        )}
+
+        {/* === НАСТРОЙКИ ПЕРСОНАЖА === */}
+        {activeSection === "Настройки персонажа" && (
+          <div className="animate-fade-in">
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>‹ Назад</button>
+            <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>Персонаж представляет вас в Городе. Помощник — служит вам, персонаж — представляет вас.</p>
+
+            <div className="flex flex-col gap-4">
+              {/* Образ персонажа (перенесено из настроек пользователя) */}
+              <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--accent)" }}>Образ · как обращаться</label>
+                <div className="flex gap-2">
+                  {[{ id: "", label: "Не указывать" }, { id: "male", label: "Муж." }, { id: "female", label: "Жен." }, { id: "neutral", label: "Нейтр." }].map((g) => (
+                    <button key={g.id || "none"} onClick={() => { setPersonaGender(g.id); updateMe({ persona_gender: g.id } as Partial<UserProfile>).then(refreshUser).catch(() => {}); }} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: personaGender === g.id ? "var(--accent)" : "var(--bg-glass)", color: personaGender === g.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${personaGender === g.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{g.label}</button>
+                  ))}
+                </div>
+                <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>Публичный образ персонажа — может отличаться от реального пола. Сохраняется сразу.</p>
+              </div>
               {/* Мой джинн в Городе */}
-              <div className="pt-4" style={{ borderTop: "1px solid var(--bg-glass-border)" }}>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Мой джинн в Городе</label>
+              <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--accent)" }}>Мой джинн в Городе</label>
                 {!myJinn ? (
                   <div>
                     <p className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>Ваш представитель в Городе — с ним смогут познакомиться и написать другие.</p>
@@ -532,10 +595,6 @@ const _av = user.assistant_voice || "ermil";
                   </div>
                 )}
               </div>
-
-              <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
-                {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить"}
-              </button>
             </div>
           </div>
         )}
@@ -543,122 +602,101 @@ const _av = user.assistant_voice || "ermil";
         {/* === НАСТРОЙКИ ПОМОЩНИКА === */}
         {activeSection === "Настройки Помощника" && (
           <div>
-            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               ‹ Назад
             </button>
-            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
 
             <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
               Настройте вашего персонального помощника — он будет общаться с вами в стиле, который вам подходит.
             </p>
 
             <div className="flex flex-col gap-4">
-              {/* Фото помощника */}
-              <div className="flex flex-col items-center gap-2 mb-4">
-                <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                  {assistantPhoto ? <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="Помощник" className="w-full h-full object-cover" /> : <span className="text-3xl opacity-40">🧞</span>}
-                </div>
-                <div className="flex gap-2">
-                  <label className="px-3 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
-                    {photoUploading ? "Загрузка..." : "Загрузить фото"}
-                    <input type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }} />
-                  </label>
-                  {assistantPhoto && <button onClick={handlePhotoDelete} className="px-3 py-1.5 rounded-lg text-[11px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>Удалить</button>}
-                </div>
+              <div className="flex flex-col gap-4 rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              {/* Аватар помощника — строка-карточка */}
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                  {assistantPhoto ? <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" /> : <span className="text-lg opacity-50">🧞</span>}
+                </span>
+                <span className="flex-1 min-w-0 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Аватар помощника</span>
+                <label className="text-[12px] font-semibold cursor-pointer shrink-0" style={{ color: "var(--accent)" }}>
+                  {photoUploading ? "Загрузка…" : (assistantPhoto ? "Сменить ›" : "Загрузить ›")}
+                  <input type="file" accept="image/*" className="hidden" disabled={photoUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value = ""; }} />
+                </label>
+                {assistantPhoto && <button onClick={handlePhotoDelete} className="text-[13px] shrink-0" style={{ color: "var(--text-muted)" }}>✕</button>}
               </div>
 
-              {/* Имя помощника */}
-              <div>
+              {/* Имя помощника — поле-карточка */}
+              <div className="rounded-2xl px-4 py-3.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Имя помощника</label>
-                <input
-                  type="text" value={assistantName} onChange={(e) => setAssistantName(e.target.value)}
-                  placeholder="Джим"
-                  className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle}
-                />
+                <input type="text" value={assistantName} onChange={(e) => setAssistantName(e.target.value)} placeholder="Джим" className="w-full px-3 py-2 rounded-xl outline-none text-sm" style={inputStyle} />
                 <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Так вы будете обращаться к помощнику</p>
               </div>
 
-              {/* Активация по имени (wake-word) */}
-              <div>
-                <label className="flex items-center justify-between cursor-pointer gap-3">
-                  <span className="flex flex-col">
-                    <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Активация по имени</span>
-                    <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Произнесите «{assistantName || "Джим"}», чтобы помощник начал слушать</span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={wakeEnabled}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setWakeEnabled(on);
-                      localStorage.setItem("jinntell_wake_enabled", on ? "1" : "0");
-                      window.dispatchEvent(new Event("jinntell_wake_change"));
-                    }}
-                    className="w-5 h-5 shrink-0 cursor-pointer"
-                    style={{ accentColor: "var(--accent)" }}
-                  />
-                </label>
+              {/* Активация по имени — строка-карточка */}
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>👂</span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Активация по имени</span>
+                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Скажи «{assistantName || "Джим"}» — начнёт слушать</span>
+                </span>
+                <Toggle on={wakeEnabled} onToggle={() => {
+                  const on = !wakeEnabled;
+                  setWakeEnabled(on);
+                  localStorage.setItem("jinntell_wake_enabled", on ? "1" : "0");
+                  window.dispatchEvent(new Event("jinntell_wake_change"));
+                }} />
               </div>
 
 
-              {/* Пол помощника */}
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Пол помощника</label>
-                <div className="grid grid-cols-3 gap-2">
+              {/* Пол помощника — строка-карточка (как в макете) */}
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>⚧</span>
+                <span className="flex-1 min-w-0 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Пол помощника</span>
+                <div className="inline-flex rounded-lg p-0.5 shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
                   {GENDERS.map((g) => (
-                    <button
-                      key={g.id}
-                      onClick={() => {
-                        setAssistantGender(g.id);
-                        // Авто-переключение голоса при смене пола
-                        if (g.id === "male") setAssistantVoice("ermil");
-                        else if (g.id === "female") setAssistantVoice("alena");
-                        else setAssistantVoice("ermil");
-                      }}
-                      className="flex flex-col items-center gap-1 px-3 py-3 rounded-xl text-sm transition-all"
-                      style={{
-                        background: assistantGender === g.id ? "var(--bg-glass-hover)" : "var(--bg-glass)",
-                        border: assistantGender === g.id ? "1px solid var(--accent)" : "1px solid var(--bg-glass-border)",
-                        color: assistantGender === g.id ? "var(--accent)" : "var(--text-primary)",
-                      }}
-                    >
-                      <span className="text-lg">{g.icon}</span>
-                      <span className="text-xs">{g.name}</span>
-                    </button>
+                    <button key={g.id} onClick={() => { setAssistantGender(g.id); if (g.id === "male") setAssistantVoice("ermil"); else if (g.id === "female") setAssistantVoice("alena"); else setAssistantVoice("ermil"); }}
+                      className="px-2.5 py-1 rounded-md text-[12px] font-medium transition-all"
+                      style={{ background: assistantGender === g.id ? "var(--accent)" : "transparent", color: assistantGender === g.id ? "#fff" : "var(--text-secondary)" }}>{g.name}</button>
                   ))}
                 </div>
               </div>
 
-              {/* Возраст помощника */}
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Возраст помощника</label>
-                <input
-                  type="number" value={assistantAge} onChange={(e) => setAssistantAge(e.target.value)}
-                  placeholder="25" min="10" max="120"
-                  className="w-full px-3 py-2.5 rounded-xl outline-none text-sm" style={inputStyle}
-                />
-                <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Возраст влияет на манеру общения помощника</p>
+              {/* Возраст помощника — строка-карточка */}
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🎂</span>
+                <span className="flex-1 min-w-0 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Возраст помощника</span>
+                <input type="number" value={assistantAge} onChange={(e) => setAssistantAge(e.target.value)} placeholder="25" min="10" max="120" className="w-16 text-right px-2 py-1 rounded-lg outline-none text-sm shrink-0" style={inputStyle} />
               </div>
 
-              {/* Характеристики общения (п.8) */}
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Характеристики общения</label>
-                <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>Тон</p>
-                <div className="flex gap-2 mb-3">
+              {/* Характеристики общения — строки-карточки */}
+              <div className="text-[11px] uppercase tracking-wider mt-1 mb-0.5 px-1" style={{ color: "var(--accent)" }}>Характеристики общения</div>
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🗣</span>
+                <span className="text-sm font-medium shrink-0" style={{ color: "var(--text-primary)" }}>Тон</span>
+                <div className="inline-flex rounded-lg p-0.5 ml-auto shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
                   {[{ id: "friendly", label: "Дружелюбный" }, { id: "neutral", label: "Нейтральный" }, { id: "business", label: "Деловой" }].map((o) => (
-                    <button key={o.id} onClick={() => setTrTone(trTone === o.id ? "" : o.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trTone === o.id ? "var(--accent)" : "var(--bg-glass)", color: trTone === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trTone === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                    <button key={o.id} onClick={() => setTrTone(trTone === o.id ? "" : o.id)} className="px-2 py-1 rounded-md text-[11px] font-medium transition-all" style={{ background: trTone === o.id ? "var(--accent)" : "transparent", color: trTone === o.id ? "#fff" : "var(--text-secondary)" }}>{o.label}</button>
                   ))}
                 </div>
-                <p className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>Длина ответов</p>
-                <div className="flex gap-2 mb-3">
+              </div>
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>📏</span>
+                <span className="text-sm font-medium shrink-0" style={{ color: "var(--text-primary)" }}>Длина ответов</span>
+                <div className="inline-flex rounded-lg p-0.5 ml-auto shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
                   {[{ id: "short", label: "Коротко" }, { id: "medium", label: "Средне" }, { id: "long", label: "Подробно" }].map((o) => (
-                    <button key={o.id} onClick={() => setTrLength(trLength === o.id ? "" : o.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trLength === o.id ? "var(--accent)" : "var(--bg-glass)", color: trLength === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trLength === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                    <button key={o.id} onClick={() => setTrLength(trLength === o.id ? "" : o.id)} className="px-2 py-1 rounded-md text-[11px] font-medium transition-all" style={{ background: trLength === o.id ? "var(--accent)" : "transparent", color: trLength === o.id ? "#fff" : "var(--text-secondary)" }}>{o.label}</button>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => setTrHumor(!trHumor)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trHumor ? "var(--accent)" : "var(--bg-glass)", color: trHumor ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trHumor ? "var(--accent)" : "var(--bg-glass-border)"}` }}>😄 С юмором</button>
-                  <button onClick={() => setTrEmoji(!trEmoji)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trEmoji ? "var(--accent)" : "var(--bg-glass)", color: trEmoji ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trEmoji ? "var(--accent)" : "var(--bg-glass-border)"}` }}>✨ Эмодзи</button>
-                </div>
+              </div>
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>😄</span>
+                <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>С юмором</span>
+                <Toggle on={trHumor} onToggle={() => setTrHumor(!trHumor)} />
+              </div>
+              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>✨</span>
+                <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Эмодзи</span>
+                <Toggle on={trEmoji} onToggle={() => setTrEmoji(!trEmoji)} />
               </div>
 
               {/* Характер (тонкая настройка, Interstellar) */}
@@ -685,12 +723,15 @@ const _av = user.assistant_voice || "ermil";
                 </div>
               </div>
 
-              {/* Инициатива в разговоре */}
-              <div>
-                <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Инициатива в разговоре</label>
-                <div className="flex gap-2">
+              {/* Инициатива в разговоре — карточка (сегмент на всю ширину) */}
+              <div className="rounded-2xl px-4 py-3.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>💬</span>
+                  <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Инициатива в разговоре</span>
+                </div>
+                <div className="flex gap-1.5">
                   {[{ id: "proactive", label: "Сам начинает" }, { id: "reactive", label: "По ходу" }, { id: "command", label: "По команде" }].map((o) => (
-                    <button key={o.id} onClick={() => setTrInit(o.id)} className="flex-1 py-2 rounded-xl text-[12px] font-medium transition-all" style={{ background: trInit === o.id ? "var(--accent)" : "var(--bg-glass)", color: trInit === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${trInit === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+                    <button key={o.id} onClick={() => setTrInit(o.id)} className="flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-all" style={{ background: trInit === o.id ? "var(--accent)" : "var(--bg-glass)", color: trInit === o.id ? "#fff" : "var(--text-secondary)", border: `1px solid ${trInit === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
                   ))}
                 </div>
               </div>
@@ -728,6 +769,7 @@ const _av = user.assistant_voice || "ermil";
               {error && <p className="text-xs text-center" style={{ color: "var(--danger)" }}>{error}</p>}
               {saved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
 
+              </div>
               <button onClick={handleSaveAssistant} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
                 {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
@@ -737,12 +779,11 @@ const _av = user.assistant_voice || "ermil";
 
         {activeSection === "Настройки действий" && (
           <div className="animate-fade-in">
-            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>‹ Назад</button>
-            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>‹ Назад</button>
             <p className="text-[12px] mb-5" style={{ color: "var(--text-muted)" }}>Вы решаете, что вам могут показывать джинны и система.</p>
 
-            <div className="mb-5">
-              <span className="text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Обращения от джиннов</span>
+            <div className="mb-4 rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <span className="text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--accent)" }}>Обращения от джиннов</span>
               <div className="flex flex-col gap-1.5">
                 {[
                   { id: "all", label: "Принимать сразу", desc: "Джинны могут обращаться и показывать предложения" },
@@ -759,23 +800,24 @@ const _av = user.assistant_voice || "ermil";
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="flex items-center justify-between cursor-pointer gap-3">
-                <span className="flex flex-col">
-                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Предложения рядом</span>
-                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Разрешить геолокацию — джинны рядом (кафе, магазины) смогут предложить акции. Выключено — вас не найдут по месту.</span>
+            <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <span className="text-[11px] uppercase tracking-wider block mb-1" style={{ color: "var(--accent)" }}>Приватность</span>
+              <label className="flex items-center gap-3 py-2 cursor-pointer">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>📍</span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Предложения рядом</span>
+                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Гео — джинны рядом (кафе, магазины) предложат акции.</span>
                 </span>
-                <input type="checkbox" checked={actLocation} onChange={(e) => { const on = e.target.checked; setActLocation(on); updateActionSettings({ allow_location: on }).catch(() => {}); }} className="w-5 h-5 shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} />
+                <Toggle on={actLocation} onToggle={() => { const on = !actLocation; setActLocation(on); updateActionSettings({ allow_location: on }).catch(() => {}); }} />
               </label>
-            </div>
-
-            <div className="mb-4">
-              <label className="flex items-center justify-between cursor-pointer gap-3">
-                <span className="flex flex-col">
-                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Акции и купоны</span>
-                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Показывать купоны, флаеры и подарки от бизнес-джиннов.</span>
+              <div style={{ borderTop: "1px solid var(--bg-glass-border)" }} />
+              <label className="flex items-center gap-3 py-2 cursor-pointer">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🎟</span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Акции и купоны</span>
+                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Купоны, флаеры и подарки от бизнес-джиннов.</span>
                 </span>
-                <input type="checkbox" checked={actPromo} onChange={(e) => { const on = e.target.checked; setActPromo(on); updateActionSettings({ allow_promo: on }).catch(() => {}); }} className="w-5 h-5 shrink-0 cursor-pointer" style={{ accentColor: "var(--accent)" }} />
+                <Toggle on={actPromo} onToggle={() => { const on = !actPromo; setActPromo(on); updateActionSettings({ allow_promo: on }).catch(() => {}); }} />
               </label>
             </div>
 
@@ -787,11 +829,11 @@ const _av = user.assistant_voice || "ermil";
         {/* === НАСТРОЙКА ИНТЕРФЕЙСА === */}
         {activeSection === "Настройка интерфейса" && (
           <div>
-            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               ‹ Назад
             </button>
-            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
-            <h3 className="text-sm font-medium mb-4" style={{ color: "var(--text-primary)" }}>Тема оформления</h3>
+            <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            <h3 className="text-sm font-medium mb-3" style={{ color: "var(--text-primary)" }}>Тема оформления</h3>
             <div className="flex flex-col gap-2">
               {THEMES.map((theme) => (
                 <button key={theme.id} onClick={() => changeTheme(theme.id)} className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all" style={{ background: theme.id === currentTheme ? "var(--bg-glass-hover)" : "transparent", border: theme.id === currentTheme ? "1px solid var(--accent)" : "1px solid transparent" }}>
@@ -802,6 +844,21 @@ const _av = user.assistant_voice || "ermil";
                   </div>
                 </button>
               ))}
+            </div>
+
+            <div className="rounded-2xl px-4 py-3.5 mt-1" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🌸</span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Оформление кружка</span>
+                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>анимация рамки · видят другие</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {AVATAR_FRAMES.map((fr) => (
+                  <button key={fr.id || "none"} onClick={() => { setAvatarFrame(fr.id); updateMe({ avatar_frame: fr.id } as Partial<UserProfile>).catch(() => {}); }} className="px-3 py-1.5 rounded-full text-[12px] font-medium transition-all" style={{ background: avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass)", color: avatarFrame === fr.id ? "#fff" : "var(--text-secondary)", border: `1px solid ${avatarFrame === fr.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{fr.label}</button>
+                ))}
+              </div>
             </div>
 
             <h3 className="text-sm font-medium mb-3 mt-6" style={{ color: "var(--text-primary)" }}>Фон</h3>
@@ -862,34 +919,30 @@ const _av = user.assistant_voice || "ermil";
                 <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Загрузка своих обоев — скоро</span>
               </div>
             )}
-            <div className="mt-4">
-              <span className="text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Размер текста</span>
-              <div className="flex gap-2">
-                {[{ id: "0.9", label: "Мелкий" }, { id: "1", label: "Обычный" }, { id: "1.2", label: "Крупный" }, { id: "1.5", label: "Очень крупный" }].map((o) => (
-                  <button key={o.id} onClick={() => { setTextScale(o.id); localStorage.setItem("jinntell_text_scale", o.id); document.documentElement.style.fontSize = (parseFloat(o.id) * 16) + "px"; }} className="flex-1 py-2 rounded-xl text-sm font-medium transition-all" style={{ background: textScale === o.id ? "var(--accent)" : "var(--bg-glass)", color: textScale === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${textScale === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
+            <div className="rounded-2xl px-4 py-3.5 mt-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🔠</span>
+                <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Размер текста</span>
+              </div>
+              <div className="flex gap-1.5">
+                {[{ id: "0.9", label: "Мелкий" }, { id: "1", label: "Обычный" }, { id: "1.2", label: "Крупный" }, { id: "1.5", label: "Очень" }].map((o) => (
+                  <button key={o.id} onClick={() => { setTextScale(o.id); localStorage.setItem("jinntell_text_scale", o.id); document.documentElement.style.fontSize = (parseFloat(o.id) * 16) + "px"; }} className="flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-all" style={{ background: textScale === o.id ? "var(--accent)" : "var(--bg-glass)", color: textScale === o.id ? "#fff" : "var(--text-secondary)", border: `1px solid ${textScale === o.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{o.label}</button>
                 ))}
               </div>
             </div>
 
-            <div className="mt-4">
-              <label className="flex items-center justify-between cursor-pointer gap-3">
-                <span className="flex flex-col">
-                  <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Анимация фона</span>
-                  <span className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Отключите для скорости и экономии батареи (слабые устройства)</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={animOn}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setAnimOn(on);
-                    localStorage.setItem("jinntell_anim_off", on ? "0" : "1");
-                    window.dispatchEvent(new Event("jinntell_anim_change"));
-                  }}
-                  className="w-5 h-5 shrink-0 cursor-pointer"
-                  style={{ accentColor: "var(--accent)" }}
-                />
-              </label>
+            <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3 mt-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🎬</span>
+              <span className="flex-1 min-w-0">
+                <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Анимация фона</span>
+                <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Выключить для скорости и экономии батареи</span>
+              </span>
+              <Toggle on={animOn} onToggle={() => {
+                const on = !animOn;
+                setAnimOn(on);
+                localStorage.setItem("jinntell_anim_off", on ? "0" : "1");
+                window.dispatchEvent(new Event("jinntell_anim_change"));
+              }} />
             </div>
             {animOn && (
               <div className="mt-4">
@@ -904,18 +957,18 @@ const _av = user.assistant_voice || "ermil";
                 <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Палитра влияет на фоны-шейдеры (Аврора/Волны/Точки).</p>
               </div>
             )}
+            </div>
             <button onClick={() => { setSaved(true); setTimeout(() => onClose(), 600); }} className="w-full mt-6 py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Готово</button>
             {saved && <p className="text-xs text-center mt-2" style={{ color: "#2ecc71" }}>Сохранено!</p>}
           </div>
         )}
 
         {/* === ОСТАЛЬНЫЕ РАЗДЕЛЫ (заглушки) === */}
-        {activeSection !== null && activeSection !== "Настройки пользователя" && activeSection !== "Настройки Помощника" && activeSection !== "Настройка интерфейса" && (
+        {activeSection !== null && activeSection !== "Настройки пользователя" && activeSection !== "Настройки персонажа" && activeSection !== "Настройки действий" && activeSection !== "Настройки Помощника" && activeSection !== "Настройка интерфейса" && (
           <div>
-            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 flex items-center gap-1" style={{ color: "var(--accent)" }}>
+            <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               ‹ Назад
             </button>
-            <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text-primary)" }}>{activeSection}</h2>
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               {activeSection} — в разработке
             </p>

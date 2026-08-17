@@ -70,3 +70,23 @@ async def build_digest(user_id: int, query: str, max_jinns: int = 4) -> dict:
         await db.commit()
         await db.refresh(d)
         return {"ok": True, "id": d.id, "query": q, "sections": sections, "created_at": d.created_at.isoformat()}
+
+
+async def create_document(user_id: int, title: str, content: str,
+                          author_name: str = "Помощник", color: str | None = None) -> dict:
+    """Документ, который помощник пишет САМ (задание/заметка/план/чек-лист).
+    Кладётся в «Задания и поручения» как обычный Digest с одной секцией-автором = помощник."""
+    t = (title or "").strip()
+    c = (content or "").strip()
+    if not t and not c:
+        return {"ok": False, "reason": "empty"}
+    if not t:
+        t = c[:60]
+    sections = [{"agent_id": None, "agent_name": (author_name or "Помощник"),
+                 "color": color or "#8a6fd0", "text": c}]
+    async with async_session() as db:
+        d = Digest(user_id=user_id, query=t[:500], sections=json.dumps(sections, ensure_ascii=False))
+        db.add(d)
+        await db.commit()
+        await db.refresh(d)
+        return {"ok": True, "id": d.id, "query": t, "created_at": d.created_at.isoformat()}

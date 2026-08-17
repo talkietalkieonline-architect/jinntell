@@ -45,6 +45,16 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   const stopUntilRef = useRef(0);  // до этого времени НЕ озвучивать (после «стоп»/тапа) — чтобы не «дозаговаривать»
   const finalRef = useRef("");
   const sendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recRef = useRef<SpeechRecognition | null>(null);
+  const micPausedRef = useRef(false);  // жёсткая пауза микрофона на время озвучки (анти-эхо)
+
+  // схлопнуть подряд идущие дубли слов («привет привет привет» → «привет»)
+  const dedupeWords = (s: string) => s.split(/\s+/).filter((w, i, a) => i === 0 || w.toLowerCase() !== a[i - 1].toLowerCase()).join(" ");
+  // голос: проп → синхронизированный из БД localStorage → женский дефолт (не мужской ermil при пустом пропе/гонке входа)
+  const resolveVoice = () => voiceId || (typeof window !== "undefined" ? (localStorage.getItem("jinntell_assistant_voice") || "") : "") || "alena";
+  // на время озвучки полностью глушим распознавание, потом возвращаем
+  const pauseMic = () => { micPausedRef.current = true; try { recRef.current?.stop(); } catch { /* noop */ } };
+  const resumeMic = () => { micPausedRef.current = false; try { recRef.current?.start(); } catch { /* noop */ } };
 
   useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
@@ -55,7 +65,9 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     if (!SR) { setStatus("idle"); return; }
     const rec = new (SR as unknown as { new (): SpeechRecognition })();
     rec.lang = "ru-RU"; rec.continuous = true; rec.interimResults = true;
+    recRef.current = rec;
     rec.onresult = (e: SpeechRecognitionEvent) => {
+      if (micPausedRef.current) return;  // микрофон заглушён на время озвучки — игнорируем эхо
       let interim = "", newFinal = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
@@ -93,13 +105,13 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       setCaption((finalRef.current + " " + interim).trim());
       if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
       sendTimerRef.current = setTimeout(() => {
-        const phrase = finalRef.current.trim();
+        const phrase = dedupeWords(finalRef.current.trim());
         finalRef.current = "";
         // не отправляем, если это эхо только что озвученного ответа (микрофон услышал сам TTS)
         if (phrase && !speakingRef.current && echoOverlap(phrase.toLowerCase(), (spokenRef.current || "")) <= 0.5) { setCaption(""); onSendRef.current(phrase); }
       }, 900);
     };
-    rec.onend = () => { try { rec.start(); } catch { /* уже запущено */ } };
+    rec.onend = () => { if (micPausedRef.current) return; try { rec.start(); } catch { /* уже запущено */ } };
     try { rec.start(); } catch { /* noop */ }
     return () => {
       try { rec.onend = null; rec.stop(); } catch { /* noop */ }
@@ -116,21 +128,21 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     setCaption(text);
     setStatus("speaking");
     try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп предыдущего — без наложения
-    speakingRef.current = true;
+    speakingRef.current = true; pauseMic();
     finalRef.current = "";  // сбросить накопленное (могло быть эхо)
     let cancelled = false;
     (async () => {
       try {
-        const url = await ttsBlobUrl(text, voiceId || "ermil");
+        const url = await ttsBlobUrl(text, resolveVoice());
         if (cancelled) { speakingRef.current = false; return; }
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1600); };
+          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; finalRef.current = ""; resumeMic(); }, 600); };
           a.onended = done;
           a.onerror = done;
           await a.play();
-        } else { setStatus("listening"); speakingRef.current = false; }
-      } catch { setStatus("listening"); speakingRef.current = false; }
+        } else { setStatus("listening"); speakingRef.current = false; resumeMic(); }
+      } catch { setStatus("listening"); speakingRef.current = false; resumeMic(); }
     })();
     return () => { cancelled = true; };
   }, [lastReply, voiceId]);
@@ -142,6 +154,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     finalRef.current = "";
     setStatus("listening");
     setCaption("");
+    resumeMic();  // микрофон был заглушён на озвучке — вернуть прослушивание
   };
 
   // 🧞 Пасхалка «потри лампу»: долгое нажатие на волну → помощник «выходит из лампы» с пожеланием
@@ -162,18 +175,18 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     setCaption(text);
     setStatus("speaking");
     try { audioRef.current?.pause(); } catch { /* noop */ }
-    speakingRef.current = true;
+    speakingRef.current = true; pauseMic();
     finalRef.current = "";
     (async () => {
       try {
-        const url = await ttsBlobUrl(text, voiceId || "ermil");
+        const url = await ttsBlobUrl(text, resolveVoice());
         if (url) {
           const a = new Audio(url); audioRef.current = a;
-          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; }, 1600); };
+          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; finalRef.current = ""; resumeMic(); }, 600); };
           a.onended = done; a.onerror = done;
           await a.play();
-        } else { setStatus("listening"); speakingRef.current = false; }
-      } catch { setStatus("listening"); speakingRef.current = false; }
+        } else { setStatus("listening"); speakingRef.current = false; resumeMic(); }
+      } catch { setStatus("listening"); speakingRef.current = false; resumeMic(); }
     })();
   };
   const rubLamp = () => {

@@ -48,7 +48,6 @@ export default function NavBar({
   onLogout,
   onSwitchUser,
   onOpenSettings,
-  onOpenOldFavorites,
 }: {
   onHeightChange?: (h: number) => void;
   assistantName: string;
@@ -141,14 +140,13 @@ export default function NavBar({
           <div className="absolute left-0 top-9 rounded-xl py-1.5 px-1 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 230, zIndex: 90 }} onClick={(e) => e.stopPropagation()}>
             {[
               { icon: "👤", label: "Настройки пользователя", sec: "Настройки пользователя" },
+              { icon: "🎭", label: "Настройки персонажа", sec: "Настройки персонажа" },
               { icon: "🎬", label: "Настройки действий", sec: "Настройки действий" },
               { icon: "🧞", label: "Настройки помощника", sec: "Настройки Помощника" },
               { icon: "🎨", label: "Настройка интерфейса", sec: "Настройка интерфейса" },
             ].map((it) => (
               <button key={it.sec} onClick={() => { setAppMenuOpen(false); onOpenSettings?.(it.sec); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>{it.icon} {it.label}</button>
             ))}
-            <div className="my-1 mx-2" style={{ borderTop: "1px solid var(--bg-glass-border)" }} />
-            <button onClick={() => { setAppMenuOpen(false); onOpenOldFavorites?.(); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>⭐ Избранное (старое)</button>
             <div className="my-1 mx-2" style={{ borderTop: "1px solid var(--bg-glass-border)" }} />
             <button onClick={() => { setAppMenuOpen(false); onSwitchUser?.(); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--text-secondary)" }}>🔄 Сменить пользователя</button>
             <button onClick={() => { setAppMenuOpen(false); onLogout?.(); }} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm w-full text-left transition-all hover:bg-[var(--bg-glass-hover)]" style={{ color: "var(--danger)" }}>🚪 Выход</button>

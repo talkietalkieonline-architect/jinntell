@@ -372,6 +372,14 @@ export default function AppBackground({ override }: { override?: string } = {}) 
           animation: bg.kind === "anim-gradient" && anim ? `bgShift ${22 / (animSpeed || 1)}s ease infinite` : undefined,
         }}
       />
+      {/* Слой глубины: мягкий световой блик сверху + виньетка снизу — де-плоскивает градиентные фоны */}
+      {(bg.kind === "gradient" || bg.kind === "anim-gradient") && (
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: st === "dark"
+            ? "radial-gradient(120% 85% at 50% -8%, rgba(255,255,255,0.07), transparent 55%), radial-gradient(150% 120% at 50% 118%, rgba(0,0,0,0.38), transparent 58%)"
+            : "radial-gradient(120% 85% at 50% -8%, rgba(255,255,255,0.55), transparent 52%), radial-gradient(150% 120% at 50% 120%, rgba(60,40,10,0.10), transparent 58%)",
+        }} />
+      )}
       {bg.kind === "image" && (
         <>
           {/* статичный фолбэк (виден, если WebGL недоступен) */}

@@ -10,6 +10,7 @@ from app.models.agent import Agent
 from app.models.contact import Contact
 from app.models.user import User
 from app.models.user_favorite import UserFavorite
+from app.models.activity import ActivityLog
 from app.services.llm import deepseek_tools
 
 TOOLS = [
@@ -41,12 +42,18 @@ TOOLS = [
         "name": "make_digest", "description": "Собрать ПОДБОРКУ: опросить несколько джиннов Города по теме и составить документ с их мнениями (с указанием, кто что сказал). Для запросов «составь рейтинг/подборку/сравни варианты X». Результат сохраняется как подборка на главном экране (раздел Информация).",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
+        "name": "create_document", "description": "Создать ДОКУМЕНТ-ЗАДАНИЕ (заметку, план, чек-лист, поручение) — текст пишешь ТЫ сам. Появится в разделе «Задания и поручения» на главном экране. Используй, когда просят «запиши задание/составь план/сделай заметку/список дел/оформи документ», или когда ты подготовил развёрнутый материал, который стоит сохранить. Отличие от make_digest: там ОПРОС джиннов, здесь пишешь ТЫ.",
+        "parameters": {"type": "object", "properties": {"title": {"type": "string", "description": "Короткое название документа (как он подпишется в разделе)."}, "content": {"type": "string", "description": "Полный текст документа/задания — можно списком/пунктами."}}, "required": ["title", "content"]}}},
+    {"type": "function", "function": {
         "name": "show_media", "description": "Показать пользователю картинку или видео на экране (напр. фото джинна, или изображение по прямой ссылке). Используй, когда просят «покажи», «как выглядит», или чтобы проиллюстрировать ответ.",
         "parameters": {"type": "object", "properties": {
             "jinn": {"type": "string", "description": "Имя джинна — показать его фото."},
             "url": {"type": "string", "description": "Прямая ссылка на изображение или видео."},
             "media_type": {"type": "string", "enum": ["image", "video"], "description": "Тип медиа (по умолчанию image)."}
         }, "required": []}}},
+    {"type": "function", "function": {
+        "name": "chat_media", "description": "Достать и показать МЕДИА (фото/видео) из переписки с человеком-контактом. Используй, когда просят «покажи последнее фото/видео из чата с X», «что мне присылал(а) X». Находит последнее медиа нужного типа в диалоге с этим контактом и показывает на экране.",
+        "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Имя контакта (человека), из чата с которым достать медиа."}, "media_type": {"type": "string", "enum": ["image", "video", "any"], "description": "image (фото) / video (видео) / any (любое последнее). По умолчанию any."}}, "required": ["name"]}}},
     {"type": "function", "function": {
         "name": "remember_interest", "description": "Запомнить интерес/тему пользователя — когда он называет интерес или просит обращать внимание на тему (напр. «детские коляски»).",
         "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
@@ -96,6 +103,66 @@ _BASE = (
 )
 
 
+_ACT_LABELS = {
+    "chat.open": "открыл чат", "chat.close": "закрыл чат", "call.start": "начал звонок",
+    "message.send": "отправил сообщение", "ping.send": "написал", "favorite.add": "добавил в избранное",
+    "favorite.remove": "убрал из избранного", "assistant.command": "команда помощнику",
+    "digest.make": "собрал подборку", "search.web": "веб-поиск", "search.deep": "глубокий поиск",
+}
+
+
+async def _situation(user_id: int) -> list:
+    """Ситуационная осведомлённость: что уже есть в мире пользователя — избранное, контакты, недавние действия.
+    Тихо: любые ошибки глотаются, осведомлённость никогда не ломает ответ."""
+    out = []
+    try:
+        async with async_session() as db:
+            favs = (await db.execute(
+                select(Agent).join(UserFavorite, UserFavorite.agent_id == Agent.id)
+                .where(UserFavorite.user_id == user_id, Agent.is_active == True)
+                .order_by(Agent.name).limit(12)
+            )).scalars().all()
+            if favs:
+                out.append("В избранном у пользователя уже есть: " + ", ".join(
+                    f"{a.name} ({a.profession})" if a.profession else a.name for a in favs
+                ) + ". Не предлагай добавить того, кто уже здесь; можешь ссылаться на них по имени.")
+            contacts = (await db.execute(
+                select(User).join(Contact, Contact.contact_user_id == User.id)
+                .where(Contact.owner_user_id == user_id)
+                .order_by(User.is_online.desc(), User.display_name).limit(12)
+            )).scalars().all()
+            if contacts:
+                out.append("Люди в контактах: " + ", ".join(
+                    f"{u.display_name}{' (в сети)' if u.is_online else ''}" for u in contacts
+                ) + ".")
+            acts = (await db.execute(
+                select(ActivityLog).where(
+                    ActivityLog.user_id == user_id,
+                    ActivityLog.target_name.isnot(None),
+                    ~ActivityLog.action.like("security.%"),
+                ).order_by(ActivityLog.created_at.desc()).limit(12)
+            )).scalars().all()
+            if acts:
+                labels = []
+                seen = set()
+                for a in acts:
+                    verb = _ACT_LABELS.get(a.action, a.action)
+                    tgt = (a.target_name or "").strip()
+                    key = (verb, tgt)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    labels.append(f"{verb} — {tgt}")
+                    if len(labels) >= 6:
+                        break
+                if labels:
+                    out.append("Недавние действия (самое свежее первым): " + "; ".join(labels)
+                               + ". Помни, что уже сделано — не предлагай повторно то же самое.")
+    except Exception:
+        pass
+    return out
+
+
 async def _build_context(user_id: int, text: str) -> str:
     """Персона помощника + память о пользователе + знания о платформе."""
     name = "Джим"
@@ -104,6 +171,16 @@ async def _build_context(user_id: int, text: str) -> str:
         u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if u:
         name = u.assistant_name or "Джим"
+        # РЕАЛЬНЫЙ владелец, с кем ты говоришь — НЕ выдумывай его имя/пол!
+        _uname = (getattr(u, "first_name", None) or getattr(u, "display_name", None) or "").strip()
+        _ug = {"male": "мужчина — обращайся к нему в мужском роде", "female": "женщина — обращайся к ней в женском роде"}.get(getattr(u, "gender", None) or "", "")
+        _uinfo = []
+        if _uname: _uinfo.append(f"его зовут {_uname}")
+        if _ug: _uinfo.append(_ug)
+        if getattr(u, "city", None): _uinfo.append(f"город: {u.city}")
+        if getattr(u, "about", None): _uinfo.append(f"о себе: {u.about}")
+        if _uinfo:
+            parts.append("ВЛАДЕЛЕЦ (с кем ты сейчас общаешься): " + "; ".join(_uinfo) + ". Обращайся к нему именно так; никогда не придумывай другое имя или пол.")
         gmap = {"male": "Ты мужчина, говори о себе в мужском роде (рад, готов).",
                 "female": "Ты женщина, говори о себе в женском роде (рада, готова).",
                 "neutral": "Избегай гендерных форм о себе.",
@@ -182,6 +259,8 @@ async def _build_context(user_id: int, text: str) -> str:
             _stale = [x["topic"] for x in _items if _age_days(x["ts"]) > 21]
             if _stale:
                 parts.append("Залежавшиеся интересы (давно не подтверждались): " + ", ".join(_stale) + ". Если ты в проактивном режиме и разговор без конкретной задачи (напр. приветствие/болтовня) — МЯГКО спроси, актуален ли ещё ОДИН из них (по одному за раз, не списком). «Уже не нужно» → forget_interest; «да, актуально» → confirm_interest.")
+    # ситуационная осведомлённость: избранное, контакты, недавние действия
+    parts += await _situation(user_id)
     # память о пользователе
     try:
         from app.services.memory import recall
@@ -199,6 +278,34 @@ async def _build_context(user_id: int, text: str) -> str:
             kn = await _rag.search(agent_id=jim.id, query=text, top_k=3)
             if kn:
                 parts.append("Справка о платформе (отвечай по ней, не выдумывай функции): " + " | ".join(c.text for c in kn))
+    except Exception:
+        pass
+    # свод функций от Архитектора (скрытый core-джинн) — авторитетный справочник, читаем ЦЕЛИКОМ
+    try:
+        async with async_session() as db:
+            arch = (await db.execute(select(Agent).where(Agent.jinntell_link == "architect"))).scalar_one_or_none()
+        _ak = (arch.knowledge_text or "").strip() if arch else ""
+        if _ak:
+            parts.append("СПРАВОЧНИК ФУНКЦИЙ (от Архитектора — авторитетно; отвечай строго по нему, не выдумывай возможности, которых тут нет):\n" + _ak[:4000])
+    except Exception:
+        pass
+    # ПРАВИЛО: заглядывай в скрытый канал новостей проекта (Маркетолог) и делись свежим деликатно
+    try:
+        from app.models.channel_post import ChannelPost
+        from datetime import datetime, timezone, timedelta
+        _posts = []
+        async with async_session() as db:
+            mk = (await db.execute(select(Agent).where(Agent.jinntell_link == "marketer"))).scalar_one_or_none()
+            if mk:
+                _cut = datetime.now(timezone.utc) - timedelta(days=30)
+                _posts = (await db.execute(
+                    select(ChannelPost).where(ChannelPost.agent_id == mk.id, ChannelPost.created_at >= _cut)
+                    .order_by(ChannelPost.created_at.desc()).limit(4)
+                )).scalars().all()
+        if _posts:
+            _news = "; ".join(f"«{p.title}»" + (f" — {p.body[:140]}" if p.body else "") for p in _posts)
+            parts.append("НОВОСТИ ПРОЕКТА (свежее от команды): " + _news
+                         + ". ПРАВИЛО: если разговор позволяет и ты в проактивном режиме — деликатно поделись ОДНОЙ свежей новостью (не навязывай, не списком); на прямой вопрос «что нового в проекте/приложении» — расскажи.")
     except Exception:
         pass
     try:
@@ -510,6 +617,37 @@ async def _add_to_chat(user_id: int, room: str, args: dict) -> str:
     return "Добавлено в чат."
 
 
+async def _chat_media(user_id: int, name: str, media_type: str = "any") -> tuple[str, dict | None]:
+    """Достать последнее медиа из личного чата (DM) с контактом по имени и показать его.
+    Возвращает (текст, media|None) — тот же формат, что _show_media."""
+    n = (name or "").strip()
+    if not n:
+        return ("Не указано, из чата с кем достать медиа.", None)
+    mt = (media_type or "any").strip().lower()
+    from app.models.message import Message
+    pat = f"%{n}%"
+    async with async_session() as db:
+        contact = (await db.execute(
+            select(User).join(Contact, Contact.contact_user_id == User.id)
+            .where(Contact.owner_user_id == user_id, User.display_name.ilike(pat)).limit(1)
+        )).scalar_one_or_none()
+        if not contact:
+            return (f"Не нашёл контакт «{n}».", None)
+        rooms = [f"dm-{user_id}-{contact.id}", f"dm-{contact.id}-{user_id}"]
+        # показываем только визуальные медиа (не голосовые/заметки)
+        want = ["video"] if mt == "video" else (["image"] if mt == "image" else ["image", "video"])
+        q = (select(Message).where(Message.room.in_(rooms), Message.media_url.isnot(None),
+                                   Message.media_type.in_(want))
+             .order_by(Message.created_at.desc()).limit(1))
+        m = (await db.execute(q)).scalar_one_or_none()
+    if not m:
+        kind = {"image": "фото", "video": "видео"}.get(mt, "фото или видео")
+        return (f"В чате с {contact.display_name} не нашёл {kind}.", None)
+    kind = "видео" if m.media_type == "video" else "фото"
+    return (f"Показываю последнее {kind} из чата с {contact.display_name}.",
+            {"url": m.media_url, "type": m.media_type or "image"})
+
+
 async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4, room: str | None = None) -> dict:
     system = await _build_context(user_id, text or "")
     if room:
@@ -562,8 +700,24 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                     result = "Не нашёл в Городе джиннов по этой теме для подборки."
                 else:
                     result = "Не удалось собрать подборку."
+            elif name == "create_document":
+                from app.services import digest as _dg
+                _cr = await _dg.create_document(user_id, args.get("title", ""), args.get("content", ""), author_name=assistant_name)
+                if _cr.get("ok"):
+                    try:
+                        from app.websocket.manager import manager
+                        await manager.broadcast(f"user-{user_id}", {"type": "feed_ping"})
+                    except Exception:
+                        pass
+                    result = f"Создал документ «{_cr['query'][:60]}» — он в разделе «Задания и поручения» на главном экране."
+                else:
+                    result = "Не удалось создать документ (пустой текст?)."
             elif name == "show_media":
                 result, _m = await _show_media(user_id, args)
+                if _m:
+                    media = _m
+            elif name == "chat_media":
+                result, _m = await _chat_media(user_id, args.get("name", ""), args.get("media_type", "any"))
                 if _m:
                     media = _m
             elif name == "add_to_chat":
