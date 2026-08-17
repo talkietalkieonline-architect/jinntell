@@ -193,7 +193,7 @@ async def _build_context(user_id: int, text: str) -> str:
         except Exception:
             tr = {}
         style = []
-        tone = {"friendly": "тон дружелюбный и тёплый", "neutral": "тон нейтральный", "business": "тон деловой, по существу"}
+        tone = {"friendly": "тон дружелюбный и тёплый", "neutral": "тон нейтральный", "business": "тон деловой, по существу", "caring": "тон тёплый и заботливый, с участием"}
         if tr.get("tone") in tone:
             style.append(tone[tr["tone"]])
         ln = {"short": "отвечай коротко (1-2 предложения)", "medium": "средней длины", "long": "можно подробно"}
@@ -248,8 +248,11 @@ async def _build_context(user_id: int, text: str) -> str:
             _items = _norm_interests(json.loads(u.assistant_interests or "[]"))
         except Exception:
             _items = []
-        if _items:
-            parts.append("Известные интересы пользователя: " + ", ".join(x["topic"] for x in _items) + ". Учитывай их и предлагай релевантное.")
+        # интересы из ПАНЕЛИ настроек (u.interests, чипы) + подмеченные помощником (assistant_interests)
+        _manual = [x.strip() for x in (getattr(u, "interests", "") or "").split(",") if x.strip()]
+        _all_int = list(dict.fromkeys(_manual + [x["topic"] for x in _items]))
+        if _all_int:
+            parts.append("Интересы пользователя (выбрал в настройках + что ты подметил): " + ", ".join(_all_int) + ". Учитывай их и предлагай релевантное; сам подмечай новые темы в общении и по тому, что он читает.")
         try:
             _blk = [x for x in json.loads(u.assistant_blocklist or "[]") if isinstance(x, str)]
         except Exception:

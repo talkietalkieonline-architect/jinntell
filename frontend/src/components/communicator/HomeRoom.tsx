@@ -263,6 +263,31 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
         {/* ═══════════ КОНТАКТЫ (помощники · джинны · люди) — в карточке ═══════════ */}
         <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+        {/* ═══════════ СОБЫТИЯ (v3.3): непрочитанное — Сообщения / Ленты / Задачи ═══════════ */}
+        {(newMsgs.length + newEvents + newOffers + newInvites + newDocs.length) > 0 && (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            <div className="text-[13px] font-extrabold px-1 pb-0.5 flex items-center gap-1.5" style={{ color: "var(--accent)" }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />События
+              <span className="text-[10px] font-normal ml-auto" style={{ color: "var(--text-muted)" }}>пока не прочитано</span>
+            </div>
+            {newMsgs.length > 0 && (<div className="mt-1.5">
+              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Сообщения</div>
+              <Strip title="">{newMsgs.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="💬" badge={c.count} online={c.online} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
+            </div>)}
+            {(newEvents + newOffers + newInvites) > 0 && (<div className="mt-1.5">
+              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Ленты</div>
+              <Strip title="">
+                {newEvents > 0 && <Circle label="Новости" emoji="🔔" color="#5ea0e8" badge={newEvents} onClick={openFeed} />}
+                {newOffers > 0 && <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" badge={newOffers} onClick={openFeed} />}
+                {newInvites > 0 && <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" badge={newInvites} onClick={openInvitesW} />}
+              </Strip>
+            </div>)}
+            {newDocs.length > 0 && (<div className="mt-1.5">
+              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Задачи и поручения</div>
+              <Strip title="">{newDocs.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" badge={1} onClick={() => openDoc(d.id)} />)}</Strip>
+            </div>)}
+          </div>
+        )}
         {bigHead("Контакты", "sob")}
         {/* Важные — ВСЕГДА на виду (даже при свёрнутых Контактах), как в макете */}
         <div className="text-[13px] font-bold px-1 pt-0.5 flex items-baseline gap-1.5" style={{ color: "var(--text-primary)" }}>Важные<span className="text-[10px] font-normal" style={{ color: "var(--text-muted)" }}>· удержи кружок → сюда</span></div>
@@ -319,37 +344,12 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         </div>
         {/* ─── КОЛОНКА 2 (веб): лента дома — События · Ленты · Задания ─── */}
         <div className="flex flex-col gap-3.5 min-w-0">
-        {/* ═══════════ СОБЫТИЯ (v3.3): непрочитанное — Сообщения / Ленты / Задачи ═══════════ */}
-        {(newMsgs.length + newEvents + newOffers + newInvites + newDocs.length) > 0 && (
-          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-            <div className="text-[13px] font-extrabold px-1 pb-0.5 flex items-center gap-1.5" style={{ color: "var(--accent)" }}>
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />События
-              <span className="text-[10px] font-normal ml-auto" style={{ color: "var(--text-muted)" }}>пока не прочитано</span>
-            </div>
-            {newMsgs.length > 0 && (<div className="mt-1.5">
-              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Сообщения</div>
-              <Strip title="">{newMsgs.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="💬" badge={c.count} online={c.online} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
-            </div>)}
-            {(newEvents + newOffers + newInvites) > 0 && (<div className="mt-1.5">
-              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Ленты</div>
-              <Strip title="">
-                {newEvents > 0 && <Circle label="События" emoji="🔔" color="#5ea0e8" badge={newEvents} onClick={openFeed} />}
-                {newOffers > 0 && <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" badge={newOffers} onClick={openFeed} />}
-                {newInvites > 0 && <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" badge={newInvites} onClick={openInvitesW} />}
-              </Strip>
-            </div>)}
-            {newDocs.length > 0 && (<div className="mt-1.5">
-              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Задачи и поручения</div>
-              <Strip title="">{newDocs.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" badge={1} onClick={() => openDoc(d.id)} />)}</Strip>
-            </div>)}
-          </div>
-        )}
         {/* ═══════════ ЛЕНТЫ (архив) — в карточке ═══════════ */}
         <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
         {bigHead("Ленты", "info")}
         {!collapsed.has("info") && (
           <Strip title="">
-            <Circle label="События" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
+            <Circle label="Новости" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
             <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
             <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={openInvitesW} />
             <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />

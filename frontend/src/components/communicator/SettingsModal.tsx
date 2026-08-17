@@ -14,6 +14,7 @@ const GENDERS = [
   { id: "male", name: "Мужской", icon: "♂" },
   { id: "female", name: "Женский", icon: "♀" },
   { id: "neutral", name: "Нейтральный", icon: "⚬" },
+  { id: "animal", name: "Существо", icon: "✦" },
 ];
 
 const VOICES = [
@@ -316,13 +317,13 @@ const _av = user.assistant_voice || "ermil";
   return (
     <div
       className="fixed inset-0 flex items-center justify-center p-4"
-      style={{ zIndex: 100 }}
+      style={{ zIndex: 100, padding: 16 }}
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/60" />
 
       <div
-        className="relative w-full max-w-md sm:max-w-lg lg:max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl p-6"
+        className="relative w-full max-w-md sm:max-w-lg lg:max-w-2xl max-h-[85vh] overflow-y-auto overflow-x-hidden rounded-2xl p-6"
         style={{
           background: "var(--panel-bg)",
           border: "1px solid var(--panel-border)",
@@ -613,7 +614,7 @@ const _av = user.assistant_voice || "ermil";
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-4 rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               {/* Аватар помощника — строка-карточка */}
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
                   {assistantPhoto ? <img src={assistantPhoto.startsWith("data:") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" /> : <span className="text-lg opacity-50">🧞</span>}
                 </span>
@@ -633,11 +634,11 @@ const _av = user.assistant_voice || "ermil";
               </div>
 
               {/* Активация по имени — строка-карточка */}
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>👂</span>
                 <span className="flex-1 min-w-0">
                   <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Активация по имени</span>
-                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Скажи «{assistantName || "Джим"}» — начнёт слушать</span>
+                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Вкл — просыпается по имени «{assistantName || "Джим"}»; выкл — только по тапу</span>
                 </span>
                 <Toggle on={wakeEnabled} onToggle={() => {
                   const on = !wakeEnabled;
@@ -649,20 +650,20 @@ const _av = user.assistant_voice || "ermil";
 
 
               {/* Пол помощника — строка-карточка (как в макете) */}
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>⚧</span>
                 <span className="flex-1 min-w-0 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Пол помощника</span>
-                <div className="inline-flex rounded-lg p-0.5 shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <div className="rounded-lg p-0.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", flexBasis: "100%", marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                   {GENDERS.map((g) => (
                     <button key={g.id} onClick={() => { setAssistantGender(g.id); if (g.id === "male") setAssistantVoice("ermil"); else if (g.id === "female") setAssistantVoice("alena"); else setAssistantVoice("ermil"); }}
-                      className="px-2.5 py-1 rounded-md text-[12px] font-medium transition-all"
-                      style={{ background: assistantGender === g.id ? "var(--accent)" : "transparent", color: assistantGender === g.id ? "#fff" : "var(--text-secondary)" }}>{g.name}</button>
+                      className="px-2 py-1.5 rounded-md text-[12px] font-medium transition-all"
+                      style={{ textAlign: "center", background: assistantGender === g.id ? "var(--accent)" : "transparent", color: assistantGender === g.id ? "#fff" : "var(--text-secondary)" }}>{g.name}</button>
                   ))}
                 </div>
               </div>
 
               {/* Возраст помощника — строка-карточка */}
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🎂</span>
                 <span className="flex-1 min-w-0 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Возраст помощника</span>
                 <input type="number" value={assistantAge} onChange={(e) => setAssistantAge(e.target.value)} placeholder="25" min="10" max="120" className="w-16 text-right px-2 py-1 rounded-lg outline-none text-sm shrink-0" style={inputStyle} />
@@ -670,30 +671,30 @@ const _av = user.assistant_voice || "ermil";
 
               {/* Характеристики общения — строки-карточки */}
               <div className="text-[11px] uppercase tracking-wider mt-1 mb-0.5 px-1" style={{ color: "var(--accent)" }}>Характеристики общения</div>
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🗣</span>
                 <span className="text-sm font-medium shrink-0" style={{ color: "var(--text-primary)" }}>Тон</span>
-                <div className="inline-flex rounded-lg p-0.5 ml-auto shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                  {[{ id: "friendly", label: "Дружелюбный" }, { id: "neutral", label: "Нейтральный" }, { id: "business", label: "Деловой" }].map((o) => (
-                    <button key={o.id} onClick={() => setTrTone(trTone === o.id ? "" : o.id)} className="px-2 py-1 rounded-md text-[11px] font-medium transition-all" style={{ background: trTone === o.id ? "var(--accent)" : "transparent", color: trTone === o.id ? "#fff" : "var(--text-secondary)" }}>{o.label}</button>
+                <div className="rounded-lg p-0.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", flexBasis: "100%", marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                  {[{ id: "friendly", label: "Дружелюбный" }, { id: "neutral", label: "Нейтральный" }, { id: "business", label: "Деловой" }, { id: "caring", label: "Заботливый" }].map((o) => (
+                    <button key={o.id} onClick={() => setTrTone(trTone === o.id ? "" : o.id)} className="px-2 py-1.5 rounded-md text-[12px] font-medium transition-all" style={{ textAlign: "center", background: trTone === o.id ? "var(--accent)" : "transparent", color: trTone === o.id ? "#fff" : "var(--text-secondary)" }}>{o.label}</button>
                   ))}
                 </div>
               </div>
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>📏</span>
                 <span className="text-sm font-medium shrink-0" style={{ color: "var(--text-primary)" }}>Длина ответов</span>
-                <div className="inline-flex rounded-lg p-0.5 ml-auto shrink-0" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <div className="inline-flex rounded-lg p-0.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", flexBasis: "100%", marginTop: 4 }}>
                   {[{ id: "short", label: "Коротко" }, { id: "medium", label: "Средне" }, { id: "long", label: "Подробно" }].map((o) => (
-                    <button key={o.id} onClick={() => setTrLength(trLength === o.id ? "" : o.id)} className="px-2 py-1 rounded-md text-[11px] font-medium transition-all" style={{ background: trLength === o.id ? "var(--accent)" : "transparent", color: trLength === o.id ? "#fff" : "var(--text-secondary)" }}>{o.label}</button>
+                    <button key={o.id} onClick={() => setTrLength(trLength === o.id ? "" : o.id)} className="px-1 py-1 rounded-md text-[11px] font-medium transition-all whitespace-nowrap" style={{ flex: 1, textAlign: "center", background: trLength === o.id ? "var(--accent)" : "transparent", color: trLength === o.id ? "#fff" : "var(--text-secondary)" }}>{o.label}</button>
                   ))}
                 </div>
               </div>
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>😄</span>
                 <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>С юмором</span>
                 <Toggle on={trHumor} onToggle={() => setTrHumor(!trHumor)} />
               </div>
-              <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>✨</span>
                 <span className="flex-1 text-sm font-medium" style={{ color: "var(--text-primary)" }}>Эмодзи</span>
                 <Toggle on={trEmoji} onToggle={() => setTrEmoji(!trEmoji)} />
@@ -931,7 +932,7 @@ const _av = user.assistant_voice || "ermil";
               </div>
             </div>
 
-            <div className="rounded-2xl px-4 py-3.5 flex items-center gap-3 mt-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
+            <div className="rounded-2xl px-4 py-3.5 flex flex-wrap items-center gap-3 mt-2.5" style={{ background: "var(--bg-surface)", border: "1px solid var(--bg-glass-border)" }}>
               <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🎬</span>
               <span className="flex-1 min-w-0">
                 <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Анимация фона</span>

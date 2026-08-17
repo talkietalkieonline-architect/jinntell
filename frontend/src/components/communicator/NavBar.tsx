@@ -140,6 +140,7 @@ export default function NavBar({
           <div className="absolute left-0 top-9 rounded-xl py-1.5 px-1 animate-fade-in" style={{ background: "var(--panel-bg)", border: "1px solid var(--panel-border)", minWidth: 230, zIndex: 90 }} onClick={(e) => e.stopPropagation()}>
             {[
               { icon: "👤", label: "Настройки пользователя", sec: "Настройки пользователя" },
+              { icon: "🎯", label: "Настройка интересов", sec: "Настройка интересов" },
               { icon: "🎭", label: "Настройки персонажа", sec: "Настройки персонажа" },
               { icon: "🎬", label: "Настройки действий", sec: "Настройки действий" },
               { icon: "🧞", label: "Настройки помощника", sec: "Настройки Помощника" },
