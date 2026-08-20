@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, uploadBackgroundImage, deleteBackgroundImage, getActionSettings, updateActionSettings, type UserProfile, type AgentFullOut } from "@/services/api";
+import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, uploadBackgroundImage, deleteBackgroundImage, getActionSettings, updateActionSettings, ttsBlobUrl, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 import { AVATAR_FRAMES, FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
 
@@ -106,6 +106,22 @@ export default function SettingsModal({
   const [assistantName, setAssistantName] = useState("Джим");
   const [assistantGender, setAssistantGender] = useState("male");
   const [assistantVoice, setAssistantVoice] = useState("male_low");
+  const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null);
+  const [addVoiceOpen, setAddVoiceOpen] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewVoice = async (voiceId: string) => {
+    try {
+      if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
+      setPreviewVoiceId(voiceId);
+      const url = await ttsBlobUrl(`Привет! Меня зовут ${assistantName || "Джим"}. Вот так я звучу.`, voiceId);
+      if (!url) { setPreviewVoiceId(null); return; }
+      const a = new Audio(url);
+      previewAudioRef.current = a;
+      a.onended = () => setPreviewVoiceId(null);
+      a.onerror = () => setPreviewVoiceId(null);
+      await a.play();
+    } catch { setPreviewVoiceId(null); }
+  };
   const [assistantPhoto, setAssistantPhoto] = useState<string | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [assistantAge, setAssistantAge] = useState("");
@@ -742,10 +758,10 @@ const _av = user.assistant_voice || "ermil";
                 <label className="text-[11px] uppercase tracking-wider mb-2 block" style={{ color: "var(--text-muted)" }}>Голос помощника</label>
                 <div className="flex flex-col gap-2">
                   {filteredVoices.map((v) => (
-                    <button
+                    <div
                       key={v.id}
                       onClick={() => setAssistantVoice(v.id)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all"
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all cursor-pointer"
                       style={{
                         background: assistantVoice === v.id ? "var(--bg-glass-hover)" : "var(--bg-glass)",
                         border: assistantVoice === v.id ? "1px solid var(--accent)" : "1px solid var(--bg-glass-border)",
@@ -758,12 +774,25 @@ const _av = user.assistant_voice || "ermil";
                           boxShadow: assistantVoice === v.id ? "0 0 8px var(--accent-glow)" : "none",
                         }}
                       />
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-sm" style={{ color: assistantVoice === v.id ? "var(--accent)" : "var(--text-primary)" }}>{v.name}</div>
                         <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{v.desc}</div>
                       </div>
-                    </button>
+                      <button onClick={(e) => { e.stopPropagation(); previewVoice(v.id); }} title="Прослушать голос" className="ml-auto shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-all" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}>
+                        {previewVoiceId === v.id ? "⏳" : "▶"}
+                      </button>
+                    </div>
                   ))}
+                  <button onClick={() => setAddVoiceOpen((o) => !o)} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all" style={{ background: "transparent", border: "1px dashed var(--accent)", color: "var(--accent)" }}>
+                    ➕ Добавить голос
+                  </button>
+                  {addVoiceOpen && (
+                    <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      <button disabled className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left" style={{ background: "var(--bg-surface)", color: "var(--text-secondary)", opacity: 0.7 }}>🎙 Записать свой голос<span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>скоро</span></button>
+                      <button disabled className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left" style={{ background: "var(--bg-surface)", color: "var(--text-secondary)", opacity: 0.7 }}>🛍 Из магазина голосов<span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }}>скоро</span></button>
+                      <p className="text-[10px] px-1" style={{ color: "var(--text-muted)" }}>Скоро: запись собственного голоса и голоса из магазина (свой голос может стать платной опцией).</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

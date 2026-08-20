@@ -265,10 +265,10 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(8,10,16,0.30)" }} />
 
       {/* Контент поверх фона (z-1). Пустое место ловит тап-прерывание */}
-      <div onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } interrupt(); }} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1 }}>
+      <div onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } interrupt(); }} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1, justifyContent: "flex-start", alignItems: "center", paddingTop: "4vh" }}>
         <button onClick={(e) => { e.stopPropagation(); onExit(); }} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
-        <div className="text-6xl font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3 }}>{hh}:{mm}</div>
-        <div className="text-[12px] mb-12 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
+        <div className="font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3, fontSize: "clamp(34px, 7.5vw, 50px)" }}>{hh}:{mm}</div>
+        <div className="text-[12px] mb-8 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
 
         {/* Центр: аватар помощника (фото в покое) → вибрирующая волна во время речи. Долгое нажатие = «потри лампу» */}
         <div

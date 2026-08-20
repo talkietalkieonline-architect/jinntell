@@ -24,7 +24,7 @@ TOOLS = [
         "name": "close_chat", "description": "Закрыть чат по имени собеседника.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {
-        "name": "call", "description": "Открыть чат и предложить видеозвонок человеку.",
+        "name": "call", "description": "ВИДЕОЗВОНОК человеку: когда пользователь говорит «видеовызов X», «позвони X», «позвони по видео X», «свяжись с X» — открыть чат и начать видеозвонок с человеком по имени. Работает и из Потока.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {
         "name": "send_message", "description": "Отправить текстовое сообщение человеку по имени.",
