@@ -36,6 +36,12 @@ from app.api.public import router as public_router
 from app.api.turn import router as turn_router
 from app.api.geo import router as geo_router
 from app.api.activity import router as activity_router
+from app.api.waitlist import router as waitlist_router
+from app.api.day import router as day_router
+from app.api.video import router as video_router
+from app.api.library import router as library_router
+from app.api.wallet import router as wallet_router
+from app.api.store import router as store_router
 from app.websocket.chat_ws import router as ws_router
 from app.services.seed import seed_agents, seed_core_agents
 
@@ -47,6 +53,21 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         import app.models  # noqa: F401
         await conn.run_sync(Base.metadata.create_all)
+        # Идемпотентные ALTER'ы для новых колонок на существующих таблицах (create_all их не добавляет)
+        from sqlalchemy import text as _sqltext
+        for _stmt in [
+            "ALTER TABLE digests ADD COLUMN IF NOT EXISTS kind VARCHAR(16) DEFAULT 'doc'",
+            "ALTER TABLE digests ADD COLUMN IF NOT EXISTS media_url TEXT",
+            "ALTER TABLE digests ADD COLUMN IF NOT EXISTS source_agent_id INTEGER",
+            "ALTER TABLE digests ADD COLUMN IF NOT EXISTS source_agent_name VARCHAR(120) DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS owned_store_items TEXT DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(8) DEFAULT 'ru'",
+            "ALTER TABLE assistant_requests ADD COLUMN IF NOT EXISTS auto_resolved BOOLEAN DEFAULT false",
+        ]:
+            try:
+                await conn.execute(_sqltext(_stmt))
+            except Exception as _ae:
+                print(f"[startup] alter skip: {_ae}")
 
     # Заполняем начальными данными
     async with async_session() as db:
@@ -113,6 +134,12 @@ app.include_router(public_router)
 app.include_router(turn_router)
 app.include_router(geo_router)
 app.include_router(activity_router)
+app.include_router(waitlist_router)
+app.include_router(day_router)
+app.include_router(video_router)
+app.include_router(library_router)
+app.include_router(wallet_router)
+app.include_router(store_router)
 app.include_router(ws_router)
 
 # Хранилище загруженных файлов (фото агентов, гардероб, в будущем RAG-база контрагента)

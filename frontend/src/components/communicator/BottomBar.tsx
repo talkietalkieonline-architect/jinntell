@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { sttRecognize } from "@/services/api";
+import { sttRecognize, sttLang } from "@/services/api";
 
 /** Состояния микрофона */
 type MicState = "off" | "on" | "always" | "mute";
@@ -22,6 +22,7 @@ export default function BottomBar({
   canCall = false,
   onAssistantCommand,
   assistantName = "Джим",
+  autoListenTick = 0,
 }: {
   onSettingsClick: () => void;
   onContactsClick: () => void;
@@ -35,6 +36,7 @@ export default function BottomBar({
   canCall?: boolean;
   onAssistantCommand?: (text: string) => void;
   assistantName?: string;
+  autoListenTick?: number;
 }) {
   const [micState, setMicState] = useState<MicState>("off");
   const [showMediaMenu, setShowMediaMenu] = useState(false);
@@ -84,7 +86,10 @@ export default function BottomBar({
   const voiceSentRef = useRef("");
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendVoice = useCallback((raw: string) => {
-    const t = (raw || "").trim();
+    let t = (raw || "").trim();
+    if (!t) return;
+    // Android SpeechRecognition иногда задваивает слова — схлопываем подряд идущие одинаковые
+    t = t.replace(/\b(\S+)(\s+\1\b)+/gi, "$1").replace(/\s{2,}/g, " ").trim();
     if (!t) return;
     const now = Date.now();
     if (t === lastVoiceRef.current.text && now - lastVoiceRef.current.t < 2500) return;
@@ -103,7 +108,7 @@ export default function BottomBar({
     if (recognitionRef.current) { recognitionRef.current.abort(); }
 
     const recognition = new (SR as unknown as { new(): SpeechRecognition })();
-    recognition.lang = "ru-RU";
+    recognition.lang = sttLang();
     recognition.continuous = true;
     recognition.interimResults = true;
 
@@ -211,7 +216,7 @@ export default function BottomBar({
     if (micStateRef.current !== "off") return;
 
     const r = new (SR as unknown as { new(): SpeechRecognition })();
-    r.lang = "ru-RU";
+    r.lang = sttLang();
     r.continuous = true;
     r.interimResults = false;
     wakeLastStart.current = Date.now();
@@ -347,6 +352,15 @@ export default function BottomBar({
     const rec = dictRecRef.current;
     if (rec && rec.state !== "inactive") { try { rec.stop(); } catch { /* noop */ } }
   }, []);
+  // Авто-микрофон: родитель (онбординг) после озвучки вопроса меняет autoListenTick → сами начинаем диктовку,
+  // авто-стоп через 7с → распознанный текст падает в поле ввода (юзер проверяет и отправляет).
+  useEffect(() => {
+    if (autoListenTick <= 0 || dictating) return;
+    startDictation();
+    const t = setTimeout(() => stopDictation(), 7000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoListenTick]);
 
   // === 🎙 Голосовое сообщение (реальный звук): зажать-записать-отпустить. Запись стартует на нажатии — без гонки. ===
   const [recording, setRecording] = useState(false);

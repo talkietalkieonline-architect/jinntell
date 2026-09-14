@@ -493,6 +493,12 @@ export default function ChatArea({
   onCloseSearch,
   onForward,
   channelPosts,
+  channelName,
+  channelDescription,
+  onLoadMorePosts,
+  hasMorePosts,
+  onAskAgent,
+  onDiscussPost,
 }: {
   messages: ChatMessage[];
   isTyping: boolean;
@@ -510,7 +516,13 @@ export default function ChatArea({
   searchOpen?: boolean;
   onCloseSearch?: () => void;
   onForward?: (m: ChatMessage) => void;
-  channelPosts?: { id: number; title: string; body?: string | null; url?: string | null }[];
+  channelPosts?: { id: number; title: string; body?: string | null; url?: string | null; created_at?: string }[];
+  channelName?: string;
+  channelDescription?: string;
+  onLoadMorePosts?: () => void;
+  hasMorePosts?: boolean;
+  onAskAgent?: () => void;
+  onDiscussPost?: (post: { id: number; title: string }) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -633,15 +645,61 @@ export default function ChatArea({
             {headerSlot}
             {channelPosts && channelPosts.length > 0 && (
               <div className="rounded-2xl p-3 mb-1" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                <div className="text-[11px] uppercase tracking-wider font-semibold mb-2" style={{ color: "var(--text-muted)" }}>📰 Канал · последние новости</div>
-                <div className="flex flex-col gap-1.5">
-                  {channelPosts.slice(0, 12).map((p) => (
-                    <a key={p.id} href={p.url || undefined} target="_blank" rel="noreferrer" className="block rounded-lg p-2 transition-all hover:opacity-90" style={{ background: "var(--bg-glass-hover)" }}>
-                      <div className="text-[13px] font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{p.title}</div>
-                      {p.body && <div className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>{p.body}</div>}
-                    </a>
-                  ))}
+                {/* Шапка канала: аватар + название + описание источника/оснований */}
+                <div className="flex items-center gap-2.5 pb-2.5 mb-1 border-b" style={{ borderColor: "var(--bg-glass-border)" }}>
+                  <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass-hover)", border: "1px solid var(--bg-glass-border)" }}>
+                    {agentPhoto ? <img src={agentPhoto.startsWith("data:") || agentPhoto.startsWith("http") ? agentPhoto : mediaUrl(agentPhoto)} alt="" className="w-full h-full object-cover" /> : <span className="text-lg">📰</span>}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[14px] font-bold leading-tight" style={{ color: "var(--text-primary)" }}>{channelName || agentInfo?.name || "Канал"}</div>
+                    {channelDescription
+                      ? <div className="text-[11px] leading-snug mt-0.5" style={{ color: "var(--text-muted)" }}>{channelDescription}</div>
+                      : <div className="text-[11px] leading-snug mt-0.5" style={{ color: "var(--text-muted)" }}>Канал новостей · перепост со ссылкой на источник</div>}
+                  </div>
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  {channelPosts.map((p, i) => {
+                    const _d = p.created_at ? new Date(p.created_at) : null;
+                    const _key = _d ? _d.toDateString() : "";
+                    const _prev = i > 0 ? channelPosts[i - 1].created_at : null;
+                    const _prevKey = _prev ? new Date(_prev).toDateString() : "__first__";
+                    const _showSep = _d && _key !== _prevKey;
+                    const _label = _d ? _d.toLocaleDateString("ru", { day: "numeric", month: "long", year: _d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined }) : "";
+                    return (
+                    <div key={p.id} className="flex flex-col gap-1.5">
+                    {_showSep && (
+                      <div className="text-center my-1">
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full" style={{ background: "var(--bg-glass-hover)", color: "var(--text-muted)" }}>{_label}</span>
+                      </div>
+                    )}
+                    <div className="rounded-lg p-2" style={{ background: "var(--bg-glass-hover)" }}>
+                      {p.url ? (
+                        <a href={p.url} target="_blank" rel="noreferrer" className="block transition-all hover:opacity-90">
+                          <div className="text-[13px] font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{p.title}</div>
+                          {p.body && <div className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>{p.body}</div>}
+                        </a>
+                      ) : (<>
+                        <div className="text-[13px] font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{p.title}</div>
+                        {p.body && <div className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>{p.body}</div>}
+                      </>)}
+                      {onDiscussPost && (
+                        <button onClick={() => onDiscussPost({ id: p.id, title: p.title })} className="mt-1.5 text-[11px] font-medium" style={{ color: "var(--accent)" }}>💬 Обсудить</button>
+                      )}
+                    </div>
+                    </div>
+                    );
+                  })}
+                </div>
+                {onLoadMorePosts && hasMorePosts && (
+                  <button onClick={onLoadMorePosts} className="w-full mt-2 py-1.5 rounded-lg text-[12px] font-medium transition-all hover:opacity-80" style={{ background: "var(--bg-glass-hover)", color: "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>
+                    ↓ Ещё новости
+                  </button>
+                )}
+                {onAskAgent && (
+                  <button onClick={onAskAgent} className="w-full mt-2.5 py-2 rounded-lg text-[12px] font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+                    💬 Спросить джина подробнее
+                  </button>
+                )}
               </div>
             )}
             {messages.map((msg) => {

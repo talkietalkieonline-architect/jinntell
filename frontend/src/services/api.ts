@@ -95,13 +95,12 @@ export async function register(data: {
   password: string;
   email?: string;
   display_name?: string;
-}): Promise<TokenResponse> {
-  const res = await apiFetch<TokenResponse>("/api/auth/register", {
+}): Promise<TokenResponse & { waitlisted?: boolean; message?: string }> {
+  const res = await apiFetch<TokenResponse & { waitlisted?: boolean; message?: string }>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(data),
   });
-  setToken(res.access_token);
-  _saveSession(res);
+  if (res.access_token) { setToken(res.access_token); _saveSession(res); }
   return res;
 }
 
@@ -232,6 +231,7 @@ export interface AgentOut {
   city?: string | null;
   is_paid?: boolean;
   corporate?: boolean;
+  intro_video_url?: string | null;
 }
 
 export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }
@@ -239,13 +239,70 @@ export function getCities(): Promise<CityOut[]> { return apiFetch("/api/cities")
 export function getAllCities(): Promise<CityOut[]> { return apiFetch("/api/cities/all"); }
 export interface UsagePayer { payer_id: number | null; calls: number; tokens: number; revenue: number; cost: number; margin: number }
 export interface UsageSummary { currency: string; total_calls: number; total_tokens: number; billable_tokens: number; free_tokens: number; revenue: number; cost: number; margin: number; by_payer_type: { contractor: { tokens: number; revenue: number; cost: number }; user: { tokens: number; revenue: number; cost: number }; free: { tokens: number; revenue: number; cost: number } }; contractors: UsagePayer[]; paying_users: UsagePayer[]; by_model: { model: string; calls: number; tokens: number; revenue: number; cost: number; margin: number }[] }
-export interface ModelInfo { model: string; provider: string; cost: number; sell: number; valid_until: string; note: string; tokens: number; calls: number; revenue: number; cost_total: number; margin: number; agents: number; has_rate: boolean }
-export function adminGetModels(): Promise<{ currency: string; default: { cost: number; sell: number }; models: ModelInfo[] }> { return apiFetch("/api/admin/models"); }
+export interface ModelInfo { model: string; provider: string; cost: number; sell: number; cost_in: number; cost_out: number; sell_in: number; sell_out: number; valid_until: string; note: string; tokens: number; calls: number; revenue: number; cost_total: number; margin: number; agents: number; has_rate: boolean }
+export interface PriceOverride { free?: boolean; mult?: number }
+export function adminGetModels(): Promise<{ currency: string; default: { cost: number; sell: number }; models: ModelInfo[]; biz_markup?: string; overrides?: Record<string, PriceOverride>; provider_keys?: Record<string, boolean> }> { return apiFetch("/api/admin/models"); }
 export function adminDelPricing(model: string): Promise<{ ok: boolean }> { return apiFetch(`/api/admin/pricing/${encodeURIComponent(model)}`, { method: "DELETE" }); }
+
+// ── Тарифы ──
+export interface TariffOut {
+  id: number; code: string; name: string; description: string; llm_model: string;
+  msgs_per_day: number; jinn_calls_per_day: number; context_limit: number;
+  gates: Record<string, unknown>; is_default: boolean; sort: number;
+}
+export type TariffIn = Omit<TariffOut, "id">;
+export function adminListTariffs(): Promise<TariffOut[]> { return apiFetch("/api/admin/tariffs"); }
+export function adminCreateTariff(body: TariffIn): Promise<TariffOut> { return apiFetch("/api/admin/tariffs", { method: "POST", body: JSON.stringify(body) }); }
+export function adminUpdateTariff(id: number, body: TariffIn): Promise<TariffOut> { return apiFetch(`/api/admin/tariffs/${id}`, { method: "PUT", body: JSON.stringify(body) }); }
+export function adminDeleteTariff(id: number): Promise<void> { return apiFetch(`/api/admin/tariffs/${id}`, { method: "DELETE" }); }
+export function adminSetUserTariff(userId: number, code: string): Promise<{ ok: boolean; user_id: number; tariff_code: string }> { return apiFetch(`/api/admin/users/${userId}/tariff`, { method: "POST", body: JSON.stringify({ code }) }); }
+
+// ── Доки (реестр документов) ──
+export interface AdminDoc { title: string; section: string; url: string; status?: string; }
+export function adminListDocs(): Promise<AdminDoc[]> { return apiFetch("/api/admin/docs"); }
+export function adminSaveDocs(docs: AdminDoc[]): Promise<{ ok: boolean; count: number }> { return apiFetch("/api/admin/docs", { method: "POST", body: JSON.stringify({ docs }) }); }
+
+// ── Токены (пакеты + подарки) ──
+export interface TokenPack { name: string; tokens: number; price_rub: number; active: boolean; }
+export interface TokenConfig { packs: TokenPack[]; gifts: Record<string, number>; note?: string; }
+export function adminGetTokenConfig(): Promise<TokenConfig> { return apiFetch("/api/admin/token-config"); }
+export function adminSaveTokenConfig(config: TokenConfig): Promise<{ ok: boolean }> { return apiFetch("/api/admin/token-config", { method: "POST", body: JSON.stringify({ config }) }); }
+
+// ── Кошелёк юзера ──
+export interface WalletOut { token_balance: number; packs: TokenPack[]; welcome_available: number; daily_available: number; }
+export function getWallet(): Promise<WalletOut> { return apiFetch("/api/users/me/wallet"); }
+export function claimGift(kind: "welcome" | "daily"): Promise<{ ok: boolean; credited: number; token_balance: number }> { return apiFetch(`/api/users/me/wallet/claim/${kind}`, { method: "POST" }); }
+
+// ── Каталог (магазин фишек) ──
+export interface CatalogItem { category: string; name: string; price_tokens: number; target: string; active: boolean; preview?: string }
+export function adminGetCatalog(): Promise<CatalogItem[]> { return apiFetch("/api/admin/catalog"); }
+export function adminSaveCatalog(items: CatalogItem[]): Promise<{ ok: boolean; count: number }> { return apiFetch("/api/admin/catalog", { method: "POST", body: JSON.stringify({ items }) }); }
 export function adminSetPricing(body: Record<string, unknown>): Promise<{ ok: boolean }> { return apiFetch("/api/admin/pricing", { method: "PATCH", body: JSON.stringify(body) }); }
 export function adminGetUsage(): Promise<UsageSummary> { return apiFetch("/api/admin/usage"); }
 export function nearestCity(lat: number, lng: number): Promise<CityOut | null> { return apiFetch("/api/cities/nearest", { method: "POST", body: JSON.stringify({ lat, lng }) }); }
 export function createCity(data: { name: string; slug: string; lat?: number; lng?: number }): Promise<CityOut> { return apiFetch("/api/cities", { method: "POST", body: JSON.stringify(data) }); }
+
+// ═══════════════════════════════════════════════
+//  МОЙ ДЕНЬ (day_entries)
+// ═══════════════════════════════════════════════
+export interface DayEntry {
+  id: number; day: string; time: string | null; title: string; note: string | null;
+  kind: string; status: string; author: string; important: boolean;
+}
+export interface DaySignal { time: string; name: string; kind: string }
+export interface DayBirthday { day: string; name: string }
+export function getDay(days = 1, back = 0): Promise<{ days: string[]; entries: DayEntry[]; signals: DaySignal[]; birthdays: DayBirthday[] }> {
+  return apiFetch(`/api/day?days=${days}&back=${back}`);
+}
+export function addDayEntry(body: { title: string; time?: string; note?: string; kind?: string; important?: boolean }): Promise<DayEntry> {
+  return apiFetch("/api/day", { method: "POST", body: JSON.stringify(body) });
+}
+export function updateDayEntry(id: number, body: { status?: string; time?: string; title?: string; note?: string; important?: boolean }): Promise<DayEntry> {
+  return apiFetch(`/api/day/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+export function deleteDayEntry(id: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/day/${id}`, { method: "DELETE" });
+}
 export function updateCity(id: number, data: Record<string, unknown>): Promise<CityOut> { return apiFetch(`/api/cities/${id}`, { method: "PATCH", body: JSON.stringify(data) }); }
 
 export interface AgentCreate {
@@ -264,6 +321,7 @@ export interface AgentCreate {
 export interface AgentFullOut extends AgentOut {
   // AI
   system_prompt?: string;
+  tools_json?: string;
   llm_model: string;
   llm_max_tokens?: number;
   photo_url?: string;
@@ -329,6 +387,7 @@ export interface AgentPersonaUpdate {
   llm_model?: string;
   llm_max_tokens?: number;
   visibility?: string;
+  tools_json?: string;
   // Голос
   voice_id?: string;
   voice_speed?: number;
@@ -556,6 +615,7 @@ export interface AdminUser {
   telegram_linked: boolean;
   yandex_linked: boolean;
   balance_kopecks?: number;
+  tariff_code?: string;
   created_at?: string;
 }
 
@@ -654,9 +714,23 @@ export interface SystemSettings {
   guardian_enabled: boolean;
 }
 
-export interface PublicConfig { shader_bg_enabled: boolean; }
+export interface PublicConfig { shader_bg_enabled: boolean; waitlist_mode?: boolean; }
 export function getPublicConfig(): Promise<PublicConfig> {
   return apiFetch("/api/public/config");
+}
+export function joinWaitlist(name: string, contact: string): Promise<{ ok: boolean; already: boolean; position: number }> {
+  return apiFetch("/api/waitlist", { method: "POST", body: JSON.stringify({ name, contact }) });
+}
+export interface WaitlistUser { id: number; name: string; phone: string; email: string | null; created_at: string | null }
+export interface WaitlistState { active_count: number; limit: number; mode: string; pending_count: number; pending: WaitlistUser[] }
+export function adminWaitlistUsers(): Promise<WaitlistState> {
+  return apiFetch("/api/admin/waitlist-users");
+}
+export function adminActivateWaitlistUser(id: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/admin/waitlist-users/${id}/activate`, { method: "POST" });
+}
+export function adminWaitlistSettings(mode: string, limit: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/admin/waitlist-settings?mode=${encodeURIComponent(mode)}&limit=${limit}`, { method: "POST" });
 }
 
 export interface ActionSettings { approaches: "all" | "assistant" | "off"; allow_location: boolean; allow_promo: boolean; }
@@ -1030,6 +1104,13 @@ export function contractorAddAgentAccess(agentId: number, identifier: string): P
 export function contractorRemoveAgentAccess(agentId: number, userId: number): Promise<{ ok: boolean }> {
   return contractorFetch(`/api/contractor/agents/${agentId}/access/${userId}`, { method: "DELETE" });
 }
+export interface ChannelSubscriber { user_id: number; display_name: string; city?: string | null }
+export function contractorSubscribers(agentId: number): Promise<ChannelSubscriber[]> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/subscribers`);
+}
+export function contractorGift(agentId: number, amount: number, userIds: number[] | "all"): Promise<{ ok: boolean; gifted_to: number; amount: number }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/gift`, { method: "POST", body: JSON.stringify({ amount, user_ids: userIds }) });
+}
 
 /** Контрагент: статистика агента */
 export interface ContractorAgentStats {
@@ -1069,6 +1150,16 @@ export function contractorGetDialogs(id: number): Promise<ContractorDialogItem[]
 export function contractorGetDialog(id: number, userId: number): Promise<ContractorDialogMessage[]> {
   return contractorFetch(`/api/contractor/agents/${id}/dialogs/${userId}`);
 }
+export interface ContractorLead {
+  id: number;
+  contact: string | null;
+  detail: string;
+  result: string;
+  created_at: string | null;
+}
+export function contractorGetLeads(id: number): Promise<ContractorLead[]> {
+  return contractorFetch(`/api/contractor/agents/${id}/leads`);
+}
 
 async function contractorUpload<T>(path: string, form: FormData): Promise<T> {
   const token = getContractorToken();
@@ -1098,6 +1189,19 @@ export interface StorageUsage {
 
 export function mediaUrl(path: string): string {
   return path ? `${API_BASE}${path}` : "";
+}
+export interface MediaAssetOut { id: number; kind: string; url: string; prompt: string | null; source: string; label: string | null; }
+export function contractorLibraryList(kind?: string): Promise<MediaAssetOut[]> {
+  return contractorFetch(`/api/contractor/library${kind ? `?kind=${kind}` : ""}`);
+}
+export function contractorLibraryGenerate(prompt: string, kind = "face", n = 3): Promise<MediaAssetOut[]> {
+  return contractorFetch(`/api/contractor/library/generate`, { method: "POST", body: JSON.stringify({ prompt, kind, n }) });
+}
+export function contractorLibraryDelete(id: number): Promise<{ ok: boolean }> {
+  return contractorFetch(`/api/contractor/library/${id}`, { method: "DELETE" });
+}
+export function contractorApplyFace(agentId: number, assetId: number): Promise<{ photo_url: string }> {
+  return contractorFetch(`/api/contractor/library/apply-face/${agentId}`, { method: "POST", body: JSON.stringify({ asset_id: assetId }) });
 }
 /** Ужать изображение до аватарного размера перед загрузкой — экономит хранилище и трафик. При любой ошибке возвращает исходный файл. */
 async function compressImage(file: File, maxDim = 512, quality = 0.85): Promise<File> {
@@ -1317,6 +1421,7 @@ export interface UserProfile {
   birth_date?: string;
   city?: string;
   about?: string;
+  birthday?: string;
   // OAuth привязки
   vk_linked?: boolean;
   telegram_linked?: boolean;
@@ -1325,6 +1430,7 @@ export interface UserProfile {
   assistant_name?: string;
   assistant_gender?: string;
   assistant_voice?: string;
+  language?: string;
   gender?: string;
   persona_gender?: string;
   interests?: string;
@@ -1417,6 +1523,9 @@ export function changePassword(current_password: string, new_password: string): 
 }
 export function deleteAssistantPhoto(): Promise<{ ok: boolean }> {
   return apiFetch("/api/users/me/assistant-photo", { method: "DELETE" });
+}
+export function deleteAccount(): Promise<{ message: string }> {
+  return apiFetch("/api/auth/delete-account", { method: "POST" });
 }
 
 export interface FeedEvent {
@@ -1579,11 +1688,12 @@ export function getMyActivity(hours = 168, limit = 100): Promise<{ total: number
   return apiFetch(`/api/activity/mine?hours=${hours}&limit=${limit}`);
 }
 export interface DigestSection { agent_id: number; agent_name: string; color?: string; text: string }
-export interface DigestFull { id: number; query: string; sections: DigestSection[]; created_at: string }
+export interface DigestFull { id: number; query: string; sections: DigestSection[]; kind?: string; media_url?: string | null; source_agent_name?: string; created_at: string }
+export interface DigestItem { id: number; query: string; kind?: string; media_url?: string | null; source_agent_name?: string; created_at: string }
 export function makeDigest(query: string): Promise<{ ok: boolean; id?: number; query?: string; sections?: DigestSection[]; reason?: string }> {
   return apiFetch("/api/chat/digest", { method: "POST", body: JSON.stringify({ text: query }) });
 }
-export function listDigests(): Promise<{ items: { id: number; query: string; created_at: string }[] }> {
+export function listDigests(): Promise<{ items: DigestItem[] }> {
   return apiFetch("/api/chat/digests");
 }
 export function getDigest(id: number): Promise<DigestFull> {
@@ -1591,4 +1701,104 @@ export function getDigest(id: number): Promise<DigestFull> {
 }
 export function deleteDigest(id: number): Promise<{ ok: boolean }> {
   return apiFetch(`/api/chat/digests/${id}`, { method: "DELETE" });
+}
+export function shareDigest(id: number, toUserId: number): Promise<{ ok: boolean }> {
+  return apiFetch(`/api/chat/digests/${id}/share`, { method: "POST", body: JSON.stringify({ to_user_id: toUserId }) });
+}
+
+// ── #4 Обращения (внутренний helpdesk) ──
+export interface AssistantRequestItem {
+  id: number; user_id: number | null; source_agent_id: number | null;
+  task_text: string; reason: string; context: string;
+  target: string; target_label: string; target_agent_id: number | null;
+  triage_category: string; triage_analysis: string;
+  thread: { role: string; text: string; at: string }[];
+  status: string; resolution_type: string; admin_notes: string;
+  response_to_user: string; assigned_to: number | null;
+  auto_resolved?: boolean;
+  created_at: string | null; updated_at: string | null;
+}
+export interface TargetInfo { label: string; agent_id: number; domain: string; }
+export function adminListRequests(status = ""): Promise<{ requests: AssistantRequestItem[]; counts: Record<string, number>; targets: Record<string, TargetInfo> }> {
+  return apiFetch(`/api/admin/requests${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+}
+export function adminGetRequest(id: number): Promise<AssistantRequestItem> {
+  return apiFetch(`/api/admin/requests/${id}`);
+}
+export function adminCreateRequest(body: { task_text?: string; reason?: string; context?: string; target?: string; user_id?: number; source_agent_id?: number }): Promise<AssistantRequestItem> {
+  return apiFetch("/api/admin/requests", { method: "POST", body: JSON.stringify(body) });
+}
+export function adminPatchRequest(id: number, body: Record<string, unknown>): Promise<AssistantRequestItem> {
+  return apiFetch(`/api/admin/requests/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+export function adminTriageRequest(id: number): Promise<AssistantRequestItem> {
+  return apiFetch(`/api/admin/requests/${id}/triage`, { method: "POST" });
+}
+export function adminAskInternal(id: number, message: string): Promise<{ reply: string; model: string; request: AssistantRequestItem }> {
+  return apiFetch(`/api/admin/requests/${id}/ask`, { method: "POST", body: JSON.stringify({ message }) });
+}
+
+// ── #5 Кошелёк (рубли) ──
+export interface WalletBonus { label: string; agent_id: number | null; display_tokens: number; remaining_rub: number; source: string; }
+export interface WalletTxn { kind: string; amount_rub: number; balance_after_rub: number; agent_id: number | null; description: string; created_at: string | null; }
+export interface WalletMoney { currency: string; currency_code: string; balance_rub: number; balance_kopecks: number; bonuses: WalletBonus[]; history: WalletTxn[]; }
+export function getWalletMoney(): Promise<WalletMoney> { return apiFetch("/api/wallet"); }
+export function topupWallet(amount_rub: number): Promise<{ confirmation_url: string | null; payment_id: string | null }> {
+  return apiFetch("/api/wallet/topup", { method: "POST", body: JSON.stringify({ amount_rub }) });
+}
+export function jinnPrice(agentId: number): Promise<{ paid: boolean; per_message_rub?: number; per_document_rub?: number; note?: string }> {
+  return apiFetch(`/api/wallet/price/${agentId}`);
+}
+export interface CityPromo { agent_id: number; sponsor_name: string; bonus_tokens: number; message: string; }
+export function getPromos(): Promise<{ promos: CityPromo[] }> { return apiFetch("/api/wallet/promos"); }
+
+// ── #4 Магазин (обои/голоса) ──
+export interface StoreItem { id: string; category: string; name: string; preview: string; price_rub: number; premium: boolean; payload_kind: string; payload: string; }
+export interface StoreOut { currency: string; balance_rub: number; owned: string[]; items: StoreItem[]; }
+export function getStore(): Promise<StoreOut> { return apiFetch("/api/store"); }
+export function buyStoreItem(item_id: string): Promise<{ ok: boolean; owned: string[]; balance_rub?: number; already?: boolean }> {
+  return apiFetch("/api/store/buy", { method: "POST", body: JSON.stringify({ item_id }) });
+}
+export function applyStoreItem(item_id: string): Promise<{ ok: boolean; applied: string; value: string }> {
+  return apiFetch("/api/store/apply", { method: "POST", body: JSON.stringify({ item_id }) });
+}
+
+// ── #7 Совещательная комната ──
+export interface CouncilCandidate { id: number; name: string; profession: string; type: string; }
+export interface CouncilTurn { agent_id: number; name: string; text: string; }
+export interface CouncilSessionOut { id: number; topic: string; mode: string; participants: { id: number; name: string }[]; transcript?: CouncilTurn[]; summary: string; created_at: string | null; }
+export function councilCandidates(mode: "core" | "city", q = ""): Promise<{ candidates: CouncilCandidate[] }> {
+  return apiFetch(`/api/admin/council/candidates?mode=${mode}${q ? `&q=${encodeURIComponent(q)}` : ""}`);
+}
+export function councilConvene(topic: string, mode: "core" | "city", participant_ids: number[]): Promise<CouncilSessionOut> {
+  return apiFetch("/api/admin/council/convene", { method: "POST", body: JSON.stringify({ topic, mode, participant_ids }) });
+}
+export function councilList(): Promise<{ sessions: CouncilSessionOut[] }> { return apiFetch("/api/admin/council"); }
+export function councilGet(id: number): Promise<CouncilSessionOut> { return apiFetch(`/api/admin/council/${id}`); }
+
+// ── #5 Спонсорские кампании + бонусы (админ) ──
+export interface SponsorCampaignItem {
+  id: number; sponsor_name: string; agent_id: number | null; bonus_tokens: number; bonus_kopecks: number;
+  budget_kopecks: number; spent_kopecks: number; budget_rub: number; spent_rub: number;
+  message: string; active: boolean; starts_at: string | null; ends_at: string | null;
+}
+export function adminListCampaigns(): Promise<{ campaigns: SponsorCampaignItem[] }> { return apiFetch("/api/admin/campaigns"); }
+export function adminSaveCampaign(body: Record<string, unknown>): Promise<SponsorCampaignItem> {
+  return apiFetch("/api/admin/campaigns", { method: "POST", body: JSON.stringify(body) });
+}
+export function adminDelCampaign(id: number): Promise<{ ok: boolean }> { return apiFetch(`/api/admin/campaigns/${id}`, { method: "DELETE" }); }
+export function adminGrantBonus(userId: number, body: { tokens: number; label?: string; agent_id?: number; expires_days?: number }): Promise<{ ok: boolean; grant_id: number; kopecks: number; tokens: number }> {
+  return apiFetch(`/api/admin/users/${userId}/bonus`, { method: "POST", body: JSON.stringify(body) });
+}
+
+// i18n: язык юзера → BCP-47 для браузерного распознавания речи (STT)
+export const LANG_OPTIONS: { id: string; label: string; bcp: string }[] = [
+  { id: "ru", label: "Русский", bcp: "ru-RU" },
+  { id: "en", label: "English", bcp: "en-US" },
+  { id: "ka", label: "ქართული (Georgian)", bcp: "ka-GE" },
+];
+export function sttLang(): string {
+  let l = "ru";
+  try { l = localStorage.getItem("jinntell_lang") || "ru"; } catch { /* noop */ }
+  return (LANG_OPTIONS.find((x) => x.id === l)?.bcp) || "ru-RU";
 }

@@ -10,6 +10,9 @@ import {
   contractorGetAgentAccess,
   contractorAddAgentAccess,
   contractorRemoveAgentAccess,
+  contractorSubscribers,
+  contractorGift,
+  type ChannelSubscriber,
   type AccessUser,
   contractorLogout,
   getContractorToken,
@@ -19,6 +22,8 @@ import {
   contractorGetAgentStats,
   contractorGetDialogs,
   contractorGetDialog,
+  contractorGetLeads,
+  type ContractorLead,
   contractorUploadPhoto,
   contractorDeletePhoto,
   contractorGetWardrobe,
@@ -39,6 +44,11 @@ import {
   contractorUploadGeoFlyer,
   contractorGeoStats,
   type GeoStats,
+  contractorLibraryList,
+  contractorLibraryGenerate,
+  contractorLibraryDelete,
+  contractorApplyFace,
+  type MediaAssetOut,
 } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
@@ -72,7 +82,26 @@ const TEMPERAMENTS = [
   { id: "reserved", label: "Сдержанный" },
 ];
 
-type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "knowledge" | "voice" | "appearance" | "outfit" | "access" | "geo";
+type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "functions" | "leads" | "subscribers" | "knowledge" | "voice" | "appearance" | "outfit" | "faces" | "access" | "geo";
+
+// Реестр функций джина (синхронно с backend app/services/agent_tools.py)
+const TOOL_CATALOG: { id: string; label: string; desc: string; kind: "read" | "write"; soon?: boolean }[] = [
+  { id: "search_knowledge", label: "Поиск по базе", desc: "Отвечает по базе знаний компании", kind: "read" },
+  { id: "lookup", label: "Каталог / прайс", desc: "Подбор товара и цены из каталога", kind: "read" },
+  { id: "web_search", label: "Поиск в интернете", desc: "Ищет в вебе, когда нет в базе", kind: "read" },
+  { id: "calc", label: "Посчитать", desc: "Точный расчёт: смета, итог, платёж по рассрочке/кредиту, скидка", kind: "read" },
+  { id: "create_lead", label: "Оформить заявку", desc: "Записывает заявку (лид) клиента — видно во вкладке «Заявки»", kind: "write" },
+  { id: "remember_client", label: "Запомнить о клиенте", desc: "Помнит клиента между разговорами (бюджет, предпочтения)", kind: "write" },
+  { id: "make_document", label: "Составить документ", desc: "Счёт / КП / договор / справка — клиенту в «Портфель»", kind: "write" },
+  { id: "escalate", label: "Позвать человека", desc: "Передаёт разговор живому специалисту компании", kind: "write" },
+  { id: "book_slot", label: "Запись на время", desc: "Записывает на приём / время", kind: "write", soon: true },
+];
+const TOOL_PRESETS: { id: string; label: string; tools: string[] }[] = [
+  { id: "consultant", label: "Консультант", tools: ["search_knowledge", "web_search", "lookup", "calc", "escalate"] },
+  { id: "seller", label: "Продавец", tools: ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate"] },
+  { id: "manager", label: "Менеджер", tools: ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot"] },
+  { id: "support", label: "Поддержка", tools: ["search_knowledge", "lookup", "create_lead", "remember_client", "escalate"] },
+];
 
 interface Props {
   isOpen: boolean;
@@ -131,6 +160,13 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [mannerEmoji, setMannerEmoji] = useState(true);
   // Знания
   const [knowledgeText, setKnowledgeText] = useState("");
+  // Функции (инструменты джина)
+  const [tools, setTools] = useState<string[]>([]);
+  // Заявки (лиды)
+  const [leads, setLeads] = useState<ContractorLead[]>([]);
+  const [subscribers, setSubscribers] = useState<ChannelSubscriber[]>([]);
+  const [giftAmount, setGiftAmount] = useState("50");
+  const [giftBusy, setGiftBusy] = useState(false);
   // Голос
   const [voiceId, setVoiceId] = useState("");
   const [voiceSpeed, setVoiceSpeed] = useState(1.0);
@@ -156,6 +192,10 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [openDialogUser, setOpenDialogUser] = useState<ContractorDialogItem | null>(null);
   const [dialogMessages, setDialogMessages] = useState<ContractorDialogMessage[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [faces, setFaces] = useState<MediaAssetOut[]>([]);
+  const [facePrompt, setFacePrompt] = useState("");
+  const [faceN, setFaceN] = useState(3);
+  const [genLoading, setGenLoading] = useState(false);
   const [wardrobe, setWardrobe] = useState<WardrobeItem[]>([]);
   const [storage, setStorage] = useState<StorageUsage | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -310,6 +350,8 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     setMannerEmoji(agent.manner_emoji_use ?? true);
     // Знания
     setKnowledgeText(agent.knowledge_text || "");
+    // Функции
+    try { setTools(agent.tools_json ? JSON.parse(agent.tools_json) : []); } catch { setTools([]); }
     // Голос
     setVoiceId(agent.tts_voice_id || agent.voice_id || "");
     setVoiceEmotion(agent.tts_emotion || "neutral");
@@ -333,6 +375,15 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
 
   // Список доступа — загружаем при входе в секцию
   useEffect(() => {
+    if (activeSection === "faces" && selectedAgent) {
+      contractorLibraryList("face").then(setFaces).catch(() => setFaces([]));
+    }
+    if (activeSection === "leads" && selectedAgent) {
+      contractorGetLeads(selectedAgent.id).then(setLeads).catch(() => setLeads([]));
+    }
+    if (activeSection === "subscribers" && selectedAgent) {
+      contractorSubscribers(selectedAgent.id).then(setSubscribers).catch(() => setSubscribers([]));
+    }
     if (activeSection === "access" && selectedAgent) {
       contractorGetAgentAccess(selectedAgent.id).then(setAccessUsers).catch(() => setAccessUsers([]));
     }
@@ -407,6 +458,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
         manner_humor: mannerHumor,
         manner_emoji_use: mannerEmoji,
         knowledge_text: knowledgeText || undefined,
+        tools_json: JSON.stringify(tools),
         voice_id: voiceId || undefined,
         tts_voice_id: voiceId || undefined,
         tts_emotion: voiceEmotion,
@@ -551,10 +603,14 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "skills" as const, label: "Скилы" },
                   { id: "exclusions" as const, label: "Запреты" },
                   { id: "manners" as const, label: "Манеры" },
+                  { id: "functions" as const, label: "Функции" },
+                  { id: "leads" as const, label: "Заявки" },
+                  { id: "subscribers" as const, label: "Подписчики" },
                   { id: "knowledge" as const, label: "Знания" },
                   { id: "voice" as const, label: "Голос" },
                   { id: "appearance" as const, label: "Внешность" },
                   { id: "outfit" as const, label: "Одежда" },
+                  { id: "faces" as const, label: "Образы" },
                   { id: "access" as const, label: "Доступ" },
                   { id: "geo" as const, label: "Геотриггер" },
                 ]).map((tab) => (
@@ -837,6 +893,104 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                 </div>
               )}
 
+              {/* ═══ Секция: Функции ═══ */}
+              {activeSection === "functions" && (
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Функции джина</label>
+                    <p className="text-[11px] mb-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                      Что джинн умеет делать в разговоре. Профессия: <b style={{ color: "var(--text-secondary)" }}>{selectedAgent?.profession || "—"}</b>. Пресет задаёт набор — можно донастроить переключателями.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {TOOL_PRESETS.map((p) => (
+                        <button key={p.id} type="button" onClick={() => setTools(p.tools)}
+                          className="px-3 py-1 rounded-full text-[11px] font-medium transition-all"
+                          style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {TOOL_CATALOG.map((t) => {
+                        const on = tools.includes(t.id);
+                        return (
+                          <button key={t.id} type="button"
+                            onClick={() => setTools(on ? tools.filter((x) => x !== t.id) : [...tools, t.id])}
+                            className="flex items-center justify-between rounded-xl px-4 py-2.5 text-left transition-all"
+                            style={{ background: "var(--bg-glass)", border: `1px solid ${on ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                            <div className="min-w-0 pr-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[12px] font-medium" style={{ color: "var(--text-primary)" }}>{t.label}</span>
+                                <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: t.kind === "read" ? "rgba(31,158,110,0.12)" : "rgba(212,168,67,0.12)", color: t.kind === "read" ? "#1F9E6E" : "var(--accent)" }}>{t.kind === "read" ? "чтение" : "действие"}</span>
+                                {t.soon && <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: "rgba(212,168,67,0.1)", color: "var(--accent)" }}>скоро</span>}
+                              </div>
+                              <div className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{t.desc}</div>
+                            </div>
+                            <div className="w-9 h-5 rounded-full flex items-center px-0.5 shrink-0 transition-all" style={{ background: on ? "var(--accent)" : "var(--bg-glass-border)", justifyContent: on ? "flex-end" : "flex-start" }}>
+                              <div className="w-4 h-4 rounded-full" style={{ background: "var(--bg-deep)" }} />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>«Оформить заявку» уже работает — собранные заявки смотри во вкладке «Заявки». «Запись на время» — скоро.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Секция: Подписчики ═══ */}
+              {activeSection === "subscribers" && (
+                <div className="flex flex-col gap-2 animate-fade-in">
+                  <div className="text-[13px] font-semibold mb-0.5" style={{ color: "var(--text-primary)" }}>Подписчики канала: {selectedAgent?.name}</div>
+                  <p className="text-[11px] mb-1 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                    Подписки именно этого джина (у каждого джина — свой канал и свои подписчики). Можно подарить им токены — пойдут к вашему консультанту (лиды).
+                  </p>
+                  <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                    <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>Подарить 🪙</span>
+                    <input value={giftAmount} onChange={(e) => setGiftAmount(e.target.value)} className="w-20 rounded-lg px-2 py-1 text-sm outline-none" style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                    <button disabled={giftBusy || subscribers.length === 0} onClick={async () => { if (!selectedAgent) return; setGiftBusy(true); try { const r = await contractorGift(selectedAgent.id, Number(giftAmount) || 0, "all"); alert(`Подарено ${r.amount} 🪙 — ${r.gifted_to} подписчикам`); } catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); } setGiftBusy(false); }} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (giftBusy || subscribers.length === 0) ? 0.5 : 1 }}>всем ({subscribers.length})</button>
+                  </div>
+                  {subscribers.length === 0 && (
+                    <div className="rounded-xl px-4 py-6 text-center text-[12px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>
+                      Пока нет подписчиков. Подписка = добавление джина в избранное.
+                    </div>
+                  )}
+                  {subscribers.map((s) => (
+                    <div key={s.user_id} className="rounded-xl px-4 py-2.5 flex items-center gap-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      <div className="flex-1">
+                        <div className="text-[13px]" style={{ color: "var(--text-primary)" }}>{s.display_name}</div>
+                        {s.city && <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>{s.city}</div>}
+                      </div>
+                      <button disabled={giftBusy} onClick={async () => { if (!selectedAgent) return; setGiftBusy(true); try { const r = await contractorGift(selectedAgent.id, Number(giftAmount) || 0, [s.user_id]); alert(`Подарено ${r.amount} 🪙`); } catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); } setGiftBusy(false); }} className="px-2.5 py-1 rounded-lg text-[11px] font-medium" style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)", color: "var(--accent)" }}>🎁 {giftAmount}</button>
+                    </div>
+                  ))}
+                  <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>«Похожие по поведению» (таргет по интересам через платформу, без доступа к чужим данным) — скоро.</p>
+                </div>
+              )}
+
+              {/* ═══ Секция: Заявки ═══ */}
+              {activeSection === "leads" && (
+                <div className="flex flex-col gap-2 animate-fade-in">
+                  <p className="text-[11px] mb-1 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                    Заявки, которые джинн собрал в разговоре инструментом «Оформить заявку».
+                  </p>
+                  {leads.length === 0 && (
+                    <div className="rounded-xl px-4 py-6 text-center text-[12px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-muted)" }}>
+                      Пока заявок нет. Включите инструмент «Оформить заявку» во вкладке «Функции».
+                    </div>
+                  )}
+                  {leads.map((l) => (
+                    <div key={l.id} className="rounded-xl px-4 py-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{l.contact || "Заявка"}</span>
+                        <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>{l.created_at ? new Date(l.created_at).toLocaleString("ru-RU") : ""}</span>
+                      </div>
+                      <div className="text-[11px] mt-1 whitespace-pre-line" style={{ color: "var(--text-secondary)" }}>{l.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* ═══ Секция: Знания ═══ */}
               {activeSection === "knowledge" && (
                 <div className="flex flex-col gap-3 animate-fade-in">
@@ -944,6 +1098,37 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                           <img src={mediaUrl(w.image_url)} alt={w.label || ""} className="w-full h-full object-cover cursor-pointer" onClick={() => handleWardrobeActivate(w.id)} />
                           {w.is_active && <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>АКТИВЕН</span>}
                           <button onClick={() => handleWardrobeDelete(w.id)} className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[11px]" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ═══ Секция: Образы (генерация лиц) ═══ */}
+              {activeSection === "faces" && (
+                <div className="flex flex-col gap-3 animate-fade-in">
+                  <div className="rounded-xl px-4 py-2.5 text-[11px]" style={{ background: "rgba(147,51,234,0.1)", border: "1px solid rgba(147,51,234,0.3)", color: "rgba(196,181,253,1)" }}>
+                    Опишите лицо джина — сгенерируем варианты (Qwen). Выберите один — станет фото джина. Библиотека общая для всех ваших джиннов.
+                  </div>
+                  <textarea value={facePrompt} onChange={(e) => setFacePrompt(e.target.value)} rows={2} placeholder="напр.: дружелюбная женщина 30 лет, тёплая улыбка, деловой стиль, студийный фон"
+                    className="w-full rounded-xl px-3 py-2 text-[13px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                  <div className="flex items-center gap-2">
+                    <select value={faceN} onChange={(e) => setFaceN(Number(e.target.value))} className="rounded-xl px-2 py-2 text-[12px]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}>
+                      <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
+                    </select>
+                    <button disabled={genLoading || !facePrompt.trim()} onClick={async () => { setGenLoading(true); try { const r = await contractorLibraryGenerate(facePrompt.trim(), "face", faceN); setFaces((f) => [...r, ...f]); } catch { alert("Не удалось сгенерировать"); } setGenLoading(false); }}
+                      className="flex-1 px-4 py-2 rounded-xl text-[12px] font-medium" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (genLoading || !facePrompt.trim()) ? 0.6 : 1 }}>
+                      {genLoading ? "Генерирую… (до минуты)" : "✨ Сгенерировать"}
+                    </button>
+                  </div>
+                  {faces.length === 0 ? <p className="text-sm text-center py-4" style={{ color: "var(--text-muted)" }}>Пока нет образов — сгенерируйте первый</p> : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {faces.map((a) => (
+                        <div key={a.id} className="relative rounded-xl overflow-hidden aspect-square" style={{ border: `2px solid ${photoUrl === a.url ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                          <img src={mediaUrl(a.url)} alt="" className="w-full h-full object-cover cursor-pointer" onClick={async () => { if (!selectedAgent) return; try { await contractorApplyFace(selectedAgent.id, a.id); setPhotoUrl(a.url); } catch {} }} />
+                          {photoUrl === a.url && <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>ФОТО</span>}
+                          <button onClick={async () => { try { await contractorLibraryDelete(a.id); setFaces((f) => f.filter((x) => x.id !== a.id)); } catch {} }} className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-[11px]" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>✕</button>
                         </div>
                       ))}
                     </div>

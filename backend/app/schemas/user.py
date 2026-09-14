@@ -25,6 +25,7 @@ class UserOut(BaseModel):
     birth_date: Optional[str] = None
     city: Optional[str] = None
     about: Optional[str] = None
+    birthday: Optional[str] = None
     bio: Optional[str] = None
     gender: Optional[str] = None
     persona_gender: Optional[str] = None
@@ -34,6 +35,7 @@ class UserOut(BaseModel):
     assistant_name: str = "Джим"
     assistant_gender: str = "male"
     assistant_voice: str = "male_low"
+    language: str = "ru"
     assistant_photo: Optional[str] = None
     assistant_age: Optional[int] = None
     assistant_traits: Optional[str] = None
@@ -69,6 +71,7 @@ class UserOut(BaseModel):
             birth_date=user.birth_date.isoformat() if user.birth_date else None,
             city=user.city,
             about=user.about,
+            birthday=user.birthday,
             bio=user.bio,
             gender=user.gender,
             persona_gender=user.persona_gender,
@@ -77,6 +80,7 @@ class UserOut(BaseModel):
             assistant_name=user.assistant_name or "Джим",
             assistant_gender=user.assistant_gender or "male",
             assistant_voice=user.assistant_voice or "male_low",
+            language=getattr(user, "language", None) or "ru",
             assistant_photo=user.assistant_photo,
             assistant_age=getattr(user, "assistant_age", None),
             assistant_traits=getattr(user, "assistant_traits", None),
@@ -104,6 +108,7 @@ class UserUpdate(BaseModel):
     birth_date: Optional[str] = None
     city: Optional[str] = None
     about: Optional[str] = None
+    birthday: Optional[str] = None
     gender: Optional[str] = None
     persona_gender: Optional[str] = None
     interests: Optional[str] = None
@@ -112,6 +117,7 @@ class UserUpdate(BaseModel):
     assistant_name: Optional[str] = None
     assistant_gender: Optional[str] = None
     assistant_voice: Optional[str] = None
+    language: Optional[str] = None
     assistant_photo: Optional[str] = None
     assistant_age: Optional[int] = None
     assistant_traits: Optional[str] = None

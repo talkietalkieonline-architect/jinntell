@@ -93,6 +93,10 @@ class Agent(Base):
 
     # Skills
     skills_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Инструменты (функции) джина — JSON-список включённых имён; права = этот список. См. vision_profession_factory.
+    tools_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Интро-ролик визитки (мини-презентация, Wan i2v из фото). См. design_jinn_starter_kit.
+    intro_video_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Exclusions
     exclusions_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

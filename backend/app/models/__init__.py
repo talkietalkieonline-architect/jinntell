@@ -20,3 +20,12 @@ from app.models.activity import ActivityLog
 from app.models.digest import Digest
 
 __all__ = ["User", "Agent", "AgentWardrobe", "Message", "Contractor", "AgentSource", "AgentRAGChunk", "AgentParseLog", "AppSetting", "FeedEvent", "Room", "RoomMember", "AgentAccess", "UserFavorite", "Contact", "ActivityLog"]
+from app.models.waitlist import WaitlistEntry
+from app.models.day_entry import DayEntry
+from app.models.media_asset import MediaAsset
+from app.models.tariff import Tariff
+from app.models.assistant_request import AssistantRequest
+from app.models.wallet_ledger import WalletLedger
+from app.models.bonus_grant import BonusGrant
+from app.models.sponsor_campaign import SponsorCampaign
+from app.models.council_session import CouncilSession

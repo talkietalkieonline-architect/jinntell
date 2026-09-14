@@ -62,4 +62,9 @@ async def _yandex_stt(audio: bytes) -> str:
         r = await client.post(YANDEX_STT_URL, params=params, headers=headers, content=data)
     if r.status_code != 200:
         raise RuntimeError(f"SpeechKit STT {r.status_code}: {r.text[:200]}")
+    try:
+        from app.services import yandex_meter
+        await yandex_meter.add("stt_calls", 1)
+    except Exception:
+        pass
     return (r.json().get("result") or "").strip()

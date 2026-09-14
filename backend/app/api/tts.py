@@ -58,6 +58,13 @@ async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(502, f"SpeechKit недоступен: {e}")
 
+    try:
+        if r.status_code == 200:
+            from app.services import yandex_meter
+            await yandex_meter.add("tts_chars", len(text))
+    except Exception:
+        pass
+
     if r.status_code != 200:
         raise HTTPException(502, f"SpeechKit error {r.status_code}: {r.text[:200]}")
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, uploadBackgroundImage, deleteBackgroundImage, getActionSettings, updateActionSettings, ttsBlobUrl, type UserProfile, type AgentFullOut } from "@/services/api";
+import { LANG_OPTIONS, updateMe, uploadAssistantPhoto, deleteAssistantPhoto, uploadUserAvatar, deleteUserAvatar, mediaUrl, getMyJinn, createMyJinn, updateAgent, clearAssistantMemory, changePassword, uploadBackgroundImage, deleteBackgroundImage, getActionSettings, updateActionSettings, ttsBlobUrl, deleteAccount, getWallet, claimGift, type WalletOut, type UserProfile, type AgentFullOut } from "@/services/api";
 import { backgroundsForTheme, defaultBgFor } from "@/components/communicator/AppBackground";
 import { AVATAR_FRAMES, FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
 
@@ -30,6 +30,7 @@ const VOICES = [
 
 const SECTIONS = [
   "Настройки пользователя",
+  "Кошелёк",
   "Настройка интересов",
   "Настройки персонажа",
   "Настройки действий",
@@ -39,6 +40,7 @@ const SECTIONS = [
 
 const SECTION_META: Record<string, { icon: string; desc: string }> = {
   "Настройки пользователя": { icon: "👤", desc: "Профиль, вход, баланс" },
+  "Кошелёк": { icon: "🪙", desc: "Токены, подарки, пополнение" },
   "Настройка интересов": { icon: "🎯", desc: "Темы, которые тебе приносить" },
   "Настройки персонажа": { icon: "🎭", desc: "Ваш представитель в Городе" },
   "Настройки действий": { icon: "🔔", desc: "Что вам могут показывать джинны" },
@@ -80,6 +82,8 @@ export default function SettingsModal({
   const [currentTheme, setCurrentTheme] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_theme") || "light" : "light"));
   const [customAccent, setCustomAccent] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_accent") || "#6c7bff" : "#6c7bff"));
   const [bgId, setBgId] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_bg") || "indigo" : "indigo"));
+  const [lang, setLang] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_lang") || "ru" : "ru"));
+  useEffect(() => { const l = (user as { language?: string } | null)?.language; if (l) { setLang(l); try { localStorage.setItem("jinntell_lang", l); } catch { /* noop */ } } }, [user]);
   const [flowBg, setFlowBg] = useState(() => (typeof window !== "undefined" ? localStorage.getItem("jinntell_flow_bg") || "" : ""));
   const setFlow = (id: string) => { setFlowBg(id); try { if (id) localStorage.setItem("jinntell_flow_bg", id); else localStorage.removeItem("jinntell_flow_bg"); } catch { /* noop */ } };
   const [customBg, setCustomBg] = useState("");
@@ -101,6 +105,18 @@ export default function SettingsModal({
   const [interests, setInterests] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // Кошелёк
+  const [wallet, setWallet] = useState<WalletOut | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
+  useEffect(() => {
+    if (isOpen && activeSection === "Кошелёк") { getWallet().then(setWallet).catch(() => {}); }
+  }, [isOpen, activeSection]);
+  const doClaim = async (kind: "welcome" | "daily") => {
+    setWalletBusy(true);
+    try { await claimGift(kind); setWallet(await getWallet()); } catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    setWalletBusy(false);
+  };
 
   // Настройки помощника
   const [assistantName, setAssistantName] = useState("Джим");
@@ -535,12 +551,62 @@ const _av = user.assistant_voice || "ermil";
                 <div className="text-lg font-semibold" style={{ color: "var(--accent)" }}>{(((user?.balance_kopecks ?? 0)) / 100).toLocaleString("ru")} ₽</div>
                 <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>Списывается за платных джиннов и вашего джинна. Пополнение — скоро.</p>
                 <button onClick={async () => { if (confirm("Очистить всё, что помощник запомнил о вас?")) { try { await clearAssistantMemory(); alert("Память помощника очищена"); } catch { /* noop */ } } }} className="mt-2 text-[12px] transition-opacity hover:opacity-70" style={{ color: "var(--text-muted)" }}>🧠 Очистить память помощника</button>
+                <button onClick={async () => {
+                  if (!confirm("Удалить аккаунт безвозвратно? Данные будут анонимизированы, вход станет невозможен. Отменить нельзя.")) return;
+                  if (!confirm("Точно удалить аккаунт? Это финальное подтверждение.")) return;
+                  try {
+                    await deleteAccount();
+                    try { localStorage.removeItem("jinntell_session"); } catch { /* noop */ }
+                    alert("Аккаунт удалён. Данные анонимизированы.");
+                    onClose(); onLogout?.();
+                    try { location.reload(); } catch { /* noop */ }
+                  } catch { alert("Не удалось удалить аккаунт. Попробуйте позже."); }
+                }} className="mt-2 block text-[12px] transition-opacity hover:opacity-70" style={{ color: "#e5484d" }}>🗑 Удалить аккаунт</button>
               </div>
 
               </div>
               <button onClick={handleSavePersonal} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.98]" style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
                 {saving ? "Сохранение..." : saved ? "✓ Сохранено" : "Сохранить"}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* === КОШЕЛЁК === */}
+        {activeSection === "Кошелёк" && (
+          <div className="space-y-4">
+            <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Баланс токенов</div>
+              <div className="text-3xl font-bold" style={{ color: "var(--accent)" }}>{wallet ? wallet.token_balance.toLocaleString("ru") : "…"} <span className="text-base">🪙</span></div>
+              <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>Токены идут на голос, анимацию, платных джиннов и умных персонажей. Бесплатная база доступна всегда.</p>
+            </div>
+
+            {wallet && (wallet.welcome_available > 0 || wallet.daily_available > 0) && (
+              <div>
+                <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Подарки</div>
+                <div className="flex flex-wrap gap-2">
+                  {wallet.welcome_available > 0 && (
+                    <button disabled={walletBusy} onClick={() => doClaim("welcome")} className="px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>🎁 Приветственные +{wallet.welcome_available}</button>
+                  )}
+                  {wallet.daily_available > 0 && (
+                    <button disabled={walletBusy} onClick={() => doClaim("daily")} className="px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] disabled:opacity-50" style={{ background: "var(--bg-glass)", color: "var(--text-primary)", border: "1px solid var(--bg-glass-border)" }}>☀️ Ежедневный +{wallet.daily_available}</button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Пополнить</div>
+              <div className="grid grid-cols-2 gap-2">
+                {(wallet?.packs || []).map((p, i) => (
+                  <div key={i} className="rounded-xl p-3 flex flex-col gap-1" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                    <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{p.name}</div>
+                    <div className="text-lg font-bold" style={{ color: "var(--accent)" }}>{p.tokens.toLocaleString("ru")} 🪙</div>
+                    <button onClick={() => alert("Оплата подключается — скоро. Пока баланс пополняется подарками.")} className="mt-1 py-1.5 rounded-lg text-xs font-semibold" style={{ background: p.price_rub === 0 ? "var(--bg-glass-border)" : "var(--accent)", color: p.price_rub === 0 ? "var(--text-muted)" : "var(--bg-deep)" }}>{p.price_rub === 0 ? "Бесплатно" : `${p.price_rub.toLocaleString("ru")} ₽`}</button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>Оплата подключается. Подарки — от нас, партнёров и бизнесов (за подписку на каналы джиннов).</p>
             </div>
           </div>
         )}
@@ -862,6 +928,16 @@ const _av = user.assistant_voice || "ermil";
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               ‹ Назад
             </button>
+            <div className="rounded-2xl p-4 mb-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--text-primary)" }}>Язык</h3>
+              <p className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>Язык распознавания речи и голоса помощника.</p>
+              <div className="flex gap-2 flex-wrap">
+                {LANG_OPTIONS.map((L) => (
+                  <button key={L.id} onClick={() => { setLang(L.id); try { localStorage.setItem("jinntell_lang", L.id); } catch { /* noop */ } updateMe({ language: L.id } as Partial<UserProfile>).catch(() => {}); }} className="px-3 py-1.5 rounded-xl text-sm font-medium transition-all" style={{ background: lang === L.id ? "var(--accent)" : "var(--bg-glass)", color: lang === L.id ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${lang === L.id ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{L.label}</button>
+                ))}
+              </div>
+              <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>Перевод интерфейса и грузинские голоса — в разработке; сейчас меняется распознавание речи.</p>
+            </div>
             <div className="rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
             <h3 className="text-sm font-medium mb-3" style={{ color: "var(--text-primary)" }}>Тема оформления</h3>
             <div className="flex flex-col gap-2">
@@ -994,7 +1070,7 @@ const _av = user.assistant_voice || "ermil";
         )}
 
         {/* === ОСТАЛЬНЫЕ РАЗДЕЛЫ (заглушки) === */}
-        {activeSection !== null && activeSection !== "Настройки пользователя" && activeSection !== "Настройки персонажа" && activeSection !== "Настройки действий" && activeSection !== "Настройки Помощника" && activeSection !== "Настройка интерфейса" && (
+        {activeSection !== null && activeSection !== "Настройки пользователя" && activeSection !== "Кошелёк" && activeSection !== "Настройки персонажа" && activeSection !== "Настройки действий" && activeSection !== "Настройки Помощника" && activeSection !== "Настройка интерфейса" && (
           <div>
             <button onClick={() => setActiveSection(null)} className="text-sm mb-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-full transition-all" style={{ color: "var(--accent)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               ‹ Назад

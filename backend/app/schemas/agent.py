@@ -28,6 +28,7 @@ class AgentOut(BaseModel):
     tts_enabled: bool = False
     video_enabled: bool = False
     video_mode: str = "bubble"
+    intro_video_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -35,6 +36,7 @@ class AgentOut(BaseModel):
 
 class AgentDetailOut(AgentOut):
     system_prompt: Optional[str] = None
+    tools_json: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
     llm_max_tokens: int = 1000
     is_active: bool = True
@@ -161,6 +163,7 @@ class AgentUpdate(BaseModel):
     llm_model: Optional[str] = Field(None, max_length=100)
     llm_max_tokens: Optional[int] = Field(None, ge=100, le=4000)
     greeting: Optional[str] = Field(None, max_length=500)
+    tools_json: Optional[str] = Field(None, max_length=4000)
 
     # TTS
     tts_enabled: Optional[bool] = None

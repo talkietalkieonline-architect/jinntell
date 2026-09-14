@@ -55,6 +55,10 @@ AVAILABLE_MODELS = [
     {"value": "gpt-4o", "label": "GPT-4o", "group": "OpenAI"},
     {"value": "gemini-2.0-flash", "label": "Gemini 2.0 Flash", "group": "Gemini"},
     {"value": "llama-3.3-70b-versatile", "label": "Llama 3.3 70B", "group": "Groq"},
+    {"value": "qwen-plus", "label": "Qwen Plus (Alibaba)", "group": "Qwen"},
+    {"value": "qwen-max", "label": "Qwen Max (Alibaba)", "group": "Qwen"},
+    {"value": "qwen-turbo", "label": "Qwen Turbo (Alibaba)", "group": "Qwen"},
+    {"value": "qwen-vl-max", "label": "Qwen-VL Max (зрение)", "group": "Qwen"},
 ]
 
 # Голос (TTS) — провайдеры для помощника
@@ -195,6 +199,11 @@ async def admin_create_agent(
     db.add(agent)
     await db.flush()
     await db.refresh(agent)
+    try:
+        from app.services import discovery
+        await discovery.index_one(agent)
+    except Exception as _e:
+        print(f"[discovery] index_one (create) skip: {_e}")
     return AgentDetailOut.model_validate(agent)
 
 
@@ -217,6 +226,11 @@ async def admin_update_agent(
             setattr(agent, field, value)
 
     await db.flush()
+    try:
+        from app.services import discovery
+        await discovery.index_one(agent)
+    except Exception as _e:
+        print(f"[discovery] index_one (update) skip: {_e}")
     return AgentDetailOut.model_validate(agent)
 
 
@@ -296,12 +310,38 @@ async def admin_balances(admin: User = Depends(get_admin_user)):
     else:
         out.append({"provider": "openrouter", "label": "OpenRouter", "status": "na", "detail": "нет ключа", "cabinet_url": "https://openrouter.ai/credits"})
 
-    # Провайдеры без простого API баланса — ссылка на кабинет
-    out.append({"provider": "yandex", "label": "Yandex Cloud", "status": "cabinet",
-                "detail": "нужен billing-SA для авто; пока — кабинет", "cabinet_url": "https://console.yandex.cloud/billing"})
+    # Yandex Cloud — реальный баланс через billing-SA (JWT→IAM→Billing API), если настроен ключ
+    y_sa = await _eff_key("YANDEX_SA_KEY_JSON")
+    y_bid = await _eff_key("YANDEX_BILLING_ACCOUNT_ID")
+    if y_sa and y_bid:
+        try:
+            from app.services.yandex_billing import get_billing
+            b = await get_billing(y_sa, y_bid)
+            out.append({"provider": "yandex", "label": "Yandex Cloud", "status": "ok",
+                        "value": b.get("balance"), "unit": b.get("currency", "RUB"),
+                        "detail": f"баланс биллинга {b.get('name', '')}".strip(),
+                        "cabinet_url": "https://console.yandex.cloud/billing"})
+        except Exception as e:
+            out.append({"provider": "yandex", "label": "Yandex Cloud", "status": "error",
+                        "detail": str(e)[:120], "cabinet_url": "https://console.yandex.cloud/billing"})
+    else:
+        out.append({"provider": "yandex", "label": "Yandex Cloud", "status": "cabinet",
+                    "detail": "добавьте YANDEX_SA_KEY_JSON + YANDEX_BILLING_ACCOUNT_ID", "cabinet_url": "https://console.yandex.cloud/billing"})
     out.append({"provider": "gemini", "label": "Gemini (Google)", "status": "cabinet", "detail": "по биллингу Google Cloud", "cabinet_url": "https://console.cloud.google.com/billing"})
     out.append({"provider": "groq", "label": "Groq", "status": "cabinet", "detail": "лимиты в кабинете", "cabinet_url": "https://console.groq.com/settings/billing"})
     out.append({"provider": "tavily", "label": "Tavily", "status": "cabinet", "detail": "квота в кабинете", "cabinet_url": "https://app.tavily.com/"})
+    # Само-метринг расхода Yandex-инструментов (наш учёт, ₽-оценка по тарифам)
+    try:
+        from app.services.yandex_meter import report as _yreport
+        u = await _yreport()
+        out.append({"provider": "yandex-tts", "label": "Yandex голос (TTS)", "status": "ok",
+                    "value": u["tts_chars"], "unit": f"симв/{u['month']}", "detail": f"~{u['tts_cost']} ₽ (оценка)"})
+        out.append({"provider": "yandex-stt", "label": "Yandex распознавание (STT)", "status": "ok",
+                    "value": u["stt_calls"], "unit": f"запр/{u['month']}", "detail": f"~{u['stt_cost']} ₽ (оценка)"})
+        out.append({"provider": "yandex-emb", "label": "Yandex эмбеддинги", "status": "ok",
+                    "value": u["emb_units"], "unit": f"ед/{u['month']}", "detail": f"~{u['emb_cost']} ₽ (оценка)"})
+    except Exception:
+        pass
     return {"balances": out}
 
 
@@ -617,6 +657,7 @@ async def admin_list_users(
             "telegram_linked": bool(u.telegram_id),
             "yandex_linked": bool(u.yandex_id),
             "balance_kopecks": getattr(u, "balance_kopecks", 0) or 0,
+            "tariff_code": getattr(u, "tariff_code", "") or "",
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users
@@ -1319,13 +1360,34 @@ INTEGRATION_KEYS = [
     {"key": "YANDEX_SPEECHKIT_API_KEY", "label": "Yandex SpeechKit — API-ключ"},
     {"key": "YANDEX_SPEECHKIT_FOLDER_ID", "label": "Yandex SpeechKit — Folder ID"},
     {"key": "YANDEX_EMBEDDING_API_KEY", "label": "Yandex Embeddings — API-ключ (роль ai.languageModels.user; folder тот же, что у SpeechKit)"},
+    {"key": "YANDEX_SEARCH_SA_KEY_JSON", "label": "Yandex Search API + Wordstat — авторизованный ключ сервис-аккаунта (JSON целиком, роль search-api)"},
+    {"key": "YANDEX_FOLDER_ID", "label": "Yandex — Folder ID (для Search API и Wordstat)"},
+    {"key": "YANDEX_SA_KEY_JSON", "label": "Yandex Billing — авторизованный ключ сервис-аккаунта billing-viewer (JSON целиком)"},
+    {"key": "YANDEX_BILLING_ACCOUNT_ID", "label": "Yandex Billing — ID биллинг-аккаунта"},
     {"key": "GEMINI_API_KEY", "label": "Gemini — API-ключ (нужен прокси из РФ)"},
     {"key": "OPENAI_API_KEY", "label": "OpenAI — API-ключ"},
+    {"key": "ANTHROPIC_API_KEY", "label": "Claude (Anthropic) — API-ключ для Архитектора (мозг системы; модели claude-*). Может требовать не-РФ IP"},
+    {"key": "MOONSHOT_API_KEY", "label": "Kimi / Moonshot AI — API-ключ (модели kimi-*/moonshot-*; китайский, из РФ обычно ок)"},
+    {"key": "MINIMAX_API_KEY", "label": "MiniMax — API-ключ (прямой, api.minimax.io; модели minimax-m3/m2; дёшево, открытые веса)"},
+    {"key": "ORCAROUTER_API_KEY", "label": "OrcaRouter — хаб моделей (второстепенно: тесты/фри-токены; id формата orcarouter/vendor/model)"},
+    {"key": "OMNIROUTER_API_KEY", "label": "OmniRoute — хаб моделей (self-host, ключ опционален; id формата omniroute/vendor/model)"},
+    {"key": "OMNIROUTER_BASE_URL", "label": "OmniRoute — base URL (если self-host; по умолч. http://localhost:20128/v1)"},
+    {"key": "REQUESTS_AUTORESOLVE", "label": "Обращения: авто-обработка Архитектором/Супер-помощником без админа (on/off, по умолч on). Код/инструмент («Строитель») всегда требует человека"},
+    {"key": "WALLET_CURRENCY", "label": "Валюта кошелька: RUB (₽, по умолч), GEL (₾ Грузия), USD, EUR, AMD. Провайдер пополнения привязан к валюте (RUB→ЮKassa)"},
+    {"key": "TOKEN_PRICE_KOPECKS", "label": "Цена 1 бонусного токена в копейках (конвертация витринных токенов в стоимость; по умолч. 10)"},
+    {"key": "YOOKASSA_SHOP_ID", "label": "ЮKassa — shopId (пополнение баланса пользователей рублями)"},
+    {"key": "YOOKASSA_SECRET_KEY", "label": "ЮKassa — секретный ключ (Basic-auth; вебхук на /api/wallet/yookassa-webhook)"},
     {"key": "JINA_API_KEY", "label": "Jina — API-ключ"},
     {"key": "TAVILY_API_KEY", "label": "Веб-поиск: Tavily — API-ключ (бесплатный тариф ~1000/мес)"},
     {"key": "BRAVE_API_KEY", "label": "Веб-поиск: Brave Search — API-ключ (альтернатива Tavily)"},
+    {"key": "VIDEO_SEARCH_PROVIDER", "label": "Видео-поиск: провайдер (off | youtube | telegram | instagram). «Поставил ключ ниже — заработало»"},
+    {"key": "YOUTUBE_API_KEY", "label": "Видео-поиск: YouTube Data API v3 — ключ (из РФ через OUTBOUND_PROXY). Показывает ролики по запросу"},
+    {"key": "TELEGRAM_SEARCH_TOKEN", "label": "Видео-поиск: Telegram — доступ (заглушка; нужна кастомная интеграция поиска)"},
+    {"key": "INSTAGRAM_SEARCH_TOKEN", "label": "Видео-поиск: Instagram — доступ (заглушка; нужна кастомная интеграция)"},
     # Генерация видео (агрегаторы — один ключ = много моделей)
     {"key": "HIGGSFIELD_API_KEY", "label": "Генерация видео: Higgsfield — API-ключ (хостит Seedance/Kling/Veo/Hailuo и др., MCP без ключа тоже есть)"},
+    {"key": "DASHSCOPE_API_KEY", "label": "Qwen (Alibaba Model Studio) — API-ключ (чат qwen-plus/max + зрение qwen-vl + видео Wan)"},
+    {"key": "DASHSCOPE_BASE_URL", "label": "Qwen — Base URL (OpenAI-совместимый, workspace-домен Model Studio)"},
     {"key": "FAL_API_KEY", "label": "Генерация видео: fal.ai — API-ключ (мультимодельный, Seedance/Kling/Veo/Wan…)"},
     {"key": "REPLICATE_API_KEY", "label": "Генерация видео: Replicate — API-ключ (open-source: Wan, LTX, CogVideoX)"},
 ]
@@ -1333,8 +1395,11 @@ INTEGRATION_KEYS = [
 EMBEDDING_CONFIG = [
     {"key": "EMBEDDING_PROVIDER", "label": "Провайдер эмбеддингов", "options": ["yandex", "gemini", "openai", "jina"]},
     {"key": "OUTBOUND_PROXY", "label": "Исходящий прокси (зарубежные LLM/эмбеддинги из РФ: OpenRouter, Gemini, Groq, Jina). Формат: http://user:pass@host:port", "options": None},
-    {"key": "WEB_SEARCH_PROVIDER", "label": "Провайдер веб-поиска помощника", "options": ["off", "tavily", "brave"]},
+    {"key": "WEB_SEARCH_PROVIDER", "label": "Провайдер веб-поиска помощника (yandex — Search API, наш ключ)", "options": ["off", "yandex", "tavily", "brave"]},
     {"key": "STT_PROVIDER", "label": "Распознавание речи (STT): yandex — SpeechKit (тот же ключ), off — выключить", "options": ["yandex", "off"]},
+    {"key": "VIDEO_GEN_ENABLED", "label": "Видеогенерация (Wan i2v, ключ DashScope): интро-ролики визиток / видео-помощник. off — выключить (платный ресурс)", "options": ["off", "on"]},
+    {"key": "IMAGE_GEN_ENABLED", "label": "Генерация изображений (Qwen-Image, ключ DashScope): лица/образы джиннов и помощника. off — выключить (платный ресурс)", "options": ["off", "on"]},
+    {"key": "WAITLIST_MODE", "label": "Лист ожидания: on — на входе только предрегистрация (дозируем нагрузку), off — обычная регистрация", "options": ["off", "on"]},
     # Генерация видео — провайдер и модель (ключи выше; ключи собираем позже)
     {"key": "VIDEO_GEN_PROVIDER", "label": "Генерация видео: провайдер/агрегатор", "options": ["off", "higgsfield", "fal", "replicate", "runway", "self-host"]},
     {"key": "VIDEO_GEN_MODEL", "label": "Генерация видео: модель (лидер — Seedance 2.0; open-source для self-host — Wan/LTX)", "options": ["seedance-2", "veo-3.1", "kling-3", "sora", "hailuo", "runway-gen4", "luma", "wan-2.7", "ltx-2.3", "cogvideox"]},
@@ -1399,6 +1464,20 @@ import json as _json
 
 _DEFAULT_RATES = {"default": {"cost": 30.0, "sell": 150.0}}
 
+# Известные модели, которые ДОЛЖНЫ показываться в реестре (цены за 1 млн токенов, ₽; ×~3 маржа).
+# Только заполняют ОТСУТСТВУЮЩИЕ ключи — ручные правки в админке не перетираются.
+_SEED_MODELS = {
+    # MiniMax — прямой (OpenAI-совместимый, api.minimax.io); дёшево, есть фри-эвал.
+    "minimax-m3": {"provider": "MiniMax (прямой)", "cost_in": 25, "cost_out": 95, "sell_in": 75, "sell_out": 285,
+                   "note": "428B MoE, открытые веса; $0.23/$0.96 за 1M. Ключ MINIMAX_API_KEY."},
+    "minimax-m2": {"provider": "MiniMax (прямой)", "cost_in": 25, "cost_out": 100, "sell_in": 75, "sell_out": 300,
+                   "note": "Дешевле/легче M3; $0.255/$1.02 за 1M."},
+    # Qwen3.8-Max-0902 — НЕ бесплатный. Через хаб OrcaRouter (или напрямую DashScope позже).
+    "orcarouter/qwen/qwen3.8-max-0902": {"provider": "OrcaRouter (хаб)", "cost_in": 190, "cost_out": 570,
+                   "sell_in": 570, "sell_out": 1710,
+                   "note": "2.4T MoE (95B актив.), 1M контекст, мультимодал вход. ~$2/$6 за 1M через хаб. НЕ фри."},
+}
+
 
 async def _get_rates() -> dict:
     """Ставки за 1 млн токенов по моделям: {model: {cost, sell}} + default."""
@@ -1410,6 +1489,9 @@ async def _get_rates() -> dict:
         r = {}
     if "default" not in r:
         r["default"] = dict(_DEFAULT_RATES["default"])
+    for m, seed in _SEED_MODELS.items():
+        if m not in r:
+            r[m] = dict(seed)
     return r
 
 
@@ -1423,7 +1505,9 @@ async def admin_get_pricing(admin: User = Depends(get_admin_user), db: AsyncSess
     from sqlalchemy import select as _sel
     from app.models.llm_usage import LlmUsage
     seen = [m for m in (await db.execute(_sel(LlmUsage.model).distinct())).scalars().all() if m]
-    return {"currency": await _get_currency(), "rates": await _get_rates(), "models_seen": seen}
+    from app.services.settings_store import get_setting as _gsp
+    return {"currency": await _get_currency(), "rates": await _get_rates(), "models_seen": seen,
+            "overrides": _json.loads(await _gsp("PRICE_OVERRIDES") or "{}"), "biz_markup": await _gsp("BIZ_MARKUP") or "1"}
 
 
 @router.patch("/pricing")
@@ -1432,11 +1516,32 @@ async def admin_set_pricing(body: dict = Body(...), admin: User = Depends(get_ad
     if "currency" in body:
         await set_setting("TOKEN_CURRENCY", str(body["currency"]).strip())
         return {"ok": True}
+    if "biz_markup" in body:
+        await set_setting("BIZ_MARKUP", str(float(body.get("biz_markup") or 1)))
+        return {"ok": True}
+    if "override_key" in body:
+        from app.services.settings_store import get_setting as _gso
+        ov = _json.loads(await _gso("PRICE_OVERRIDES") or "{}")
+        key = str(body["override_key"]).strip()
+        if body.get("override_delete"):
+            ov.pop(key, None)
+        elif key:
+            e = {}
+            if body.get("free"):
+                e["free"] = True
+            if body.get("mult") not in (None, ""):
+                e["mult"] = float(body.get("mult") or 0)
+            ov[key] = e
+        await set_setting("PRICE_OVERRIDES", _json.dumps(ov, ensure_ascii=False))
+        return {"ok": True, "overrides": ov}
     model = (body.get("model") or "").strip()
     if not model:
         raise HTTPException(400, "нужна модель или currency")
     rates = await _get_rates()
     entry = {"cost": float(body.get("cost", 0) or 0), "sell": float(body.get("sell", 0) or 0)}
+    for f in ("cost_in", "cost_out", "sell_in", "sell_out"):
+        if f in body and str(body.get(f)) not in ("", "None"):
+            entry[f] = float(body.get(f) or 0)
     for f in ("valid_until", "provider", "note"):
         v = (body.get(f) or "").strip()
         if v:
@@ -1477,17 +1582,598 @@ async def admin_models(admin: User = Depends(get_admin_user), db: AsyncSession =
     out = []
     for m in sorted(n for n in names if n):
         r = rates.get(m) or {}
-        cost = float((r.get("cost") if r else None) or (rates["default"].get("cost") or 0))
-        sell = float((r.get("sell") if r else None) or (rates["default"].get("sell") or 0))
+        d = rates["default"]
+        def _rf(field, legacy):
+            v = r.get(field)
+            if v in (None, ""):
+                v = d.get(field)
+            if v in (None, ""):
+                v = r.get(legacy) if r.get(legacy) not in (None, "") else d.get(legacy)
+            return float(v or 0)
+        cost = float((r.get("cost") if r else None) or (d.get("cost") or 0))
+        sell = float((r.get("sell") if r else None) or (d.get("sell") or 0))
+        cost_in = _rf("cost_in", "cost"); cost_out = _rf("cost_out", "cost")
+        sell_in = _rf("sell_in", "sell"); sell_out = _rf("sell_out", "sell")
         tk, calls = urows.get(m, (0, 0))
         btk = brows.get(m, 0)
         revenue = round(btk / 1_000_000.0 * sell, 2)
         cost_total = round(tk / 1_000_000.0 * cost, 2)
         out.append({
             "model": m, "provider": r.get("provider", ""), "cost": cost, "sell": sell,
+            "cost_in": cost_in, "cost_out": cost_out, "sell_in": sell_in, "sell_out": sell_out,
             "valid_until": r.get("valid_until", ""), "note": r.get("note", ""),
             "tokens": tk, "calls": calls, "revenue": revenue, "cost_total": cost_total,
             "margin": round(revenue - cost_total, 2), "agents": arows.get(m, 0),
             "has_rate": m in rates,
         })
-    return {"currency": cur, "default": rates.get("default"), "models": out}
+    import json as _jj
+    from app.services.settings_store import get_setting as _gs2
+    from app.core.config import settings as _st
+    async def _pk(name: str) -> bool:
+        return bool((await _gs2(name)) or getattr(_st, name, "") or "")
+    provider_keys = {
+        "deepseek": await _pk("DEEPSEEK_API_KEY"),
+        "openrouter": await _pk("OPENROUTER_API_KEY"),
+        "orcarouter": await _pk("ORCAROUTER_API_KEY"),
+        "omnirouter": await _pk("OMNIROUTER_API_KEY"),
+        "gemini": await _pk("GEMINI_API_KEY"),
+        "openai": await _pk("OPENAI_API_KEY"),
+        "groq": await _pk("GROQ_API_KEY"),
+        "zai": await _pk("ZAI_API_KEY"),
+        "dashscope": await _pk("DASHSCOPE_API_KEY"),
+        "anthropic": await _pk("ANTHROPIC_API_KEY"),
+        "moonshot": await _pk("MOONSHOT_API_KEY"),
+        "minimax": await _pk("MINIMAX_API_KEY"),
+    }
+    return {"currency": cur, "default": rates.get("default"), "models": out,
+            "biz_markup": await _gs2("BIZ_MARKUP") or "1",
+            "overrides": _jj.loads(await _gs2("PRICE_OVERRIDES") or "{}"),
+            "provider_keys": provider_keys}
+
+
+
+# ═══════════════════════ ТАРИФЫ (Фаза 1) ═══════════════════════
+import json as _tjson
+from pydantic import BaseModel as _TBase
+from app.models.tariff import Tariff
+
+
+class TariffIn(_TBase):
+    code: str
+    name: str = ""
+    description: str = ""
+    llm_model: str = "deepseek-chat"
+    msgs_per_day: int = 0
+    jinn_calls_per_day: int = 0
+    context_limit: int = 0
+    gates: dict = {}
+    is_default: bool = False
+    sort: int = 0
+
+
+class TariffOut(TariffIn):
+    id: int
+
+
+def _tariff_out(t: Tariff) -> TariffOut:
+    try:
+        g = _tjson.loads(t.gates or "{}")
+    except Exception:
+        g = {}
+    return TariffOut(
+        id=t.id, code=t.code, name=t.name, description=t.description or "",
+        llm_model=t.llm_model, msgs_per_day=t.msgs_per_day, jinn_calls_per_day=t.jinn_calls_per_day,
+        context_limit=t.context_limit, gates=g, is_default=t.is_default, sort=t.sort,
+    )
+
+
+@router.get("/tariffs", response_model=list[TariffOut])
+async def admin_list_tariffs(db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    rows = (await db.execute(select(Tariff).order_by(Tariff.sort, Tariff.id))).scalars().all()
+    return [_tariff_out(t) for t in rows]
+
+
+@router.post("/tariffs", response_model=TariffOut, status_code=201)
+async def admin_create_tariff(body: TariffIn, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    if (await db.execute(select(Tariff).where(Tariff.code == body.code))).scalar_one_or_none():
+        raise HTTPException(400, f"Код тарифа '{body.code}' уже есть")
+    if body.is_default:
+        for t in (await db.execute(select(Tariff).where(Tariff.is_default == True))).scalars().all():  # noqa: E712
+            t.is_default = False
+    t = Tariff(
+        code=body.code, name=body.name, description=body.description, llm_model=body.llm_model,
+        msgs_per_day=body.msgs_per_day, jinn_calls_per_day=body.jinn_calls_per_day, context_limit=body.context_limit,
+        gates=_tjson.dumps(body.gates, ensure_ascii=False), is_default=body.is_default, sort=body.sort,
+    )
+    db.add(t)
+    await db.flush()
+    await db.refresh(t)
+    return _tariff_out(t)
+
+
+@router.put("/tariffs/{tariff_id}", response_model=TariffOut)
+async def admin_update_tariff(tariff_id: int, body: TariffIn, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    t = (await db.execute(select(Tariff).where(Tariff.id == tariff_id))).scalar_one_or_none()
+    if not t:
+        raise HTTPException(404, "Тариф не найден")
+    if body.is_default and not t.is_default:
+        for o in (await db.execute(select(Tariff).where(Tariff.is_default == True))).scalars().all():  # noqa: E712
+            o.is_default = False
+    t.code = body.code; t.name = body.name; t.description = body.description; t.llm_model = body.llm_model
+    t.msgs_per_day = body.msgs_per_day; t.jinn_calls_per_day = body.jinn_calls_per_day; t.context_limit = body.context_limit
+    t.gates = _tjson.dumps(body.gates, ensure_ascii=False); t.is_default = body.is_default; t.sort = body.sort
+    await db.flush()
+    await db.refresh(t)
+    return _tariff_out(t)
+
+
+@router.delete("/tariffs/{tariff_id}", status_code=204)
+async def admin_delete_tariff(tariff_id: int, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    t = (await db.execute(select(Tariff).where(Tariff.id == tariff_id))).scalar_one_or_none()
+    if t:
+        await db.delete(t)
+    return
+
+
+@router.post("/users/{user_id}/tariff")
+async def admin_set_user_tariff(user_id: int, code: str = Body("", embed=True), db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not u:
+        raise HTTPException(404, "Пользователь не найден")
+    u.tariff_code = code or ""
+    await db.flush()
+    return {"ok": True, "user_id": user_id, "tariff_code": u.tariff_code}
+
+
+# ═══════════════════════ ДОКИ (реестр документов/генераций) ═══════════════════════
+from app.services.settings_store import get_setting as _docs_get, set_setting as _docs_set
+
+
+@router.get("/docs")
+async def admin_list_docs(admin: User = Depends(get_admin_user)):
+    raw = await _docs_get("ADMIN_DOCS")
+    try:
+        return _tjson.loads(raw or "[]")
+    except Exception:
+        return []
+
+
+@router.post("/docs")
+async def admin_save_docs(docs: list = Body(..., embed=True), admin: User = Depends(get_admin_user)):
+    await _docs_set("ADMIN_DOCS", _tjson.dumps(docs, ensure_ascii=False))
+    return {"ok": True, "count": len(docs)}
+
+
+# ═══════════════════════ ТОКЕНЫ (пакеты + подарки) ═══════════════════════
+@router.get("/token-config")
+async def admin_get_token_config(admin: User = Depends(get_admin_user)):
+    raw = await _docs_get("TOKEN_CONFIG")
+    try:
+        return _tjson.loads(raw or "{}")
+    except Exception:
+        return {}
+
+
+@router.post("/token-config")
+async def admin_save_token_config(config: dict = Body(..., embed=True), admin: User = Depends(get_admin_user)):
+    await _docs_set("TOKEN_CONFIG", _tjson.dumps(config, ensure_ascii=False))
+    return {"ok": True}
+
+
+# ═══════════════════════ КАТАЛОГ (магазин фишек) ═══════════════════════
+@router.get("/catalog")
+async def admin_get_catalog(admin: User = Depends(get_admin_user)):
+    raw = await _docs_get("CATALOG")
+    try:
+        return _tjson.loads(raw or "[]")
+    except Exception:
+        return []
+
+
+@router.post("/catalog")
+async def admin_save_catalog(items: list = Body(..., embed=True), admin: User = Depends(get_admin_user)):
+    await _docs_set("CATALOG", _tjson.dumps(items, ensure_ascii=False))
+    return {"ok": True, "count": len(items)}
+
+
+# ═══════════════════════ #4 ОБРАЩЕНИЯ (внутренний helpdesk) ═══════════════════════
+# Маршрутизация обращений по ДОМЕНУ к внутренним джиннам. id core-джиннов:
+#   Джим=1, Админ=2, Контент=3, Железо=4, Маркетолог=37, Архитектор=47, Супер-помощник=48
+INTERNAL_TARGETS = {
+    "super_assistant": {"label": "Супер-помощник", "agent_id": 48, "domain": "how-to/рутина помощника"},
+    "architect":       {"label": "Архитектор",     "agent_id": 47, "domain": "доработка/код/инструмент/знание"},
+    "admin":           {"label": "Админ",          "agent_id": 2,  "domain": "сбой/ошибка/аномалия"},
+    "content":         {"label": "Контент",        "agent_id": 3,  "domain": "тексты/контент"},
+    "marketing":       {"label": "Маркетолог",     "agent_id": 37, "domain": "PR/реклама/рост"},
+    "hardware":        {"label": "Железо",          "agent_id": 4,  "domain": "железо/ресурсы/сервер"},
+    "other":           {"label": "Не распознано",  "agent_id": 47, "domain": "по умолчанию → Архитектор"},
+}
+
+
+def _route_target(text: str) -> str:
+    """Простой доменный роутер по ключевым словам. Возвращает ключ target."""
+    s = (text or "").lower()
+    def has(*ws): return any(w in s for w in ws)
+    if has("как ", "how", "где найти", "настро", "голос", "образ", "скопир", "инструкц", "не понимаю как"):
+        return "super_assistant"
+    if has("сбой", "ошибк", "аномал", "упал", "не работает", "виснет", "баг", "500", "401"):
+        return "admin"
+    if has("текст", "контент", "пост", "описан", "статья", "перепиш"):
+        return "content"
+    if has("реклам", "продвиж", "seo", "трафик", "маркет", "канал"):
+        return "marketing"
+    if has("железо", "ресурс", "память", "сервер", "gpu", "диск", "ram", "cpu"):
+        return "hardware"
+    if has("код", "доработ", "функци", "инструмент", "фич", "не могу", "невозможно", "добав", "интеграц", "api"):
+        return "architect"
+    return "architect"  # дефолтный триажёр
+
+
+def _areq_out(r) -> dict:
+    try:
+        thread = _tjson.loads(r.thread or "[]")
+    except Exception:
+        thread = []
+    tinfo = INTERNAL_TARGETS.get(r.target) or INTERNAL_TARGETS["other"]
+    return {
+        "id": r.id, "user_id": r.user_id, "source_agent_id": r.source_agent_id,
+        "task_text": r.task_text, "reason": r.reason, "context": r.context,
+        "target": r.target, "target_label": tinfo["label"], "target_agent_id": r.target_agent_id,
+        "triage_category": r.triage_category, "triage_analysis": r.triage_analysis,
+        "thread": thread, "status": r.status, "resolution_type": r.resolution_type,
+        "admin_notes": r.admin_notes, "response_to_user": r.response_to_user, "assigned_to": r.assigned_to,
+        "auto_resolved": bool(getattr(r, "auto_resolved", False)),
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+
+@router.get("/requests")
+async def admin_list_requests(status: str = Query(""), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    from app.models.assistant_request import AssistantRequest
+    q = select(AssistantRequest).order_by(AssistantRequest.created_at.desc())
+    if status:
+        q = q.where(AssistantRequest.status == status)
+    rows = (await db.execute(q)).scalars().all()
+    # счётчики по статусам
+    counts = {}
+    for st, c in (await db.execute(
+        select(AssistantRequest.status, func.count(AssistantRequest.id)).group_by(AssistantRequest.status))).all():
+        counts[st] = int(c)
+    return {"requests": [_areq_out(r) for r in rows], "counts": counts, "targets": INTERNAL_TARGETS}
+
+
+@router.get("/requests/{req_id}")
+async def admin_get_request(req_id: int, admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    from app.models.assistant_request import AssistantRequest
+    r = (await db.execute(select(AssistantRequest).where(AssistantRequest.id == req_id))).scalar_one_or_none()
+    if not r:
+        raise HTTPException(404, "обращение не найдено")
+    return _areq_out(r)
+
+
+@router.post("/requests")
+async def admin_create_request(body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Создать обращение вручную (тест/ручной ввод). Авто-маршрутизация если target не задан."""
+    from app.models.assistant_request import AssistantRequest
+    task = (body.get("task_text") or "").strip()
+    reason = (body.get("reason") or "").strip()
+    if not task and not reason:
+        raise HTTPException(400, "нужен task_text или reason")
+    target = (body.get("target") or "").strip() or _route_target(task + " " + reason)
+    tinfo = INTERNAL_TARGETS.get(target) or INTERNAL_TARGETS["other"]
+    r = AssistantRequest(
+        user_id=body.get("user_id"), source_agent_id=body.get("source_agent_id"),
+        task_text=task, reason=reason, context=(body.get("context") or "").strip(),
+        target=target, target_agent_id=tinfo["agent_id"], status="new",
+    )
+    db.add(r)
+    await db.commit()
+    await db.refresh(r)
+    return _areq_out(r)
+
+
+@router.patch("/requests/{req_id}")
+async def admin_patch_request(req_id: int, body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    from app.models.assistant_request import AssistantRequest
+    r = (await db.execute(select(AssistantRequest).where(AssistantRequest.id == req_id))).scalar_one_or_none()
+    if not r:
+        raise HTTPException(404, "обращение не найдено")
+    if "target" in body:
+        r.target = str(body["target"]).strip() or r.target
+        tinfo = INTERNAL_TARGETS.get(r.target) or INTERNAL_TARGETS["other"]
+        r.target_agent_id = tinfo["agent_id"]
+    for f in ("status", "resolution_type", "admin_notes", "response_to_user", "triage_category", "triage_analysis"):
+        if f in body:
+            setattr(r, f, str(body[f] or ""))
+    if "assigned_to" in body:
+        r.assigned_to = body["assigned_to"] or admin.id
+    # Доставка: как только статус «Отвечено» и есть ответ — отправить юзеру (лента + пинг), статус → delivered
+    if r.status == "answered" and (r.response_to_user or "").strip():
+        try:
+            from app.services import requests_flow
+            await requests_flow.deliver(db, r)
+        except Exception as _de:
+            print(f"[admin] deliver err: {_de}")
+    await db.commit()
+    await db.refresh(r)
+    return _areq_out(r)
+
+
+async def _internal_jinn_reply(db, target: str, prompt: str, extra_system: str = "") -> tuple[str, str]:
+    """Вызвать внутреннего джина домена. Возвращает (reply, model)."""
+    from app.services.llm import get_llm_reply
+    from app.core.config import settings as s
+    tinfo = INTERNAL_TARGETS.get(target) or INTERNAL_TARGETS["other"]
+    agent = (await db.execute(select(Agent).where(Agent.id == tinfo["agent_id"]))).scalar_one_or_none()
+    model = (agent.llm_model if agent and agent.llm_model else _default_model_for_provider(s.DEFAULT_LLM_PROVIDER))
+    sysp = (agent.system_prompt if agent and agent.system_prompt else f"Ты — {tinfo['label']}, внутренний джинн команды JinnTell.")
+    if extra_system:
+        sysp = sysp + "\n\n" + extra_system
+    reply = await get_llm_reply(user_message=prompt, system_prompt=sysp, model=model,
+                                max_tokens=(agent.llm_max_tokens if agent else 1000))
+    return reply or "", model
+
+
+@router.post("/requests/{req_id}/triage")
+async def admin_triage_request(req_id: int, admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """ИИ-триаж: внутренний джинн домена анализирует обращение → категория + черновик решения."""
+    from app.models.assistant_request import AssistantRequest
+    r = (await db.execute(select(AssistantRequest).where(AssistantRequest.id == req_id))).scalar_one_or_none()
+    if not r:
+        raise HTTPException(404, "обращение не найдено")
+    prompt = (
+        "Проанализируй обращение помощника, который НЕ смог выполнить задачу пользователя.\n"
+        f"ЗАДАЧА ЮЗЕРА: {r.task_text}\n"
+        f"ПОЧЕМУ НЕ СМОГ: {r.reason}\n"
+        f"КОНТЕКСТ: {r.context}\n\n"
+        "Ответь СТРОГО двумя блоками:\n"
+        "КАТЕГОРИЯ: <одно из: нет инструмента | нет знаний | вне зоны | нужен код | how-to | прочее>\n"
+        "РЕШЕНИЕ: <кратко, что нужно сделать, чтобы закрыть пробел>"
+    )
+    reply, _ = await _internal_jinn_reply(db, r.target, prompt)
+    cat = ""
+    low = reply.lower()
+    for c in ("нет инструмента", "нет знаний", "вне зоны", "нужен код", "how-to", "прочее"):
+        if c in low:
+            cat = c
+            break
+    r.triage_category = cat or "прочее"
+    r.triage_analysis = reply
+    if r.status == "new":
+        r.status = "triaged"
+    await db.commit()
+    await db.refresh(r)
+    return _areq_out(r)
+
+
+@router.post("/requests/{req_id}/ask")
+async def admin_ask_internal(req_id: int, body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Чат админ↔внутренний джинн ПО обращению. Сохраняет нить в thread."""
+    from app.models.assistant_request import AssistantRequest
+    r = (await db.execute(select(AssistantRequest).where(AssistantRequest.id == req_id))).scalar_one_or_none()
+    if not r:
+        raise HTTPException(404, "обращение не найдено")
+    msg = (body.get("message") or "").strip()
+    if not msg:
+        raise HTTPException(400, "пустое сообщение")
+    try:
+        thread = _tjson.loads(r.thread or "[]")
+    except Exception:
+        thread = []
+    ctx = (f"Обращение по задаче: {r.task_text}. Причина: {r.reason}. "
+           f"Ты помогаешь живому админу решить этот пробел. Отвечай по делу, можешь предлагать код/знания/инструменты.")
+    hist = "\n".join(f"{m.get('role')}: {m.get('text')}" for m in thread[-6:])
+    prompt = (hist + "\nadmin: " + msg) if hist else msg
+    reply, model = await _internal_jinn_reply(db, r.target, prompt, extra_system=ctx)
+    import datetime as _dt
+    now = _dt.datetime.utcnow().isoformat()
+    thread.append({"role": "admin", "text": msg, "at": now})
+    thread.append({"role": "jinn", "text": reply, "at": now})
+    r.thread = _tjson.dumps(thread, ensure_ascii=False)
+    if r.status in ("new", "triaged"):
+        r.status = "in_progress"
+    await db.commit()
+    await db.refresh(r)
+    return {"reply": reply, "model": model, "request": _areq_out(r)}
+
+
+# ═══════════════════════ #5 КОШЕЛЁК: бонусы + спонсорские кампании ═══════════════════════
+async def _token_price_kop() -> int:
+    """Цена 1 токена в копейках (для конвертации витринных токенов в реальную стоимость генерации)."""
+    from app.services.settings_store import get_setting
+    try:
+        v = int(float(await get_setting("TOKEN_PRICE_KOPECKS") or 0))
+    except Exception:
+        v = 0
+    return v or 10  # по умолчанию 1 токен = 10 коп
+
+
+@router.post("/users/{user_id}/bonus")
+async def admin_grant_bonus(user_id: int, body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Выдать пользователю бонусный (неденежный) грант. tokens → копейки по TOKEN_PRICE."""
+    from app.services import billing
+    import datetime as _dt
+    tokens = int(float(body.get("tokens") or 0))
+    if tokens <= 0:
+        raise HTTPException(400, "нужно tokens > 0")
+    kop = tokens * (await _token_price_kop())
+    agent_id = body.get("agent_id") or None
+    label = (body.get("label") or "Подарок").strip()
+    exp = None
+    days = int(float(body.get("expires_days") or 0))
+    if days > 0:
+        exp = _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(days=days)
+    g = await billing.grant_bonus(db, user_id, kop, display_tokens=tokens, label=label,
+                                  agent_id=agent_id, source="platform", expires_at=exp)
+    await db.commit()
+    return {"ok": True, "grant_id": g.id, "kopecks": kop, "tokens": tokens}
+
+
+def _camp_out(c) -> dict:
+    return {"id": c.id, "sponsor_name": c.sponsor_name, "agent_id": c.agent_id,
+            "bonus_tokens": c.bonus_tokens, "bonus_kopecks": c.bonus_kopecks,
+            "budget_kopecks": c.budget_kopecks, "spent_kopecks": c.spent_kopecks,
+            "budget_rub": round((c.budget_kopecks or 0) / 100, 2), "spent_rub": round((c.spent_kopecks or 0) / 100, 2),
+            "message": c.message, "active": c.active,
+            "starts_at": c.starts_at.isoformat() if c.starts_at else None,
+            "ends_at": c.ends_at.isoformat() if c.ends_at else None}
+
+
+@router.get("/campaigns")
+async def admin_list_campaigns(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    from app.models.sponsor_campaign import SponsorCampaign
+    rows = (await db.execute(select(SponsorCampaign).order_by(SponsorCampaign.id.desc()))).scalars().all()
+    return {"campaigns": [_camp_out(c) for c in rows]}
+
+
+@router.post("/campaigns")
+async def admin_save_campaign(body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Создать/обновить спонсорскую кампанию. Бюджет/бонус задаются в РУБЛЯХ (конвертим в копейки)."""
+    from app.models.sponsor_campaign import SponsorCampaign
+    import datetime as _dt
+    cid = body.get("id")
+    c = (await db.get(SponsorCampaign, int(cid))) if cid else None
+    if not c:
+        c = SponsorCampaign()
+        db.add(c)
+    c.sponsor_name = (body.get("sponsor_name") or "").strip()
+    c.agent_id = body.get("agent_id") or None
+    c.bonus_tokens = int(float(body.get("bonus_tokens") or 0))
+    c.bonus_kopecks = c.bonus_tokens * (await _token_price_kop())
+    if body.get("budget_rub") is not None:
+        c.budget_kopecks = round(float(body.get("budget_rub") or 0) * 100)
+    c.message = (body.get("message") or "").strip()
+    c.active = bool(body.get("active", True))
+    for f, attr in (("starts_at", "starts_at"), ("ends_at", "ends_at")):
+        v = body.get(f)
+        if v:
+            try:
+                setattr(c, attr, _dt.datetime.fromisoformat(str(v).replace("Z", "+00:00")))
+            except Exception:
+                pass
+    await db.commit()
+    await db.refresh(c)
+    return _camp_out(c)
+
+
+@router.delete("/campaigns/{cid}")
+async def admin_del_campaign(cid: int, admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    from app.models.sponsor_campaign import SponsorCampaign
+    c = await db.get(SponsorCampaign, cid)
+    if c:
+        await db.delete(c)
+        await db.commit()
+    return {"ok": True}
+
+
+# ═══════════════════════ #7 СОВЕЩАТЕЛЬНАЯ КОМНАТА ═══════════════════════
+_ARCHITECT_ID = 47
+
+
+async def _agent_say(db, agent, prompt: str, max_tokens: int = 400) -> str:
+    """Один голос совещания: агент отвечает своей моделью+характером."""
+    from app.services.llm import get_llm_reply
+    from app.core.config import settings as s
+    model = agent.llm_model or _default_model_for_provider(s.DEFAULT_LLM_PROVIDER)
+    sysp = agent.system_prompt or f"Ты — {agent.name}, {agent.profession or 'джинн'} команды JinnTell."
+    try:
+        return (await get_llm_reply(user_message=prompt, system_prompt=sysp, model=model, max_tokens=max_tokens)) or ""
+    except Exception as e:
+        print(f"[council] say err {getattr(agent,'id','?')}: {e}")
+        return "(не смог ответить)"
+
+
+@router.get("/council/candidates")
+async def council_candidates(mode: str = Query("core"), q: str = Query(""), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Кандидаты в участники: core-джинны (оперативка) или публичные джинны Города (совет)."""
+    stmt = select(Agent).where(Agent.is_active == True)
+    if mode == "city":
+        stmt = stmt.where(Agent.agent_type.in_(["business", "citizen", "personal", "specialist"]))
+        if q:
+            stmt = stmt.where(Agent.name.ilike(f"%{q}%") | Agent.profession.ilike(f"%{q}%"))
+        stmt = stmt.limit(80)
+    else:
+        stmt = stmt.where(Agent.agent_type == "core")
+    rows = (await db.execute(stmt.order_by(Agent.id))).scalars().all()
+    return {"candidates": [{"id": a.id, "name": a.name, "profession": a.profession or "", "type": a.agent_type} for a in rows]}
+
+
+@router.post("/council/convene")
+async def council_convene(body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Собрать совещание: раунд мнений участников → сводка Архитектора → сохранить транскрипт."""
+    import json as _j
+    from app.models.council_session import CouncilSession
+    topic = (body.get("topic") or "").strip()
+    mode = (body.get("mode") or "core").strip()
+    ids = body.get("participant_ids") or []
+    if not topic:
+        raise HTTPException(400, "нужна тема")
+    if not ids:
+        raise HTTPException(400, "выберите участников")
+    ids = [int(x) for x in ids]
+    agents = (await db.execute(select(Agent).where(Agent.id.in_(ids)))).scalars().all()
+    order = {x: i for i, x in enumerate(ids)}
+    agents.sort(key=lambda a: order.get(a.id, 999))
+    transcript = []
+    prior = ""
+    for a in agents:
+        prompt = (f"Совещание команды JinnTell. ТЕМА: {topic}\n"
+                  + (f"\nЧто уже сказали коллеги:\n{prior}\n" if prior else "")
+                  + f"\nТы — {a.name} ({a.profession or 'участник'}). Дай мнение по теме КОРОТКО (2–4 предложения) со своей экспертизы. Не повторяй сказанное — дополняй.")
+        say = await _agent_say(db, a, prompt)
+        transcript.append({"agent_id": a.id, "name": a.name, "text": say})
+        prior += f"- {a.name}: {say}\n"
+    summary = ""
+    arch = await db.get(Agent, _ARCHITECT_ID)
+    if arch and transcript:
+        sump = (f"Ты — Архитектор, модератор совещания JinnTell. ТЕМА: {topic}\n\nМнения участников:\n{prior}\n\n"
+                "Сведи в ИТОГ: 1) главные тезисы; 2) разногласия (если есть); 3) конкретные РЕШЕНИЯ / следующие шаги списком. Кратко и структурно.")
+        summary = await _agent_say(db, arch, sump, max_tokens=700)
+    sess = CouncilSession(topic=topic, mode=mode,
+                          participants=_j.dumps([{"id": a.id, "name": a.name} for a in agents], ensure_ascii=False),
+                          transcript=_j.dumps(transcript, ensure_ascii=False), summary=summary)
+    db.add(sess)
+    await db.commit()
+    await db.refresh(sess)
+    try:
+        from app.services import activity
+        await activity.log("council", actor="architect", target_type="council_session", result="done", detail=topic[:120])
+    except Exception:
+        pass
+    return {"id": sess.id, "topic": topic, "mode": mode, "transcript": transcript, "summary": summary,
+            "created_at": sess.created_at.isoformat() if sess.created_at else None}
+
+
+@router.get("/council")
+async def council_list(admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    import json as _j
+    from app.models.council_session import CouncilSession
+    rows = (await db.execute(select(CouncilSession).order_by(CouncilSession.created_at.desc()).limit(30))).scalars().all()
+
+    def _out(s):
+        try:
+            parts = _j.loads(s.participants or "[]")
+        except Exception:
+            parts = []
+        return {"id": s.id, "topic": s.topic, "mode": s.mode, "participants": parts,
+                "summary": s.summary, "created_at": s.created_at.isoformat() if s.created_at else None}
+    return {"sessions": [_out(s) for s in rows]}
+
+
+@router.get("/council/{sid}")
+async def council_get(sid: int, admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    import json as _j
+    from app.models.council_session import CouncilSession
+    s = await db.get(CouncilSession, sid)
+    if not s:
+        raise HTTPException(404, "не найдено")
+
+    def _load(x):
+        try:
+            return _j.loads(x or "[]")
+        except Exception:
+            return []
+    return {"id": s.id, "topic": s.topic, "mode": s.mode, "participants": _load(s.participants),
+            "transcript": _load(s.transcript), "summary": s.summary,
+            "created_at": s.created_at.isoformat() if s.created_at else None}

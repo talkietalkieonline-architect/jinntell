@@ -42,13 +42,14 @@ TOOLS = [
         "name": "make_digest", "description": "Собрать ПОДБОРКУ: опросить несколько джиннов Города по теме и составить документ с их мнениями (с указанием, кто что сказал). Для запросов «составь рейтинг/подборку/сравни варианты X». Результат сохраняется как подборка на главном экране (раздел Информация).",
         "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {
-        "name": "create_document", "description": "Создать ДОКУМЕНТ-ЗАДАНИЕ (заметку, план, чек-лист, поручение) — текст пишешь ТЫ сам. Появится в разделе «Задания и поручения» на главном экране. Используй, когда просят «запиши задание/составь план/сделай заметку/список дел/оформи документ», или когда ты подготовил развёрнутый материал, который стоит сохранить. Отличие от make_digest: там ОПРОС джиннов, здесь пишешь ТЫ.",
+        "name": "create_document", "description": "Создать ДОКУМЕНТ-ЗАДАНИЕ (заметку, план, чек-лист, поручение) — текст пишешь ТЫ сам. Появится в разделе «Портфель» на главном экране. Используй, когда просят «запиши задание/составь план/сделай заметку/список дел/оформи документ», или когда ты подготовил развёрнутый материал, который стоит сохранить. Отличие от make_digest: там ОПРОС джиннов, здесь пишешь ТЫ.",
         "parameters": {"type": "object", "properties": {"title": {"type": "string", "description": "Короткое название документа (как он подпишется в разделе)."}, "content": {"type": "string", "description": "Полный текст документа/задания — можно списком/пунктами."}}, "required": ["title", "content"]}}},
     {"type": "function", "function": {
-        "name": "show_media", "description": "Показать пользователю картинку или видео на экране (напр. фото джинна, или изображение по прямой ссылке). Используй, когда просят «покажи», «как выглядит», или чтобы проиллюстрировать ответ.",
+        "name": "show_media", "description": "Показать пользователю картинку или видео: фото джинна (jinn), прямая ссылка (url), ИЛИ найти в вебе по теме (query). Для КАРТИНКИ — media_type=image; для ВИДЕО («покажи видео …», «прыгающих щенят») — media_type=video (ищет ролик; если не найдено — предложи генерацию). Используй на «покажи», «как выглядит».",
         "parameters": {"type": "object", "properties": {
             "jinn": {"type": "string", "description": "Имя джинна — показать его фото."},
             "url": {"type": "string", "description": "Прямая ссылка на изображение или видео."},
+            "query": {"type": "string", "description": "Запрос для поиска картинки в вебе (если нет прямой ссылки)."},
             "media_type": {"type": "string", "enum": ["image", "video"], "description": "Тип медиа (по умолчанию image)."}
         }, "required": []}}},
     {"type": "function", "function": {
@@ -86,6 +87,33 @@ TOOLS = [
             "media_type": {"type": "string", "enum": ["image", "video"], "description": "Тип медиа (по умолчанию image)."}
         }, "required": []}}},
     {"type": "function", "function": {
+        "name": "search_city", "description": "Найти джиннов в ГОРОДЕ по профессии, теме или имени (напр. «юрист», «психолог», «магазин колясок», «Костя»). Возвращает список подходящих джиннов Города. Используй, когда пользователь ищет специалиста/сервис/собеседника или спрашивает «кто есть в городе», «найди мне юриста». Дальше можно открыть чат через open_chat.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Профессия, тема или имя"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "ask_jinn", "description": "Спросить джина-ЖИТЕЛЯ Города по теме и получить его ответ, чтобы передать пользователю — БЕЗ открытия отдельного чата. Используй, когда по вопросу пользователя есть подходящий специалист Города (садовод про растения, автоэксперт про машины, нутрициолог про питание), а разговор идёт с тобой. Для платных джиннов ответ не придёт — тогда предложи открыть чат.",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string", "description": "Профессия/тема специалиста (напр. «садовод», «автоэксперт»)"}, "question": {"type": "string", "description": "Вопрос, который задать джину от лица пользователя"}}, "required": ["topic", "question"]}}},
+    {"type": "function", "function": {
+        "name": "ask_city", "description": "BROADCAST: опросить НЕСКОЛЬКИХ джиннов-жителей Города по одной теме и собрать их мнения (когда полезно услышать разные точки зрения, «спроси у города», «что думают специалисты»). Отвечают бесплатные жители. Для одного специалиста — ask_jinn.",
+        "parameters": {"type": "object", "properties": {"topic": {"type": "string", "description": "Тема/профессия"}, "question": {"type": "string", "description": "Вопрос ко всем"}}, "required": ["topic", "question"]}}},
+    {"type": "function", "function": {
+        "name": "wallet_info", "description": "Узнать баланс пользователя в РУБЛЯХ и бонусы. Вызывай, когда спрашивают «сколько у меня денег/на балансе», перед платным действием, или чтобы предупредить о нехватке средств.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "jinn_cost", "description": "Узнать, ПЛАТНЫЙ ли джинн Города и сколько примерно стоит общение (₽ за сообщение/документ). Вызывай ПЕРЕД тем как предложить платного джина — чтобы предупредить о цене — или когда спрашивают «сколько стоит X».",
+        "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Имя или профессия джинна"}}, "required": ["name"]}}},
+    {"type": "function", "function": {
+        "name": "read_day", "description": "Прочитать записи «Мой день» пользователя (что сегодня/дальше). Возвращает список с номерами #id — они нужны, чтобы менять записи. Вызывай ПЕРЕД update_day_entry.",
+        "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {
+        "name": "add_day_entry", "description": "Добавить запись в «Мой день» пользователя (событие/план/напоминание, ИЛИ подсказку-комментарий kind=hint — напр. «☔ будет дождь, возьми зонт» или полезный совет к событию). time=HH:MM если есть время; important=true для важных встреч.",
+        "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "time": {"type": "string", "description": "HH:MM"}, "note": {"type": "string"}, "kind": {"type": "string", "enum": ["event", "plan", "reminder", "hint"], "description": "hint = подсказка-комментарий"}, "important": {"type": "boolean"}}, "required": ["title"]}}},
+    {"type": "function", "function": {
+        "name": "update_day_entry", "description": "Изменить запись дня по #id: отметить выполненной (done), отменить (cancel) или перенести (move) на другое время. Сначала read_day, чтобы узнать id.",
+        "parameters": {"type": "object", "properties": {"id": {"type": "integer"}, "action": {"type": "string", "enum": ["done", "cancel", "move"]}, "time": {"type": "string", "description": "HH:MM для переноса"}}, "required": ["id", "action"]}}},
+    {"type": "function", "function": {
+        "name": "escalate_internal", "description": "Передать вопрос ВНУТРЕННЕЙ команде JinnTell, когда ты сам НЕ можешь помочь пользователю: не хватает возможности/инструмента/знаний, непонятно как что-то сделать в системе, нужна доработка. Обращение уйдёт нужному внутреннему специалисту (по how-to — Супер-помощнику, по доработкам/коду — Архитектору, и т.д.), человек-админ его увидит. Используй как последнее средство, тихо: пользователю потом вернётся решение. НЕ для вызова городских джиннов (для этого ask_jinn/open_chat).",
+        "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "Что хотел пользователь (суть задачи)"}, "reason": {"type": "string", "description": "Почему ты не смог помочь"}}, "required": ["task", "reason"]}}},
+    {"type": "function", "function": {
         "name": "reply", "description": "Ответить пользователю обычным текстом (когда действие не нужно или чтобы подтвердить/уточнить).",
         "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
 ]
@@ -99,6 +127,16 @@ _BASE = (
     "Если человека/джинна нет или он не в сети — честно скажи и предложи вариант (например, оставить сообщение). "
     "Когда пользователь называет свой интерес или просит обращать внимание на тему — запомни через remember_interest. "
     "Если пользователь просит не показывать/не беспокоить какой-то темой — block_topic. "
+    "ПОИСК В ИНТЕРНЕТЕ: для короткого факта (погода, курс, одна цифра) — web_search. "
+    "Если просят «найди/поищи информацию про …» — открой чат с Поисковым джином (open_chat «Поисковый джинн»), чтобы человек продолжил поиск живым диалогом. "
+    "Если просят «расскажи о …/разбери подробно/подготовь материал» — сделай deep_search, а затем оформи результат в документ через create_document (заголовок = тема). "
+    "ИСТОЧНИК: когда воспользовался поиском — коротко скажи, где нашёл (напр. «по данным Яндекса…»). "
+    "КОРОТКО/ПОДРОБНО: короткий результат отдавай кратко (1-2 фразы) — он и так сохраняется в этом чате; если материал большой ИЛИ просят сохранить — оформи через create_document («Портфель») и дай короткое резюме. "
+    "ГОРОД: в JinnTell есть Город, где живут джинны разных профессий. Ты можешь найти их по профессии, теме или имени через search_city (напр. «юрист», «психолог», «магазин колясок») и открыть чат через open_chat. Если пользователь ищет специалиста, сервис или собеседника — сначала search_city, затем предложи открыть подходящего. "
+    "ЖИТЕЛИ ГОРОДА: если по теме пользователя есть подходящий джинн-житель, можешь СПРОСИТЬ его через ask_jinn и передать ответ — как позвать знающего собеседника, не переключая чат (для бесплатных; платных — предложи открыть чат). Если полезно услышать НЕСКОЛЬКО мнений («спроси у города») — ask_city (опрос нескольких жителей). ПРОАКТИВНО: заметив устойчивый интерес пользователя (напр. ландшафтный дизайн, рассада, авто) — предложи познакомить со специалистом Города: «в Городе есть … — хочешь, спрошу у него / приглашу?». "
+    "ДЕНЬГИ: у пользователя баланс в РУБЛЯХ (не токены). Можешь узнать баланс через wallet_info и цену/платность джина через jinn_cost. "
+    "ПРЕДУПРЕЖДАЙ о платности ПЕРЕД тем как предложить платного джина (напр. «он платный, ≈X ₽ за сообщение — списывается с баланса»). "
+    "Если денег мало или пользователь хочет сэкономить — предложи БЕСПЛАТНОГО специалиста (search_city → бесплатные) или скажи, что можно пополнить баланс. Не навязывай платное. "
     "Не выдумывай людей и факты. Отвечай по-русски."
 )
 
@@ -167,6 +205,19 @@ async def _build_context(user_id: int, text: str) -> str:
     """Персона помощника + память о пользователе + знания о платформе."""
     name = "Джим"
     parts = []
+    # ВРЕМЕННАЯ ОСВЕДОМЛЁННОСТЬ: помощник должен знать «сейчас», чтобы не напоминать о прошедшем
+    try:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        _wd = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+        _now = _dt.now(_tz.utc) + _td(hours=3)  # МСК (UTC+3; в РФ нет перехода на летнее время)
+        parts.append(
+            f"СЕЙЧАС: {_now.strftime('%Y-%m-%d')} ({_wd[_now.weekday()]}), время {_now.strftime('%H:%M')} МСК. "
+            "Всегда сверяйся с текущей датой/временем. НЕ напоминай о СОСТОЯВШИХСЯ (прошедших) встречах и событиях как о предстоящих; "
+            "о том, что уже прошло, говори в прошедшем времени и не навязывай (можешь мягко спросить, как всё прошло, ОДИН раз). "
+            "Записи «Мой день» и факты из памяти привязаны к датам — событие с датой РАНЬШЕ сегодняшней уже позади."
+        )
+    except Exception:
+        pass
     async with async_session() as db:
         u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if u:
@@ -473,6 +524,287 @@ async def _find_person(user_id: int, name: str) -> str:
     return "; ".join(parts) if parts else f"Никого с именем «{n}» не нашёл."
 
 
+async def _discover_city(query: str, limit: int = 8):
+    """Семантический поиск публичных джиннов Города (Qdrant/discovery); фолбэк на ilike. Возвращает список Agent."""
+    from sqlalchemy import or_
+    q = (query or "").strip()
+    ids = []
+    try:
+        from app.services import discovery
+        ranked = await discovery.discover(q, limit=limit * 2)
+        ids = [aid for aid, _ in ranked]
+    except Exception as e:
+        print(f"[discover_city] skip: {e}")
+    async with async_session() as db:
+        if ids:
+            rows = (await db.execute(
+                select(Agent).where(Agent.id.in_(ids), Agent.is_active == True, Agent.visibility == "public")
+            )).scalars().all()
+            order = {aid: i for i, aid in enumerate(ids)}
+            rows = sorted(rows, key=lambda a: order.get(a.id, 10**6))[:limit]
+            if rows:
+                return rows
+        pat = f"%{q}%"
+        return (await db.execute(
+            select(Agent).where(
+                Agent.is_active == True, Agent.visibility == "public",
+                or_(Agent.name.ilike(pat), Agent.profession.ilike(pat), Agent.description.ilike(pat))
+            ).order_by(Agent.rating.desc()).limit(limit)
+        )).scalars().all()
+
+
+async def _ask_one(a, user_id: int, question: str, max_tokens: int = 600) -> str:
+    """Задать вопрос ОДНОМУ джину (tool-loop если у него есть tools, иначе обычный ответ)."""
+    import json as _json
+    akw = dict(
+        agent_name=a.name, agent_profession=a.profession, agent_description=a.description or "",
+        system_prompt=a.system_prompt, llm_model=a.llm_model or "deepseek-chat",
+        manner_style=a.manner_style, manner_temperament=a.manner_temperament,
+        manner_humor=a.manner_humor, manner_emoji_use=a.manner_emoji_use,
+        knowledge_text=a.knowledge_text, skills_text=a.skills_text, exclusions_text=a.exclusions_text,
+        rag_context=None, conversation_history=[], user_id=user_id, agent_id=a.id,
+        user_message=question, max_tokens=max_tokens)
+    try:
+        enabled = _json.loads(a.tools_json) if getattr(a, "tools_json", None) else []
+    except Exception:
+        enabled = []
+    if enabled:
+        from app.services import agent_tools
+        return await agent_tools.reply_with_tools(None, a, akw, enabled)
+    from app.services.llm import get_agent_reply
+    return await get_agent_reply(**akw)
+
+
+async def _search_city(query: str) -> str:
+    q = (query or "").strip()
+    if not q:
+        return "Уточни профессию или тему для поиска в Городе."
+    rows = await _discover_city(q, limit=10)
+    if not rows:
+        return f"В Городе не нашёл джиннов по запросу «{q}»."
+    return "Нашёл в Городе: " + "; ".join(f"{a.name} ({a.profession})" for a in rows)
+
+
+async def _wallet_info(user_id: int) -> str:
+    if not user_id:
+        return "Не могу узнать баланс — нет пользователя."
+    from app.core.database import async_session
+    from app.models.user import User
+    from sqlalchemy import select, func
+    async with async_session() as db:
+        u = await db.get(User, user_id)
+        money = (u.balance_kopecks or 0) / 100 if u else 0
+        bonus = 0
+        try:
+            from app.models.bonus_grant import BonusGrant
+            bonus = (await db.execute(select(func.coalesce(func.sum(BonusGrant.remaining_kopecks), 0))
+                                      .where(BonusGrant.user_id == user_id, BonusGrant.active == True))).scalar() or 0
+        except Exception:
+            bonus = 0
+    s = f"Баланс: {money:.0f} ₽."
+    if bonus:
+        s += f" Плюс бонусы ≈{int(bonus) / 100:.0f} ₽ (тратятся первыми)."
+    s += " Пополнить — на странице кошелька (/wallet)."
+    return s
+
+
+async def _jinn_cost(name: str) -> str:
+    n = (name or "").strip()
+    if not n:
+        return "Уточни, стоимость какого джина узнать."
+    rows = await _discover_city(n, limit=1)
+    a = rows[0] if rows else None
+    if not a:
+        return f"Не нашёл джина «{n}» в Городе."
+    if not getattr(a, "is_paid", False):
+        return f"«{a.name}» ({a.profession}) — бесплатный, списаний нет."
+    try:
+        import json as _j
+        from app.services.settings_store import get_setting
+        rates = _j.loads(await get_setting("MODEL_RATES") or "{}")
+        rr = rates.get(getattr(a, "llm_model", "") or "") or rates.get("default") or {}
+        d = rates.get("default") or {}
+
+        def _pick(f, legacy):
+            v = rr.get(f)
+            if v in (None, ""):
+                v = d.get(f)
+            if v in (None, ""):
+                v = rr.get(legacy) if rr.get(legacy) not in (None, "") else d.get(legacy)
+            return float(v or 0)
+        si = _pick("sell_in", "sell")
+        so = _pick("sell_out", "sell")
+        msg = 600 / 1_000_000 * si + 300 / 1_000_000 * so
+        doc = 1500 / 1_000_000 * si + 1200 / 1_000_000 * so
+        return (f"«{a.name}» ({a.profession}) — ПЛАТНЫЙ: ≈{msg:.1f} ₽ за сообщение, ≈{doc:.0f} ₽ за документ. "
+                "Спишется по факту токенов. Если нужно бесплатно — поищу бесплатного специалиста.")
+    except Exception:
+        return f"«{a.name}» ({a.profession}) — платный; точную цену подскажу позже."
+
+
+async def _ask_jinn(user_id: int, topic: str, question: str) -> str:
+    """Найти подходящего джина-жителя (семантически) и задать ему вопрос. Бесплатных — транслируем; платных — предлагаем открыть чат."""
+    t = (topic or "").strip()
+    qn = (question or topic or "").strip()
+    if not t:
+        return "Уточни тему или профессию, у кого спросить в Городе."
+    rows = await _discover_city(t, limit=1)
+    a = rows[0] if rows else None
+    if not a:
+        return f"В Городе не нашёл джина-жителя по теме «{t}»."
+    if getattr(a, "is_paid", False):
+        promo = ""
+        try:
+            from app.core.database import async_session as _asess
+            from app.services import billing as _bl
+            async with _asess() as _cdb:
+                _camp = await _bl.active_campaign_for(_cdb, a.id)
+            if _camp:
+                promo = (f" 🎁 АКЦИЯ: первые {int(_camp.bonus_tokens or 0)} токенов в подарок от "
+                         f"{_camp.sponsor_name} — обязательно скажи это пользователю. "
+                         f"{(_camp.message or '')[:150]}")
+        except Exception:
+            pass
+        return (f"По теме «{t}» есть ПЛАТНЫЙ джинн «{a.name}» ({a.profession}). "
+                f"Не отвечай за него — предложи пользователю открыть с ним чат (open_chat «{a.name}»).{promo}")
+    try:
+        ans = await _ask_one(a, user_id, qn)
+    except Exception as e:
+        print(f"[ask_jinn] err: {e}")
+        return f"Не удалось спросить джина «{a.name}» сейчас."
+    return f"Ответ жителя Города «{a.name}» ({a.profession}): {ans}"
+
+
+async def _escalate_internal(user_id: int, task: str, reason: str) -> str:
+    """Помощник не смог сам → создаёт обращение к внутренней команде (авто-маршрут по домену)."""
+    task = (task or "").strip()
+    reason = (reason or "").strip()
+    if not task and not reason:
+        return "Уточни, что именно передать команде."
+    try:
+        from app.core.database import async_session
+        from app.models.assistant_request import AssistantRequest
+        from app.api.admin import _route_target, INTERNAL_TARGETS
+        target = _route_target(task + " " + reason)
+        tinfo = INTERNAL_TARGETS.get(target) or INTERNAL_TARGETS["other"]
+        auto_answer = ""
+        async with async_session() as db:
+            r = AssistantRequest(user_id=user_id or None, task_text=task, reason=reason,
+                                 target=target, target_agent_id=tinfo["agent_id"], status="new")
+            db.add(r)
+            await db.flush()
+            try:
+                from app.services import requests_flow
+                await requests_flow.auto_process(db, r)  # авто-триаж/ответ Архитектором/Супер-помощником
+                if getattr(r, "auto_resolved", False) and (r.response_to_user or "").strip():
+                    auto_answer = r.response_to_user
+            except Exception as _ae:
+                print(f"[escalate_internal] auto err: {_ae}")
+            await db.commit()
+        try:
+            from app.services import activity
+            await activity.log("internal_request", actor="assistant", user_id=user_id or None,
+                               target_type="assistant_request", result=("auto" if auto_answer else "new"), detail=f"{target}: {task[:80]}")
+        except Exception:
+            pass
+        if auto_answer:
+            return (f"Внутренняя команда ({tinfo['label']}) сразу дала решение — передай его пользователю: {auto_answer}")
+        return (f"Передал во внутреннюю команду ({tinfo['label']}). Скажи пользователю, что вопрос принят "
+                f"и решение вернётся позже — сейчас за него не отвечай, если не знаешь.")
+    except Exception as e:
+        print(f"[escalate_internal] err: {e}")
+        return "Не удалось передать обращение внутренней команде."
+
+
+async def _ask_city(user_id: int, topic: str, question: str, n: int = 3) -> str:
+    """BROADCAST: опросить несколько бесплатных жителей Города по теме и собрать их ответы."""
+    t = (topic or "").strip()
+    qn = (question or topic or "").strip()
+    if not t:
+        return "Уточни тему для опроса Города."
+    rows = await _discover_city(t, limit=n + 4)
+    free = [a for a in rows if not getattr(a, "is_paid", False)][:n]
+    if not free:
+        return f"В Городе не нашёл бесплатных жителей по теме «{t}»."
+    answers = []
+    for a in free:
+        try:
+            ans = await _ask_one(a, user_id, qn, max_tokens=400)
+            answers.append(f"«{a.name}» ({a.profession}): {ans}")
+        except Exception as e:
+            print(f"[ask_city] {getattr(a, 'id', '?')} err: {e}")
+    if not answers:
+        return "Никто из жителей Города не ответил."
+    return "Опросил жителей Города:\n\n" + "\n\n".join(answers)
+
+
+async def _day_ping(user_id: int):
+    try:
+        from app.websocket.manager import manager
+        await manager.broadcast(f"user-{user_id}", {"type": "day_ping"})
+    except Exception:
+        pass
+
+
+async def _day_add(user_id: int, title: str, time=None, note=None, kind="event", important=False) -> str:
+    from app.models.day_entry import DayEntry
+    from datetime import datetime
+    t = (title or "").strip()
+    if not t:
+        return "Что добавить в день?"
+    async with async_session() as db:
+        e = DayEntry(user_id=user_id, day=datetime.now().strftime("%Y-%m-%d"), time=(time or None),
+                     title=t[:300], note=note, kind=kind or "event", important=bool(important), author="assistant")
+        db.add(e)
+        await db.commit()
+        await db.refresh(e)
+        eid = e.id
+    await _day_ping(user_id)
+    return f"Добавил в твой день: {(time + ' — ') if time else ''}{t} (#{eid})."
+
+
+async def _day_read(user_id: int) -> str:
+    from app.models.day_entry import DayEntry
+    from datetime import datetime
+    d = datetime.now().strftime("%Y-%m-%d")
+    async with async_session() as db:
+        rows = (await db.execute(
+            select(DayEntry).where(DayEntry.user_id == user_id, DayEntry.day == d)
+            .order_by(DayEntry.time.is_(None), DayEntry.time, DayEntry.id)
+        )).scalars().all()
+    if not rows:
+        return "На сегодня записей в «Мой день» нет."
+    _st = {"planned": "", "done": " ✓", "cancelled": " ✗отменено", "moved": " ↦перенесено"}
+    return "Твой день:\n" + "\n".join(
+        f"#{e.id} {e.time or '--:--'} — {e.title}{_st.get(e.status, '')}" for e in rows)
+
+
+async def _day_update(user_id: int, entry_id, action=None, time=None) -> str:
+    from app.models.day_entry import DayEntry
+    if not entry_id:
+        return "Укажи #id записи (сначала read_day)."
+    async with async_session() as db:
+        e = (await db.execute(
+            select(DayEntry).where(DayEntry.id == entry_id, DayEntry.user_id == user_id)
+        )).scalar_one_or_none()
+        if not e:
+            return f"Записи #{entry_id} не нашёл."
+        if action == "done":
+            e.status = "done"
+        elif action == "cancel":
+            e.status = "cancelled"
+        elif action == "move":
+            e.status = "moved"
+            if time:
+                e.time = time
+        elif time:
+            e.time = time
+        await db.commit()
+        ttl, stt, tm = e.title, e.status, e.time
+    await _day_ping(user_id)
+    return f"Готово: «{ttl}» → {stt}" + (f", время {tm}" if tm else "")
+
+
 async def _add_favorite(user_id: int, name: str) -> str:
     pat = f"%{(name or '').strip()}%"
     async with async_session() as db:
@@ -574,7 +906,31 @@ async def _show_media(user_id: int, args: dict) -> tuple[str, dict | None]:
         return (f"Джинн «{jinn}» не найден.", None)
     if url and (url.startswith("http://") or url.startswith("https://")):
         return ("Показываю медиа.", {"url": url, "type": mtype})
-    return ("Нечего показать: укажи имя джинна или ссылку на изображение.", None)
+    # нет ссылки/джина — ищем в вебе по запросу
+    q = (args.get("query") or args.get("jinn") or "").strip()
+    if q:
+        if mtype == "video":
+            try:
+                from app.services.websearch import video_search as _vsearch
+                vr = await _vsearch(q, max_results=5)
+                vids = vr.get("videos") if isinstance(vr, dict) else None
+                if vids:
+                    return (f"Нашёл видео по запросу «{q}».", {"url": vids[0]["url"], "type": "video"})
+            except Exception as e:
+                print(f"[show_media] video search err: {e}")
+            # видео не нашли — предложить генерацию (полный пайплайн генерации — следующий шаг)
+            return (f"Готового видео по «{q}» не нашёл. Предложи пользователю: «могу сгенерировать короткий ролик — "
+                    f"он сохранится в Портфель». Не генерируй сам сейчас, просто предложи.", None)
+        try:
+            from app.services.websearch import search as _wsearch
+            sr = await _wsearch(q, max_results=5)
+            imgs = sr.get("images") if isinstance(sr, dict) else None
+            if imgs:
+                return (f"Нашёл картинку по запросу «{q}».", {"url": imgs[0], "type": "image"})
+        except Exception as e:
+            print(f"[show_media] image search err: {e}")
+        return (f"Не нашёл картинку по запросу «{q}».", None)
+    return ("Нечего показать: укажи имя джинна, ссылку или запрос картинки/видео.", None)
 
 
 async def _add_to_chat(user_id: int, room: str, args: dict) -> str:
@@ -680,6 +1036,15 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
             except Exception:
                 args = {}
             steps.append({"tool": name, "args": args})
+            # Журнал действий помощника: фиксируем содержательные инструменты (поиск/картинки/подборки/город)
+            if name in ("web_search", "deep_search", "show_media", "make_digest", "ask_jinn", "ask_city", "search_city", "create_document"):
+                try:
+                    from app.services import activity as _act
+                    _q = (args.get("query") or args.get("topic") or args.get("title") or args.get("jinn") or args.get("name") or "")
+                    await _act.log("assistant_action", actor="assistant", user_id=user_id or None,
+                                   target_type=name, detail=str(_q)[:160])
+                except Exception:
+                    pass
             if name == "reply":
                 final = (args.get("text") or "").strip()
                 result = "ok"
@@ -690,6 +1055,24 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _find_person(user_id, args.get("name", ""))
             elif name == "add_favorite":
                 result = await _add_favorite(user_id, args.get("name", ""))
+            elif name == "search_city":
+                result = await _search_city(args.get("query", ""))
+            elif name == "ask_jinn":
+                result = await _ask_jinn(user_id, args.get("topic", ""), args.get("question", ""))
+            elif name == "ask_city":
+                result = await _ask_city(user_id, args.get("topic", ""), args.get("question", ""))
+            elif name == "wallet_info":
+                result = await _wallet_info(user_id)
+            elif name == "jinn_cost":
+                result = await _jinn_cost(args.get("name", ""))
+            elif name == "escalate_internal":
+                result = await _escalate_internal(user_id, args.get("task", ""), args.get("reason", ""))
+            elif name == "read_day":
+                result = await _day_read(user_id)
+            elif name == "add_day_entry":
+                result = await _day_add(user_id, args.get("title", ""), args.get("time"), args.get("note"), kind=(args.get("kind") or "event"), important=bool(args.get("important")))
+            elif name == "update_day_entry":
+                result = await _day_update(user_id, args.get("id"), args.get("action"), args.get("time"))
             elif name == "web_search":
                 result = await _web_search(args.get("query", ""))
             elif name == "deep_search":
@@ -712,7 +1095,7 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                         await manager.broadcast(f"user-{user_id}", {"type": "feed_ping"})
                     except Exception:
                         pass
-                    result = f"Создал документ «{_cr['query'][:60]}» — он в разделе «Задания и поручения» на главном экране."
+                    result = f"Создал документ «{_cr['query'][:60]}» — он в разделе «Портфель» на главном экране."
                 else:
                     result = "Не удалось создать документ (пустой текст?)."
             elif name == "show_media":

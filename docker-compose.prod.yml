@@ -84,6 +84,12 @@ services:
       ADMIN_PHONES: '${ADMIN_PHONES:-["+79214787478"]}'
       # CORS — домен
       CORS_ORIGINS: '["https://jinntell.com", "https://www.jinntell.com", "http://localhost:3090"]'
+      # SMTP (почта восстановления)
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-465}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
     depends_on:
       postgres:
         condition: service_healthy

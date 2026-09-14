@@ -6,7 +6,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, UploadFile
 from typing import Optional
 
 from pydantic import BaseModel
@@ -306,6 +306,7 @@ async def contractor_update_agent(
         "description", "greeting", "system_prompt", "llm_model", "llm_max_tokens",
         "manner_style", "manner_temperament", "manner_humor", "manner_emoji_use",
         "knowledge_text", "knowledge_urls", "knowledge_files",
+        "tools_json",
         "voice_id", "voice_speed", "voice_pitch", "tts_voice_id", "tts_emotion",
         "appearance_preset", "appearance_face", "appearance_hair", "appearance_skin", "appearance_body",
         "outfit_style", "outfit_top", "outfit_bottom", "outfit_shoes", "outfit_accessory",
@@ -326,6 +327,11 @@ async def contractor_update_agent(
 
     await db.flush()
     await db.refresh(agent)
+    try:
+        from app.services import discovery
+        await discovery.index_one(agent)
+    except Exception as _e:
+        print(f"[discovery] index_one (contractor) skip: {_e}")
     return AgentDetailOut.model_validate(agent)
 
 
@@ -467,6 +473,37 @@ async def contractor_agent_stats(
         "by_hour": by_hour,
         "by_day": by_day,
     }
+
+
+@router.get("/agents/{agent_id}/leads")
+async def contractor_agent_leads(
+    agent_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Заявки (лиды), которые джинн собрал инструментом create_lead."""
+    await _get_owned_agent(agent_id, contractor, db)
+    from app.models.activity import ActivityLog
+    from app.core.crypto import decrypt_text
+    rows = (await db.execute(
+        select(ActivityLog)
+        .where(ActivityLog.actor_agent_id == agent_id, ActivityLog.action == "lead")
+        .order_by(ActivityLog.created_at.desc()).limit(200)
+    )).scalars().all()
+    out = []
+    for r in rows:
+        try:
+            detail = decrypt_text(r.detail) if r.detail else ""
+        except Exception:
+            detail = ""
+        out.append({
+            "id": r.id,
+            "contact": r.target_name,
+            "detail": detail,
+            "result": r.result or "new",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return out
 
 
 @router.get("/agents/{agent_id}/dialogs")
@@ -717,3 +754,51 @@ async def contractor_wardrobe_delete(
     await db.delete(w)
     await db.flush()
     return {"ok": True}
+
+
+# ── Подписчики канала + раздача подарков токенов ──
+@router.get("/agents/{agent_id}/subscribers")
+async def contractor_agent_subscribers(
+    agent_id: int,
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Кто подписан на канал джина (подписка = избранное)."""
+    await _get_owned_agent(agent_id, contractor, db)
+    from app.models.user_favorite import UserFavorite
+    rows = (await db.execute(
+        select(User).join(UserFavorite, UserFavorite.user_id == User.id)
+        .where(UserFavorite.agent_id == agent_id)
+        .order_by(UserFavorite.id.desc()).limit(500)
+    )).scalars().all()
+    return [{"user_id": u.id, "display_name": u.display_name, "city": u.city} for u in rows]
+
+
+@router.post("/agents/{agent_id}/gift")
+async def contractor_agent_gift(
+    agent_id: int,
+    body: dict = Body(...),
+    contractor: Contractor = Depends(_require_contractor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Подарить токены подписчикам (всем или выбранным). Начисляет на token_balance."""
+    await _get_owned_agent(agent_id, contractor, db)
+    amount = int(body.get("amount") or 0)
+    if amount <= 0:
+        raise HTTPException(400, "нужна сумма токенов")
+    from app.models.user_favorite import UserFavorite
+    ids = body.get("user_ids")
+    if ids == "all" or not ids:
+        subs = (await db.execute(
+            select(UserFavorite.user_id).where(UserFavorite.agent_id == agent_id)
+        )).scalars().all()
+    else:
+        subs = [int(x) for x in ids]
+    n = 0
+    for uid in subs:
+        u = await db.get(User, uid)
+        if u:
+            u.token_balance = int(getattr(u, "token_balance", 0) or 0) + amount
+            n += 1
+    await db.flush()
+    return {"ok": True, "gifted_to": n, "amount": amount}

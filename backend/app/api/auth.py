@@ -19,6 +19,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
+from app.core.deps import get_current_user
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -129,7 +130,24 @@ async def _sec_event(action: str, source: str) -> None:
 #  РЕГИСТРАЦИЯ
 # =====================================
 
-@router.post("/register", response_model=TokenResponse)
+async def _waitlist_active(db: AsyncSession) -> bool:
+    """Включён ли лист ожидания: off / on / auto (авто — при активных пользователях >= лимита)."""
+    from sqlalchemy import func
+    from app.services.settings_store import get_setting
+    mode = ((await get_setting("WAITLIST_MODE")) or "off").strip().lower()
+    if mode in ("on", "1", "true", "yes"):
+        return True
+    if mode == "auto":
+        try:
+            limit = int((await get_setting("WAITLIST_LIMIT")) or "1000")
+        except Exception:
+            limit = 1000
+        active = (await db.execute(select(func.count(User.id)).where(User.is_active == True))).scalar() or 0
+        return int(active) >= limit
+    return False
+
+
+@router.post("/register")
 async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Регистрация: телефон + пароль + email (опционально)"""
     phone = _normalize_phone(body.phone)
@@ -153,9 +171,11 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     if existing:
         raise HTTPException(409, "Пользователь с таким номером уже зарегистрирован")
 
-    # Проверка email уникальности (если указан)
+    # Email ОБЯЗАТЕЛЕН — нужен для восстановления пароля
     email = body.email.strip().lower() if body.email else None
-    if email:
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "Укажите корректный email — он нужен для восстановления пароля")
+    if True:
         email_exists = await db.execute(select(User).where(User.email == email))
         if email_exists.scalar_one_or_none():
             raise HTTPException(409, "Этот email уже используется")
@@ -179,15 +199,21 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     if settings.ADMIN_PHONES and phone in settings.ADMIN_PHONES:
         user.is_admin = True
 
+    # Лист ожидания: если включён (или авто-порог достигнут) — аккаунт создаётся, но ждёт активации
+    if not user.is_admin and await _waitlist_active(db):
+        user.is_active = False
+        await db.flush()
+        return {"waitlisted": True, "message": "Вы зарегистрированы! Аккаунт в листе ожидания — доступ откроется после активации. Мы сообщим."}
+
     await db.flush()
 
     token = create_access_token(user.id)
-    return TokenResponse(
-        access_token=token,
-        user_id=user.id,
-        display_name=user.display_name,
-        is_admin=user.is_admin,
-    )
+    return {
+        "access_token": token,
+        "user_id": user.id,
+        "display_name": user.display_name,
+        "is_admin": user.is_admin,
+    }
 
 
 # =====================================
@@ -223,7 +249,9 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
         raise HTTPException(401, "Неверный номер или пароль")
 
     if not user.is_active:
-        raise HTTPException(403, "Аккаунт деактивирован")
+        if (user.phone or "").startswith("del_"):
+            raise HTTPException(403, "Аккаунт удалён")
+        raise HTTPException(403, "Ваш аккаунт в листе ожидания — доступ откроется после активации администратором.")
 
     # успех — сбрасываем счётчик неудач по номеру
     await _rate_reset(f"rl:login:phone:{phone}")
@@ -266,12 +294,12 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request, db: Asy
         user.reset_code_expires = datetime.now(timezone.utc) + timedelta(minutes=15)
         await db.flush()
 
-        if settings.DEBUG:
+        from app.services.email_service import send_reset_email
+        sent = await send_reset_email(email, code)
+        # Код отдаём в ответ ТОЛЬКО как dev-fallback, если письмо не ушло (SMTP не настроен)
+        if not sent and settings.DEBUG:
             debug_code = code
-            print(f"[auth] Reset code for {email}: {code}")
-        else:
-            # TODO: отправка почты (SMTP / API)
-            print(f"[auth] Would send reset email to {email} with code {code}")
+            print(f"[auth] SMTP недоступен. Reset code for {email}: {code}")
 
     return MessageResponse(
         message="Если аккаунт с таким email существует, код восстановления отправлен",
@@ -638,3 +666,36 @@ async def verify_sms(body: VerifySMSRequest, request: Request, db: AsyncSession 
         display_name=user.display_name,
         is_admin=user.is_admin,
     )
+
+
+@router.post("/delete-account", response_model=MessageResponse)
+async def delete_account(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Удаление аккаунта (право быть забытым): анонимизация ПД + блокировка входа + деактивация агентов владельца."""
+    import secrets as _secrets
+    from app.models.agent import Agent
+    try:
+        agents = (await db.execute(select(Agent).where(Agent.owner_id == user.id))).scalars().all()
+        for a in agents:
+            a.is_active = False
+            a.visibility = "core"
+    except Exception:
+        pass
+    user.is_active = False
+    user.phone = f"del_{user.id}_{_secrets.token_hex(3)}"[:20]
+    user.email = None
+    user.password_hash = ""
+    user.display_name = "Удалённый пользователь"
+    user.first_name = None
+    user.last_name = None
+    user.city = None
+    user.about = None
+    user.assistant_photo = None
+    user.custom_bg_url = None
+    user.birth_date = None
+    user.vk_id = None
+    user.telegram_id = None
+    user.yandex_id = None
+    user.jinntell_link = None
+    user.reset_code = None
+    await db.commit()
+    return MessageResponse(message="Аккаунт удалён. Данные анонимизированы, вход заблокирован.")

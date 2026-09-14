@@ -122,7 +122,8 @@ interface UseChatResult {
 
 export function useChat(initialRoom: string = "general"): UseChatResult {
   const { user } = useAuth();
-  const assistantName = user?.assistant_name || DEFAULT_ASSISTANT_NAME;
+  // Липкое имя: пока профиль не догрузился — берём последнее известное из localStorage (иначе мелькает дефолт «Джим»)
+  const assistantName = user?.assistant_name || (typeof window !== "undefined" ? (() => { try { return localStorage.getItem("jinntell_assistant_name") || ""; } catch { return ""; } })() : "") || DEFAULT_ASSISTANT_NAME;
   const myId = user?.id ?? null;
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [buildWelcome(false, assistantName)]);

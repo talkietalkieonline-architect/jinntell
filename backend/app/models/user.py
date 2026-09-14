@@ -26,11 +26,14 @@ class User(Base):
     birth_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     about: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    birthday: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # ММ-ДД или ГГГГ-ММ-ДД (визитка → дни рождения в «Мой день»)
 
     # Персонализация помощника
     assistant_name: Mapped[str] = mapped_column(String(100), default="Джим")
     assistant_gender: Mapped[str] = mapped_column(String(20), default="male")  # male / female / animal / other
     assistant_voice: Mapped[str] = mapped_column(String(50), default="male_low")
+    language: Mapped[str] = mapped_column(String(8), default="ru", server_default="ru")  # ru|en|ka — язык юзера (STT/голос/контент)
+    owned_store_items: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")  # купленные позиции магазина (JSON id[])
     assistant_photo: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # base64 data URL
     assistant_age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # возраст образа помощника
     assistant_traits: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: характеристики общения (тон/длина/юмор/эмодзи)
@@ -54,6 +57,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    tariff_code: Mapped[str] = mapped_column(String(40), default="", server_default="")  # пусто = полный доступ
+    token_balance: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    welcome_gift_claimed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    last_daily_gift: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
     # Настройки
     theme: Mapped[str] = mapped_column(String(50), default="light")

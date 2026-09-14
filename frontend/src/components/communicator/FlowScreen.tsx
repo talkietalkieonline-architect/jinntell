@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ttsBlobUrl, mediaUrl } from "@/services/api";
+import { ttsBlobUrl, mediaUrl, getDay, sttLang, type DayEntry } from "@/services/api";
 import AppBackground from "@/components/communicator/AppBackground";
+import MyDayModal from "@/components/communicator/MyDayModal";
 
 // Похоже ли услышанное на ЭХО собственной озвучки помощника (доля слов услышанного, встречающихся в его реплике)
 function echoOverlap(heard: string, spoken: string): number {
@@ -13,6 +14,10 @@ function echoOverlap(heard: string, spoken: string): number {
   return hit / hw.length;
 }
 
+const _FLOW_SPEEDS = [1, 1.5, 2];
+function _flowSpeed(): number { try { return parseFloat(localStorage.getItem("jinntell_play_speed") || "1") || 1; } catch { return 1; } }
+function _setFlowSpeed(v: number) { try { localStorage.setItem("jinntell_play_speed", String(v)); } catch { /* noop */ } }
+
 export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assistantName, assistantPhoto, voiceId }: {
   onExit: () => void;
   onSend: (text: string) => void;
@@ -23,6 +28,8 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   voiceId?: string;
 }) {
   const [now, setNow] = useState<Date | null>(null);
+  const [speed, setSpeed] = useState(1);
+  useEffect(() => { setSpeed(_flowSpeed()); }, []);
   const [status, setStatus] = useState<"idle" | "listening" | "speaking">("listening");
   const [caption, setCaption] = useState("");
   const [viewer, setViewer] = useState<number | null>(null);  // индекс медиа в полноэкранном просмотре
@@ -38,6 +45,30 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   const spokenRef = useRef<string>(lastReply || "");
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
+
+  // «Мой день» — карточка ближайшего события внизу Потока + попап
+  const [dayNext, setDayNext] = useState<DayEntry | null>(null);
+  const [dayOpen, setDayOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const r = await getDay();
+        if (!alive) return;
+        const d = new Date();
+        const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        const active = r.entries.filter((e) => e.status === "planned" || e.status === "moved");
+        const cmp = (a: DayEntry, b: DayEntry) => ((a.time || "") < (b.time || "") ? -1 : 1);
+        const upcoming = active.filter((e) => e.time && e.time >= hm).sort(cmp);
+        const timed = active.filter((e) => e.time).sort(cmp);
+        setDayNext(upcoming[0] || timed[0] || active[0] || null);
+      } catch { /* noop */ }
+    };
+    load();
+    const h = () => load();
+    window.addEventListener("jinntell_day_ping", h);
+    return () => { alive = false; window.removeEventListener("jinntell_day_ping", h); };
+  }, []);
   const assistantNameRef = useRef(assistantName);
   assistantNameRef.current = assistantName;
   // Анти-эхо: пока помощник озвучивает — НЕ слушаем (иначе микрофон слышит TTS и зацикливается)
@@ -64,7 +95,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR) { setStatus("idle"); return; }
     const rec = new (SR as unknown as { new (): SpeechRecognition })();
-    rec.lang = "ru-RU"; rec.continuous = true; rec.interimResults = true;
+    rec.lang = sttLang(); rec.continuous = true; rec.interimResults = true;
     recRef.current = rec;
     rec.onresult = (e: SpeechRecognitionEvent) => {
       if (micPausedRef.current) return;  // микрофон заглушён на время озвучки — игнорируем эхо
@@ -136,7 +167,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const url = await ttsBlobUrl(text, resolveVoice());
         if (cancelled) { speakingRef.current = false; return; }
         if (url) {
-          const a = new Audio(url); audioRef.current = a;
+          const a = new Audio(url); audioRef.current = a; a.playbackRate = _flowSpeed();
           const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; finalRef.current = ""; resumeMic(); }, 600); };
           a.onended = done;
           a.onerror = done;
@@ -181,7 +212,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       try {
         const url = await ttsBlobUrl(text, resolveVoice());
         if (url) {
-          const a = new Audio(url); audioRef.current = a;
+          const a = new Audio(url); audioRef.current = a; a.playbackRate = _flowSpeed();
           const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; finalRef.current = ""; resumeMic(); }, 600); };
           a.onended = done; a.onerror = done;
           await a.play();
@@ -267,6 +298,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       {/* Контент поверх фона (z-1). Пустое место ловит тап-прерывание */}
       <div onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } interrupt(); }} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1, justifyContent: "flex-start", alignItems: "center", paddingTop: "4vh" }}>
         <button onClick={(e) => { e.stopPropagation(); onExit(); }} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
+        <button onClick={(e) => { e.stopPropagation(); const nx = _FLOW_SPEEDS[(_FLOW_SPEEDS.indexOf(speed) + 1) % _FLOW_SPEEDS.length]; setSpeed(nx); _setFlowSpeed(nx); if (audioRef.current) audioRef.current.playbackRate = nx; }} className="absolute top-5 left-5 h-9 px-3 rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }} title="Скорость озвучки">{speed}×</button>
         <div className="font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3, fontSize: "clamp(34px, 7.5vw, 50px)" }}>{hh}:{mm}</div>
         <div className="text-[12px] mb-8 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
 
@@ -376,6 +408,22 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
           </div>
         </div>
       )}
+
+      {/* Карточка «Мой день» — ближайшее событие (визуальное подтверждение) */}
+      {dayNext && (
+        <div onClick={(e) => { e.stopPropagation(); setDayOpen(true); }} className="absolute left-0 right-0 flex justify-center animate-fade-in" style={{ bottom: 18, zIndex: 4, pointerEvents: "auto" }}>
+          <div className="flex items-center gap-3" style={{ width: "min(88%,420px)", background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", borderRadius: 16, padding: "10px 14px", backdropFilter: "blur(10px)", cursor: "pointer", boxShadow: "0 8px 30px -12px rgba(0,0,0,0.6)" }}>
+            <div style={{ fontFamily: "monospace", fontSize: 15, fontWeight: 700, color: dayNext.important ? "#E0902A" : "var(--text-primary)", minWidth: 46 }}>{dayNext.time || "—"}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dayNext.title}</div>
+              <div style={{ fontSize: 10.5, color: "var(--text-muted)" }}>{dayNext.note || "ближайшее в твоём дне · тап — открыть"}</div>
+            </div>
+            <div style={{ fontSize: 18 }}>🗓</div>
+          </div>
+        </div>
+      )}
+
+      {dayOpen && <MyDayModal onClose={() => setDayOpen(false)} />}
     </div>
   );
 }

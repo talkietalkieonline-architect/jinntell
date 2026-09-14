@@ -137,6 +137,8 @@ async def update_me(
         user.avatar_url = body.avatar_url
     if body.about is not None:
         user.about = body.about
+    if body.birthday is not None:
+        user.birthday = body.birthday
     # Персонализация помощника
     if body.assistant_name is not None:
         user.assistant_name = body.assistant_name
@@ -144,6 +146,8 @@ async def update_me(
         user.assistant_gender = body.assistant_gender
     if body.assistant_voice is not None:
         user.assistant_voice = body.assistant_voice
+    if body.language is not None:
+        user.language = body.language
     if body.assistant_photo is not None:
         user.assistant_photo = body.assistant_photo
     if body.assistant_age is not None:
@@ -353,3 +357,55 @@ async def delete_user_avatar(
     user.avatar_url = None
     await db.flush()
     return {"ok": True}
+
+
+# ── Кошелёк пользователя (токены + подарки) ──
+import json as _wjson
+from datetime import date as _wdate
+from app.services.settings_store import get_setting as _w_get
+
+
+def _wcfg(raw):
+    try:
+        return _wjson.loads(raw or "{}")
+    except Exception:
+        return {}
+
+
+@router.get("/me/wallet")
+async def my_wallet(user: User = Depends(get_current_user)):
+    cfg = _wcfg(await _w_get("TOKEN_CONFIG"))
+    gifts = cfg.get("gifts", {}) or {}
+    packs = [p for p in (cfg.get("packs", []) or []) if p.get("active")]
+    today = _wdate.today().isoformat()
+    welcome_av = 0 if getattr(user, "welcome_gift_claimed", False) else int(gifts.get("welcome", 0) or 0)
+    daily_av = 0 if (getattr(user, "last_daily_gift", None) == today) else int(gifts.get("daily", 0) or 0)
+    return {
+        "token_balance": int(getattr(user, "token_balance", 0) or 0),
+        "packs": packs,
+        "welcome_available": welcome_av,
+        "daily_available": daily_av,
+    }
+
+
+@router.post("/me/wallet/claim/{kind}")
+async def claim_gift(kind: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    cfg = _wcfg(await _w_get("TOKEN_CONFIG"))
+    gifts = cfg.get("gifts", {}) or {}
+    today = _wdate.today().isoformat()
+    if kind == "welcome":
+        if getattr(user, "welcome_gift_claimed", False):
+            raise HTTPException(400, "Приветственный подарок уже получен")
+        credited = int(gifts.get("welcome", 0) or 0)
+        user.token_balance = int(getattr(user, "token_balance", 0) or 0) + credited
+        user.welcome_gift_claimed = True
+    elif kind == "daily":
+        if getattr(user, "last_daily_gift", None) == today:
+            raise HTTPException(400, "Ежедневный подарок уже получен сегодня")
+        credited = int(gifts.get("daily", 0) or 0)
+        user.token_balance = int(getattr(user, "token_balance", 0) or 0) + credited
+        user.last_daily_gift = today
+    else:
+        raise HTTPException(400, "Неизвестный подарок")
+    await db.flush()
+    return {"ok": True, "credited": credited, "token_balance": user.token_balance}

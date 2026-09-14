@@ -4,7 +4,7 @@ import uuid
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -331,7 +331,10 @@ async def list_digests(user: User = Depends(get_current_user), db: AsyncSession 
     rows = (await db.execute(
         select(Digest).where(Digest.user_id == user.id).order_by(Digest.id.desc()).limit(30)
     )).scalars().all()
-    return {"items": [{"id": d.id, "query": d.query, "created_at": d.created_at.isoformat()} for d in rows]}
+    return {"items": [{"id": d.id, "query": d.query, "kind": getattr(d, "kind", "doc") or "doc",
+                       "media_url": getattr(d, "media_url", None),
+                       "source_agent_name": getattr(d, "source_agent_name", "") or "",
+                       "created_at": d.created_at.isoformat()} for d in rows]}
 
 
 @router.get("/digests/{digest_id}")
@@ -341,7 +344,10 @@ async def get_digest(digest_id: int, user: User = Depends(get_current_user), db:
     d = await db.get(Digest, digest_id)
     if not d or d.user_id != user.id:
         raise HTTPException(404, "Подборка не найдена")
-    return {"id": d.id, "query": d.query, "sections": _json.loads(d.sections or "[]"), "created_at": d.created_at.isoformat()}
+    return {"id": d.id, "query": d.query, "sections": _json.loads(d.sections or "[]"),
+            "kind": getattr(d, "kind", "doc") or "doc", "media_url": getattr(d, "media_url", None),
+            "source_agent_name": getattr(d, "source_agent_name", "") or "",
+            "created_at": d.created_at.isoformat()}
 
 
 @router.delete("/digests/{digest_id}")
@@ -351,6 +357,40 @@ async def delete_digest(digest_id: int, user: User = Depends(get_current_user), 
     if d and d.user_id == user.id:
         await db.delete(d)
         await db.commit()
+    return {"ok": True}
+
+
+@router.post("/digests/{digest_id}/share")
+async def share_digest(digest_id: int, body: dict = Body(...), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Поделиться элементом Портфеля с другим пользователем (MVP = копия в его Портфель с пометкой «от {имя}»)."""
+    from app.models.digest import Digest
+    from app.models.contact import Contact
+    d = await db.get(Digest, digest_id)
+    if not d or d.user_id != user.id:
+        raise HTTPException(404, "Элемент не найден")
+    to = int(body.get("to_user_id") or 0)
+    if not to or to == user.id:
+        raise HTTPException(400, "нужен получатель")
+    # получатель должен быть в контактах (безопасность — не слать кому попало)
+    ok = (await db.execute(select(Contact).where(Contact.owner_user_id == user.id, Contact.contact_user_id == to))).first()
+    if not ok:
+        raise HTTPException(403, "Получатель не в контактах")
+    copy = Digest(user_id=to, query=d.query, sections=d.sections,
+                  kind=getattr(d, "kind", "doc") or "doc", media_url=getattr(d, "media_url", None),
+                  source_agent_id=getattr(d, "source_agent_id", None),
+                  source_agent_name=f"📤 от {user.display_name}"[:120])
+    db.add(copy)
+    await db.commit()
+    try:
+        await manager.broadcast(f"user-{to}", {"type": "feed_ping"})
+    except Exception:
+        pass
+    try:
+        from app.models.feed import FeedEvent
+        db.add(FeedEvent(user_id=to, kind="info", title=f"📤 {user.display_name} поделился: {d.query[:50]}", body=None))
+        await db.commit()
+    except Exception:
+        pass
     return {"ok": True}
 
 

@@ -104,6 +104,6 @@ async def channel_mark_read(agent_id: int, user: User = Depends(get_current_user
 async def channel_posts(agent_id: int, limit: int = 30, db: AsyncSession = Depends(get_db)):
     res = await db.execute(
         select(ChannelPost).where(ChannelPost.agent_id == agent_id)
-        .order_by(ChannelPost.created_at.desc()).limit(min(limit, 50))
+        .order_by(ChannelPost.created_at.desc()).limit(min(limit, 500))
     )
     return [ChannelPostOut.model_validate(p) for p in res.scalars().all()]

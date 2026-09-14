@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState, useRef, type ReactNode } from "react";
-import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite } from "@/services/api";
+import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite, type DigestItem } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
+import MyDayModal from "@/components/communicator/MyDayModal";
 import { FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
 
 interface Props {
@@ -74,8 +75,26 @@ function Strip({ title, children, empty }: { title: string; children: ReactNode;
   );
 }
 
+// Перетаскиваемая раскладка дома: колонки = массивы id блоков (сохраняется per-браузер)
+type HomeLayout = { a: string[]; b: string[]; c: string[] };
+const HOME_BLOCK_IDS = ["assistant", "lists", "contacts", "events", "tools", "feeds", "portfolio", "channels", "guests"] as const;
+const DEFAULT_HOME_LAYOUT: HomeLayout = {
+  a: ["assistant", "lists", "contacts"],
+  b: ["events", "tools", "feeds", "portfolio"],
+  c: ["channels", "guests"],
+};
+const HOME_BLOCK_LABEL: Record<string, string> = {
+  assistant: "Помощник", lists: "Мои списки", contacts: "Контакты", events: "События",
+  tools: "Инструменты", feeds: "Ленты", portfolio: "Портфель", channels: "Каналы", guests: "Гостиная",
+};
+function migrateLayout(l: HomeLayout): HomeLayout {
+  const seen = new Set([...l.a, ...l.b, ...l.c]);
+  const miss = HOME_BLOCK_IDS.filter((id) => !seen.has(id));
+  return { a: [...l.a], b: [...l.b, ...miss], c: [...l.c] };
+}
+
 export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPhoto, userId, openChats = [], favIds, onOpenAssistant, onOpenFlow, onOpenAgent, onOpenContact, onOpenChat, onOpenActions, onOpenSettings, onOpenDigest, onOpenInvites, onCreateJinn, onOpenFeed, onOpenCity }: Props) {
-  const [digests, setDigests] = useState<{ id: number; query: string; created_at: string }[]>([]);
+  const [digests, setDigests] = useState<DigestItem[]>([]);
   const [allChannels, setAllChannels] = useState<ChannelUnread[]>([]);
   const [favs, setFavs] = useState<AgentOut[]>([]);
   const [recommended, setRecommended] = useState<AgentOut[]>([]);
@@ -89,6 +108,15 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [gostTab, setGostTab] = useState<"rec" | "pop" | "recent">("rec");
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [dayOpen, setDayOpen] = useState(false);
+  // Онбординг «С чего начать»
+  const [obSteps, setObSteps] = useState<Record<string, boolean>>({});
+  const [obHide, setObHide] = useState(false);
+  useEffect(() => { try { const raw = localStorage.getItem("jinntell_onboarding"); if (raw) { const o = JSON.parse(raw); setObSteps(o.steps || {}); setObHide(!!o.hide); } } catch { /* noop */ } }, []);
+  const obPersist = (steps: Record<string, boolean>, hide: boolean) => { try { localStorage.setItem("jinntell_onboarding", JSON.stringify({ steps, hide })); } catch { /* noop */ } };
+  const obMark = (k: string) => setObSteps((prev) => { const n = { ...prev, [k]: true }; obPersist(n, obHide); return n; });
+  const obDismiss = () => { setObHide(true); obPersist(obSteps, true); };
+  useEffect(() => { const keys = ["topup", "promos", "ask", "day", "feed", "city"]; if (!obHide && keys.every((k) => obSteps[k])) { setObHide(true); obPersist(obSteps, true); } }, [obSteps, obHide]);
   useEffect(() => { try { const raw = localStorage.getItem("jinntell_home_collapsed"); if (raw) setCollapsed(new Set(JSON.parse(raw))); } catch { /* noop */ } }, []);
   const toggleCollapse = (k: string) => setCollapsed((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); try { localStorage.setItem("jinntell_home_collapsed", JSON.stringify([...n])); } catch { /* noop */ } return n; });
 
@@ -99,7 +127,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   type ListMember = { kind: "agent" | "contact"; id: number };
   type UserList = { id: string; name: string; members: ListMember[] };
   const [lists, setLists] = useState<UserList[]>([]);
-  const [menuFor, setMenuFor] = useState<{ kind: "agent" | "contact"; id: number; name: string } | null>(null);
+  const [menuFor, setMenuFor] = useState<{ kind: "agent" | "contact"; id: number; name: string; contact?: ContactOut } | null>(null);
   const [newListName, setNewListName] = useState("");
   useEffect(() => {
     try { const a = localStorage.getItem("jinntell_pinned"); if (a) setPinned(new Set(JSON.parse(a))); } catch { /* noop */ }
@@ -124,6 +152,26 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   }, []);
   const markDocSeen = (id: number) => setSeenDocs((prev) => { const n = new Set(prev); n.add(id); try { localStorage.setItem("jinntell_seen_docs", JSON.stringify([...n])); } catch { /* noop */ } return n; });
   const openDoc = (id: number) => { markDocSeen(id); onOpenDigest?.(id); };
+  const docEmoji = (kind?: string) => ({ image: "🖼", video: "🎬", file: "📎", link: "🔗" }[kind || "doc"] || "📑");
+  const openPortfolioItem = (d: DigestItem) => openDoc(d.id);  // просмотрщик внутри приложения (DigestModal)
+
+  // Перетаскиваемая раскладка блоков дома
+  const [layout, setLayout] = useState<HomeLayout>(DEFAULT_HOME_LAYOUT);
+  const [editLayout, setEditLayout] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
+  useEffect(() => { try { const raw = localStorage.getItem("jinntell_home_layout"); if (raw) { const l = JSON.parse(raw); if (l && l.a && l.b && l.c) setLayout(migrateLayout(l)); } } catch { /* noop */ } }, []);
+  const persistLayout = (l: HomeLayout) => { try { localStorage.setItem("jinntell_home_layout", JSON.stringify(l)); } catch { /* noop */ } };
+  const moveBlock = (id: string, toCol: keyof HomeLayout, beforeId: string | null) => {
+    setLayout((prev) => {
+      const cols: HomeLayout = { a: prev.a.filter((x) => x !== id), b: prev.b.filter((x) => x !== id), c: prev.c.filter((x) => x !== id) };
+      const arr = cols[toCol];
+      const idx = beforeId ? arr.indexOf(beforeId) : -1;
+      arr.splice(idx < 0 ? arr.length : idx, 0, id);
+      persistLayout(cols);
+      return cols;
+    });
+  };
+  const resetLayout = () => { setLayout(DEFAULT_HOME_LAYOUT); persistLayout(DEFAULT_HOME_LAYOUT); };
   const openFeed = () => { const now = Date.now(); setFeedSeenTs(now); try { localStorage.setItem("jinntell_feed_seen_ts", String(now)); } catch { /* noop */ } onOpenFeed?.(); };
   const openInvitesW = () => { const now = Date.now(); setInvitesSeenTs(now); try { localStorage.setItem("jinntell_invites_seen_ts", String(now)); } catch { /* noop */ } onOpenInvites?.(); };
 
@@ -196,7 +244,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small={small} star={pinned.has(a.id)} badge={unreadByAgent.get(a.id) || 0} onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={() => setMenuFor({ kind: "agent", id: a.id, name: a.name })} />
   );
   const contactCircle = (c: ContactOut) => (
-    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} frame={c.avatar_frame} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => setMenuFor({ kind: "contact", id: c.id, name: c.display_name })} />
+    <Circle key={c.id} label={c.display_name} photo={c.avatar_url} color={c.avatar_color || undefined} emoji="👤" online={c.is_online} frame={c.avatar_frame} star={pinnedContacts.has(c.id)} onClick={() => onOpenContact?.(c)} onLongPress={() => setMenuFor({ kind: "contact", id: c.id, name: c.display_name, contact: c })} />
   );
   const guestAgentCircle = (a: AgentOut) => (
     <Circle key={a.id} label={a.name} sub={a.profession} color={a.color} emoji="🧞" paid={a.is_paid} small onClick={() => onOpenAgent?.(a.id, { name: a.name, color: a.color })} onLongPress={async () => { try { await addFavoriteAgent(a.id); window.dispatchEvent(new Event("jinntell_favs_change")); } catch { /* noop */ } }} />
@@ -224,47 +272,94 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     </div>
   );
 
-  return (
-    <div className="absolute inset-0 overflow-y-auto overflow-x-hidden flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: `calc(${bottomPad + 12}px + env(safe-area-inset-bottom, 0px) + 16px)`, paddingLeft: "clamp(16px, 3.5vw, 56px)", paddingRight: "clamp(16px, 3.5vw, 56px)" }}>
-      <div className="w-full max-w-[460px] sm:max-w-[1400px] flex flex-col gap-3.5 sm:grid sm:grid-cols-2 sm:gap-4 sm:items-start md:grid-cols-3">
-
-        {/* ─── КОЛОНКА 1 (веб): помощник · События · Контакты ─── */}
-        <div className="flex flex-col gap-3.5 min-w-0">
-        {/* ═══════════ КОМПАКТНЫЙ ПОМОЩНИК (v3.3): чат + долгий тап = настройки ═══════════ */}
-        <button
-          onClick={onOpenAssistant}
-          onContextMenu={(e) => { if (onOpenSettings) { e.preventDefault(); onOpenSettings("Настройки Помощника"); } }}
-          className="w-full flex items-center gap-3 rounded-2xl p-3 text-left transition-transform hover:scale-[1.01]"
-          style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
-        >
-          <div className="relative w-12 h-12 rounded-full overflow-hidden flex items-center justify-center shrink-0" style={{ border: "2px solid var(--accent)", background: "var(--bg-glass)" }}>
-            {assistantPhoto ? <img src={assistantPhoto.startsWith("data:") || assistantPhoto.startsWith("http") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" /> : <span className="text-xl">🧞</span>}
-            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>Чат с {assistantName}</div>
-            <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>● на связи · спроси о чём угодно</div>
-          </div>
-          <span className="text-[11px] shrink-0" style={{ color: "var(--text-muted)" }}>открыть ›</span>
-        </button>
-
-        {/* ═══════════ Кастомные списки (семья/работа) — удержи кружок → «В список» ═══════════ */}
-        {lists.filter((l) => l.members.length > 0).map((l) => (
-          <div key={l.id}>
-            <div className="text-[13px] font-bold px-1 pt-1" style={{ color: "var(--text-primary)" }}>📁 {l.name}</div>
-            <Strip title="">
-              {l.members.map((m) => {
-                if (m.kind === "agent") { const a = favs.find((x) => x.id === m.id); return a ? agentCircle(a, true) : null; }
-                const c = contacts.find((x) => x.id === m.id); return c ? contactCircle(c) : null;
-              })}
+  const renderBlock = (id: string): ReactNode => {
+    switch (id) {
+      case "assistant":
+        return (
+          <button
+            onClick={onOpenAssistant}
+            onContextMenu={(e) => { if (onOpenSettings) { e.preventDefault(); onOpenSettings("Настройки Помощника"); } }}
+            className="w-full flex items-center gap-3 rounded-2xl p-3 text-left transition-transform hover:scale-[1.01]"
+            style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}
+          >
+            <div className="relative w-12 h-12 rounded-full overflow-hidden flex items-center justify-center shrink-0" style={{ border: "2px solid var(--accent)", background: "var(--bg-glass)" }}>
+              {assistantPhoto ? <img src={assistantPhoto.startsWith("data:") || assistantPhoto.startsWith("http") ? assistantPhoto : mediaUrl(assistantPhoto)} alt="" className="w-full h-full object-cover" /> : <span className="text-xl">🧞</span>}
+              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full" style={{ background: "#3ecf6a", border: "2px solid var(--panel-bg, #101018)" }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>Чат с {assistantName}</div>
+              <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>● на связи · спроси о чём угодно</div>
+            </div>
+            <span className="text-[11px] shrink-0" style={{ color: "var(--text-muted)" }}>открыть ›</span>
+          </button>
+        );
+      case "lists":
+        return lists.filter((l) => l.members.length > 0).length === 0 ? null : (<>
+          {lists.filter((l) => l.members.length > 0).map((l) => (
+            <div key={l.id}>
+              <div className="text-[13px] font-bold px-1 pt-1" style={{ color: "var(--text-primary)" }}>📁 {l.name}</div>
+              <Strip title="">
+                {l.members.map((m) => {
+                  if (m.kind === "agent") { const a = favs.find((x) => x.id === m.id); return a ? agentCircle(a, true) : null; }
+                  const c = contacts.find((x) => x.id === m.id); return c ? contactCircle(c) : null;
+                })}
+              </Strip>
+            </div>
+          ))}
+        </>);
+      case "contacts":
+        return (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            {bigHead("Контакты", "sob")}
+            <div className="text-[13px] font-bold px-1 pt-0.5 flex items-baseline gap-1.5" style={{ color: "var(--text-primary)" }}>Важные<span className="text-[10px] font-normal" style={{ color: "var(--text-muted)" }}>· удержи кружок → сюда</span></div>
+            <Strip title="" empty={(important.length + favContacts.length) === 0 ? "перетащи важного джинна или человека сюда (удержи кружок → «в важные»)" : undefined}>
+              {[...important.map((a) => agentCircle(a, true)), ...favContacts.map((c) => contactCircle(c))]}
             </Strip>
+            {!collapsed.has("sob") && (<>
+              {subHead("Мои персонажи", "asst", "твои представители")}
+              {!collapsed.has("asst") && (
+                <Strip title="" empty={personal.length === 0 ? "создай персонажа в настройках" : undefined}>
+                  {personal.map((a) => agentCircle(a))}
+                  {onOpenSettings && <Circle label="Создать" emoji="➕" onClick={() => onOpenSettings("Настройки персонажа")} />}
+                </Strip>
+              )}
+              {subHead("Джинны", "jinns", "удержи кружок → ⭐")}
+              {!collapsed.has("jinns") && (<>
+                <Strip title="" empty={(important.length + corporate.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
+                  {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
+                </Strip>
+                {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
+                {corporate.length > 0 && <Strip title="🏢 Корпоративные">{corporate.map((a) => agentCircle(a, true))}</Strip>}
+                {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
+                {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
+                {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
+              </>)}
+              {subHead("Люди", "ppl", "удержи → в избранные")}
+              {!collapsed.has("ppl") && (<>
+                <Strip title="" empty={contacts.length === 0 ? "нет контактов — найди человека ниже" : undefined}>
+                  {contacts.map((c) => contactCircle(c))}
+                </Strip>
+                <div className="flex gap-2 px-1">
+                  <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Найти человека (имя, @username, телефон)…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                  <button onClick={() => doAddContact(peopleSearch)} disabled={addBusy || peopleSearch.trim().length < 2} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (addBusy || peopleSearch.trim().length < 2) ? 0.5 : 1 }}>Добавить</button>
+                </div>
+                {userResults.filter((u) => !contactIds.has(u.id)).length > 0 && (
+                  <div className="flex flex-col gap-1 px-1">
+                    {userResults.filter((u) => !contactIds.has(u.id)).slice(0, 8).map((u) => (
+                      <div key={u.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                        <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] overflow-hidden" style={{ background: `${u.avatar_color || "var(--accent)"}22`, border: `1.5px solid ${u.avatar_color || "var(--accent)"}` }}>{u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" /> : "👤"}</span>
+                        <span className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}{u.jinntell_link ? ` · @${u.jinntell_link}` : ""}</span>
+                        <button onClick={() => doAddContact(u.jinntell_link || u.phone)} disabled={addBusy} className="text-[12px] font-semibold shrink-0" style={{ color: "var(--accent)" }}>+ добавить</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>)}
+            </>)}
           </div>
-        ))}
-
-        {/* ═══════════ КОНТАКТЫ (помощники · джинны · люди) — в карточке ═══════════ */}
-        <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-        {/* ═══════════ СОБЫТИЯ (v3.3): непрочитанное — Сообщения / Ленты / Задачи ═══════════ */}
-        {(newMsgs.length + newEvents + newOffers + newInvites + newDocs.length) > 0 && (
+        );
+      case "events":
+        return (newMsgs.length + newEvents + newOffers + newInvites + newDocs.length) === 0 ? null : (
           <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
             <div className="text-[13px] font-extrabold px-1 pb-0.5 flex items-center gap-1.5" style={{ color: "var(--accent)" }}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--accent)" }} />События
@@ -283,132 +378,159 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
               </Strip>
             </div>)}
             {newDocs.length > 0 && (<div className="mt-1.5">
-              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Задачи и поручения</div>
-              <Strip title="">{newDocs.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" badge={1} onClick={() => openDoc(d.id)} />)}</Strip>
+              <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Портфель</div>
+              <Strip title="">{newDocs.map((d) => <Circle key={d.id} label={d.query} sub={d.source_agent_name || undefined} emoji={docEmoji(d.kind)} color="#8a6fd0" badge={1} onClick={() => openPortfolioItem(d)} />)}</Strip>
             </div>)}
           </div>
-        )}
-        {bigHead("Контакты", "sob")}
-        {/* Важные — ВСЕГДА на виду (даже при свёрнутых Контактах), как в макете */}
-        <div className="text-[13px] font-bold px-1 pt-0.5 flex items-baseline gap-1.5" style={{ color: "var(--text-primary)" }}>Важные<span className="text-[10px] font-normal" style={{ color: "var(--text-muted)" }}>· удержи кружок → сюда</span></div>
-        <Strip title="" empty={(important.length + favContacts.length) === 0 ? "перетащи важного джинна или человека сюда (удержи кружок → «в важные»)" : undefined}>
-          {[...important.map((a) => agentCircle(a, true)), ...favContacts.map((c) => contactCircle(c))]}
-        </Strip>
-        {!collapsed.has("sob") && (<>
-
-        {subHead("Мои персонажи", "asst", "твои представители")}
-        {!collapsed.has("asst") && (
-          <Strip title="" empty={personal.length === 0 ? "создай персонажа в настройках" : undefined}>
-            {personal.map((a) => agentCircle(a))}
-            {onOpenSettings && <Circle label="Создать" emoji="➕" onClick={() => onOpenSettings("Настройки персонажа")} />}
-          </Strip>
-        )}
-
-        {subHead("Джинны", "jinns", "удержи кружок → ⭐")}
-        {!collapsed.has("jinns") && (<>
-          <Strip title="" empty={(important.length + corporate.length + consultants.length + specialists.length + others.length + recs.length) === 0 ? "добавь джиннов из Города ниже" : undefined}>
-            {onCreateJinn && <Circle label="Создать" emoji="➕" onClick={onCreateJinn} />}
-          </Strip>
-          {important.length > 0 && <Strip title="⭐ Важные">{important.map((a) => agentCircle(a, true))}</Strip>}
-          {corporate.length > 0 && <Strip title="🏢 Корпоративные">{corporate.map((a) => agentCircle(a, true))}</Strip>}
-          {consultants.length > 0 && <Strip title="Консультанты">{consultants.map((a) => agentCircle(a, true))}</Strip>}
-          {specialists.length > 0 && <Strip title="Специалисты">{specialists.map((a) => agentCircle(a, true))}</Strip>}
-          {others.length > 0 && <Strip title="Другие">{others.map((a) => agentCircle(a, true))}</Strip>}
-        </>)}
-
-        {subHead("Люди", "ppl", "удержи → в избранные")}
-        {!collapsed.has("ppl") && (<>
-          <Strip title="" empty={contacts.length === 0 ? "нет контактов — найди человека ниже" : undefined}>
-            {contacts.map((c) => contactCircle(c))}
-          </Strip>
-          <div className="flex gap-2 px-1">
-            <input value={peopleSearch} onChange={(e) => setPeopleSearch(e.target.value)} placeholder="Найти человека (имя, @username, телефон)…" className="flex-1 rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
-            <button onClick={() => doAddContact(peopleSearch)} disabled={addBusy || peopleSearch.trim().length < 2} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)", opacity: (addBusy || peopleSearch.trim().length < 2) ? 0.5 : 1 }}>Добавить</button>
+        );
+      case "tools":
+        return (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            {bigHead("Инструменты", "tools")}
+            {!collapsed.has("tools") && (
+              <Strip title="">
+                <Circle label="Мой день" emoji="🗓" color="#5B4BF0" onClick={() => setDayOpen(true)} />
+              </Strip>
+            )}
           </div>
-          {userResults.filter((u) => !contactIds.has(u.id)).length > 0 && (
-            <div className="flex flex-col gap-1 px-1">
-              {userResults.filter((u) => !contactIds.has(u.id)).slice(0, 8).map((u) => (
-                <div key={u.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] overflow-hidden" style={{ background: `${u.avatar_color || "var(--accent)"}22`, border: `1.5px solid ${u.avatar_color || "var(--accent)"}` }}>{u.avatar_url ? <img src={u.avatar_url.startsWith("data:") ? u.avatar_url : mediaUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" /> : "👤"}</span>
-                  <span className="flex-1 min-w-0 text-sm truncate" style={{ color: "var(--text-primary)" }}>{u.display_name}{u.jinntell_link ? ` · @${u.jinntell_link}` : ""}</span>
-                  <button onClick={() => doAddContact(u.jinntell_link || u.phone)} disabled={addBusy} className="text-[12px] font-semibold shrink-0" style={{ color: "var(--accent)" }}>+ добавить</button>
+        );
+      case "feeds":
+        return (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            {bigHead("Ленты", "info")}
+            {!collapsed.has("info") && (
+              <Strip title="">
+                <Circle label="Новости" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
+                <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
+                <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={openInvitesW} />
+                <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
+              </Strip>
+            )}
+          </div>
+        );
+      case "portfolio":
+        return (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            {bigHead("Портфель", "docs")}
+            {!collapsed.has("docs") && (
+              <Strip title="" empty={digests.length === 0 ? "скажи помощнику «составь подборку …»" : undefined}>
+                {digests.map((d) => <Circle key={d.id} label={d.query} sub={d.source_agent_name || undefined} emoji={docEmoji(d.kind)} color="#8a6fd0" small onClick={() => openPortfolioItem(d)} />)}
+              </Strip>
+            )}
+          </div>
+        );
+      case "channels":
+        return allChannels.length === 0 ? null : (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            {bigHead("Каналы", "chan")}
+            {!collapsed.has("chan") && (
+              <Strip title="">
+                {allChannels.map((ch) => <Circle key={ch.agent_id} label={ch.name} sub="канал" color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />)}
+              </Strip>
+            )}
+          </div>
+        );
+      case "guests":
+        return (
+          <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+            {bigHead("Гостиная", "gost", "удержи → в «Джинны»")}
+            {!collapsed.has("gost") && (() => {
+              const agentTabs: { k: "rec" | "pop"; label: string; items: AgentOut[] }[] = [
+                { k: "rec" as const, label: "Рекомендованные", items: recs },
+                { k: "pop" as const, label: "Популярные", items: pops },
+              ].filter((t) => t.items.length > 0);
+              const hasRecent = guests.length > 0;
+              const keys: ("rec" | "pop" | "recent")[] = [...agentTabs.map((t) => t.k), ...(hasRecent ? ["recent" as const] : [])];
+              if (keys.length === 0) return <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>;
+              const active = keys.includes(gostTab) ? gostTab : keys[0];
+              const tabBtn = (k: "rec" | "pop" | "recent", label: string) => (
+                <button key={k} onClick={() => setGostTab(k)} className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap" style={{ background: active === k ? "var(--accent)" : "var(--bg-glass)", color: active === k ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${active === k ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{label}</button>
+              );
+              return (<>
+                <div className="flex gap-1.5 mt-1.5 mb-0.5 flex-wrap">
+                  {agentTabs.map((t) => tabBtn(t.k, t.label))}
+                  {hasRecent && tabBtn("recent", "Недавние")}
                 </div>
+                {active === "recent"
+                  ? <Strip title="">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
+                  : <Strip title="">{(active === "rec" ? recs : pops).map((a) => guestAgentCircle(a))}</Strip>}
+              </>);
+            })()}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderColumn = (colKey: keyof HomeLayout) => (
+    <div
+      className={`flex flex-col gap-3.5 min-w-0${colKey === "c" ? " sm:col-span-2 md:col-span-1" : ""}`}
+      onDragOver={editLayout ? (e) => e.preventDefault() : undefined}
+      onDrop={editLayout ? (e) => { e.preventDefault(); if (dragId) moveBlock(dragId, colKey, null); setDragId(null); } : undefined}
+    >
+      {layout[colKey].map((id) => {
+        const content = renderBlock(id);
+        if (!content && !editLayout) return null;
+        if (!editLayout) return <div key={id}>{content}</div>;
+        return (
+          <div
+            key={id}
+            draggable
+            onDragStart={() => setDragId(id)}
+            onDragEnd={() => setDragId(null)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (dragId) moveBlock(dragId, colKey, id); setDragId(null); }}
+            className="rounded-2xl border border-dashed"
+            style={{ borderColor: dragId === id ? "var(--accent)" : "var(--bg-glass-border)", cursor: "grab", opacity: dragId === id ? 0.5 : 1 }}
+          >
+            <div className="text-[10px] px-2 py-1 flex items-center gap-1" style={{ color: "var(--text-muted)" }}>⠿ {HOME_BLOCK_LABEL[id] || id}</div>
+            <div style={{ pointerEvents: "none" }}>{content || <div className="text-[11px] p-3" style={{ color: "var(--text-muted)", opacity: 0.6 }}>пусто</div>}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="absolute inset-0 overflow-y-auto overflow-x-hidden flex justify-center" style={{ paddingTop: topPad + 12, paddingBottom: `calc(${bottomPad + 12}px + env(safe-area-inset-bottom, 0px) + 16px)`, paddingLeft: "clamp(16px, 3.5vw, 56px)", paddingRight: "clamp(16px, 3.5vw, 56px)" }}>
+      <div className="w-full max-w-[460px] sm:max-w-[1400px] flex flex-col gap-3.5 sm:grid sm:grid-cols-2 sm:gap-4 sm:items-start md:grid-cols-3">
+
+        {!obHide && (
+          <div className="sm:col-span-2 md:col-span-3 rounded-2xl p-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)" }}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>✨ С чего начать</div>
+              <button onClick={obDismiss} className="text-[11px]" style={{ color: "var(--text-muted)" }}>скрыть</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { k: "topup", label: "💳 Пополнить баланс", act: () => { obMark("topup"); try { window.location.href = "/wallet"; } catch { /* noop */ } } },
+                { k: "promos", label: "🎁 Найти токены", act: () => { obMark("promos"); onOpenCity?.(); } },
+                { k: "ask", label: "💬 Спросить помощника", act: () => { obMark("ask"); onOpenAssistant(); } },
+                { k: "day", label: "🗓 Открыть «Мой день»", act: () => { obMark("day"); setDayOpen(true); } },
+                { k: "feed", label: "📰 Посмотреть ленту", act: () => { obMark("feed"); openFeed(); } },
+                { k: "city", label: "🌆 Позвать джина из Города", act: () => { obMark("city"); onOpenCity?.(); } },
+              ] as { k: string; label: string; act: () => void }[]).map((s) => (
+                <button key={s.k} onClick={s.act} className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-medium transition-transform hover:scale-[1.02]" style={{ background: obSteps[s.k] ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--bg-deep)", border: `1px solid ${obSteps[s.k] ? "var(--accent)" : "var(--bg-glass-border)"}`, color: "var(--text-primary)" }}>
+                  <span>{obSteps[s.k] ? "✓" : "○"}</span>{s.label}
+                </button>
               ))}
             </div>
-          )}
-        </>)}
-
-        </>)}
-        </div>
-
-        </div>
-        {/* ─── КОЛОНКА 2 (веб): лента дома — События · Ленты · Задания ─── */}
-        <div className="flex flex-col gap-3.5 min-w-0">
-        {/* ═══════════ ЛЕНТЫ (архив) — в карточке ═══════════ */}
-        <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-        {bigHead("Ленты", "info")}
-        {!collapsed.has("info") && (
-          <Strip title="">
-            <Circle label="Новости" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
-            <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
-            <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={openInvitesW} />
-            <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
-          </Strip>
-        )}
-        </div>
-
-        {/* ═══════════ ЗАДАНИЯ (архив) — в карточке ═══════════ */}
-        <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-        {bigHead("Задания и поручения", "docs")}
-        {!collapsed.has("docs") && (
-          <Strip title="" empty={digests.length === 0 ? "скажи помощнику «составь подборку …»" : undefined}>
-            {digests.map((d) => <Circle key={d.id} label={d.query} emoji="📑" color="#8a6fd0" small onClick={() => openDoc(d.id)} />)}
-          </Strip>
+            <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>Попробуй 5 вещей — и ты освоился. Помощник рядом на каждом шаге.</p>
+          </div>
         )}
 
+        {/* Кнопка «Настроить дом» — включает перетаскивание блоков */}
+        <div className="sm:col-span-2 md:col-span-3 flex items-center justify-end gap-2">
+          {editLayout && <button onClick={resetLayout} className="text-[11px] px-2.5 py-1 rounded-lg" style={{ background: "var(--bg-glass)", color: "var(--text-muted)", border: "1px solid var(--bg-glass-border)" }}>Сбросить</button>}
+          <button onClick={() => setEditLayout((v) => !v)} className="text-[11px] px-2.5 py-1 rounded-lg" style={{ background: editLayout ? "var(--accent)" : "var(--bg-glass)", color: editLayout ? "var(--bg-deep)" : "var(--text-muted)", border: `1px solid ${editLayout ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{editLayout ? "✓ Готово" : "⇅ Настроить дом"}</button>
         </div>
 
-        </div>
-        {/* ─── КОЛОНКА 3 (веб): Каналы · Гостиная ─── */}
-        <div className="flex flex-col gap-3.5 min-w-0 sm:col-span-2 md:col-span-1">
-        {/* ═══════════ КАНАЛЫ — в карточке ═══════════ */}
-        {allChannels.length > 0 && (<div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-          {bigHead("Каналы", "chan")}
-          {!collapsed.has("chan") && (
-            <Strip title="">
-              {allChannels.map((ch) => <Circle key={ch.agent_id} label={ch.name} sub="канал" color={ch.color} emoji="📰" badge={ch.unread} onClick={() => onOpenChat?.(ch.link_room)} />)}
-            </Strip>
-          )}
-        </div>)}
+        {renderColumn("a")}
+        {renderColumn("b")}
+        {renderColumn("c")}
+        {dayOpen && <MyDayModal onClose={() => setDayOpen(false)} />}
 
-        {/* ═══════════ ГОСТИНАЯ — в карточке ═══════════ */}
-        <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-        {bigHead("Гостиная", "gost", "удержи → в «Джинны»")}
-        {!collapsed.has("gost") && (() => {
-          const agentTabs: { k: "rec" | "pop"; label: string; items: AgentOut[] }[] = [
-            { k: "rec" as const, label: "Рекомендованные", items: recs },
-            { k: "pop" as const, label: "Популярные", items: pops },
-          ].filter((t) => t.items.length > 0);
-          const hasRecent = guests.length > 0;
-          const keys: ("rec" | "pop" | "recent")[] = [...agentTabs.map((t) => t.k), ...(hasRecent ? ["recent" as const] : [])];
-          if (keys.length === 0) return <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>;
-          const active = keys.includes(gostTab) ? gostTab : keys[0];
-          const tabBtn = (k: "rec" | "pop" | "recent", label: string) => (
-            <button key={k} onClick={() => setGostTab(k)} className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap" style={{ background: active === k ? "var(--accent)" : "var(--bg-glass)", color: active === k ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${active === k ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{label}</button>
-          );
-          return (<>
-            <div className="flex gap-1.5 mt-1.5 mb-0.5 flex-wrap">
-              {agentTabs.map((t) => tabBtn(t.k, t.label))}
-              {hasRecent && tabBtn("recent", "Недавние")}
-            </div>
-            {active === "recent"
-              ? <Strip title="">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
-              : <Strip title="">{(active === "rec" ? recs : pops).map((a) => guestAgentCircle(a))}</Strip>}
-          </>);
-        })()}
-        </div>
-
-        </div>
         {/* Переход в Город — на всю ширину под колонками */}
         <button onClick={onOpenCity} className="w-full mt-3 sm:mt-1 sm:col-span-2 md:col-span-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition-all hover:scale-[1.01]" style={{ background: "var(--accent)", color: "var(--bg-deep)", padding: "16px", minHeight: 52, marginTop: 14, boxShadow: "0 6px 24px -6px color-mix(in srgb, var(--accent) 60%, transparent)" }}>
           🏙 Перейти в Город джиннов
@@ -424,6 +546,18 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
               <h3 className="text-base font-bold truncate" style={{ color: "var(--text-primary)" }}>{menuFor.name}</h3>
               <button onClick={() => setMenuFor(null)} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>✕</button>
             </div>
+            {menuFor.kind === "contact" && menuFor.contact && (
+              <div className="mb-3 flex items-center gap-3 p-2.5 rounded-xl" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-lg shrink-0 overflow-hidden" style={{ background: menuFor.contact.avatar_color || "var(--accent)", color: "#fff" }}>
+                  {menuFor.contact.avatar_url ? <img src={mediaUrl(menuFor.contact.avatar_url)} alt="" className="w-full h-full object-cover" /> : "👤"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{menuFor.contact.display_name}</div>
+                  <div className="text-[11px]" style={{ color: menuFor.contact.is_online ? "#42C593" : "var(--text-muted)" }}>{menuFor.contact.is_online ? "● в сети" : "не в сети"}</div>
+                </div>
+                <button onClick={() => { const c = menuFor.contact; setMenuFor(null); if (c) onOpenContact?.(c); }} className="px-3 py-2 rounded-xl text-sm font-semibold shrink-0" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>💬 Открыть</button>
+              </div>
+            )}
             <button onClick={() => { if (menuFor.kind === "agent") togglePin(menuFor.id); else togglePinContact(menuFor.id); }} className="w-full text-left px-3 py-2.5 rounded-xl mb-2 flex items-center gap-2" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>
               <span>⭐</span><span>{(menuFor.kind === "agent" ? pinned.has(menuFor.id) : pinnedContacts.has(menuFor.id)) ? "Убрать из важных" : "В важные"}</span>
             </button>

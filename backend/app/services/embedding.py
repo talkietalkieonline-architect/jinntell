@@ -87,6 +87,11 @@ async def _embed_yandex(texts: List[str]) -> List[List[float]]:
             data = r.json()
             out.append([float(x) for x in data["embedding"]])
     print(f"[embedding] Yandex OK: {len(texts)} texts, {len(out[0]) if out else 0}d")
+    try:
+        from app.services import yandex_meter
+        await yandex_meter.add("emb_units", len(texts))
+    except Exception:
+        pass
     return out
 
 

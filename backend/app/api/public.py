@@ -23,4 +23,11 @@ async def public_config():
             shader = bool(ss.get("shader_bg_enabled", True))
     except Exception:
         pass
-    return {"shader_bg_enabled": shader}
+    wl = False
+    try:
+        from app.services.settings_store import get_setting
+        v = (await get_setting("WAITLIST_MODE")) or ""
+        wl = v.strip().lower() in ("1", "on", "true", "yes")
+    except Exception:
+        pass
+    return {"shader_bg_enabled": shader, "waitlist_mode": wl}

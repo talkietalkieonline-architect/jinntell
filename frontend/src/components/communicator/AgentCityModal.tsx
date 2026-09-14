@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
 import { useAgents } from "@/hooks/useAgents";
-import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, discoverAgents, getCities, nearestCity, updateMe, type AgentOut, type CityOut } from "@/services/api";
+import { getFavoriteAgents, getRecommendedAgents, addFavoriteAgent, removeFavoriteAgent, discoverAgents, getCities, nearestCity, updateMe, getPromos, type AgentOut, type CityOut, type CityPromo } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 
 /* ══════════════════════════════════════════════════════════════
@@ -73,8 +73,11 @@ export default function AgentCityModal({
     getFavoriteAgents().then((f) => { if (alive) setFavorites(new Set(f.map((a) => a.id))); }).catch(() => {});
     getRecommendedAgents().then((r) => { if (alive) setRecommended(r); }).catch(() => {});
     getCities().then((c) => { if (alive) setCities(c); }).catch(() => {});
+    getPromos().then((r) => { if (alive) setPromos(new Map(r.promos.map((p) => [p.agent_id, p]))); }).catch(() => {});
     return () => { alive = false; };
   }, [isOpen]);
+  const [promos, setPromos] = useState<Map<number, CityPromo>>(new Map());
+  const [onlyPromo, setOnlyPromo] = useState(false);
 
   // Локальная фильтрация (поиск + профессия + тип)
   const filtered = useMemo(() => {
@@ -91,9 +94,10 @@ export default function AgentCityModal({
       const matchScope = cityTab === "federal"
         ? a.scope === "federal"
         : a.scope === "city" && (!userCity || a.city === userCity);
-      return matchSearch && matchProfession && matchType && matchScope;
+      const matchPromo = !onlyPromo || promos.has(a.id);
+      return matchSearch && matchProfession && matchType && matchScope && matchPromo;
     });
-  }, [agents, searchQuery, selectedProfession, selectedType, cityTab, userCity]);
+  }, [agents, searchQuery, selectedProfession, selectedType, cityTab, userCity, onlyPromo, promos]);
 
   const displayed = semantic !== null ? semantic : filtered;
 
@@ -291,6 +295,20 @@ export default function AgentCityModal({
                 {t.label}
               </button>
             ))}
+            {promos.size > 0 && (
+              <button
+                onClick={() => setOnlyPromo((v) => !v)}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all"
+                style={{
+                  background: onlyPromo ? "#e0a13a" : "var(--bg-glass)",
+                  color: onlyPromo ? "#1a1400" : "#e0a13a",
+                  border: `1px solid ${onlyPromo ? "#e0a13a" : "var(--bg-glass-border)"}`,
+                }}
+                title="Джинны с бонусными токенами от спонсоров"
+              >
+                🎁 С бонусом
+              </button>
+            )}
           </div>
 
           {/* Фильтры по профессии — горизонтальный скролл */}
@@ -376,6 +394,18 @@ export default function AgentCityModal({
               >
                 {agentDetails.description}
               </p>
+
+              {/* Интро-ролик (мини-презентация) */}
+              {agentDetails.intro_video_url && (
+                <video
+                  src={agentDetails.intro_video_url}
+                  controls
+                  playsInline
+                  loop
+                  className="w-full rounded-xl mb-4"
+                  style={{ maxHeight: 260, background: "#000", objectFit: "cover" }}
+                />
+              )}
 
               {/* Действия */}
               <div className="flex flex-col gap-1">
@@ -525,12 +555,23 @@ export default function AgentCityModal({
                               у тебя
                             </span>
                           )}
+                          {promos.has(agent.id) && (
+                            <span
+                              className="text-[8px] px-1.5 py-0.5 rounded-full shrink-0 font-bold"
+                              style={{ background: "#e0a13a", color: "#1a1400" }}
+                              title={promos.get(agent.id)?.message || ""}
+                            >
+                              🎁 {promos.get(agent.id)?.bonus_tokens} токенов
+                            </span>
+                          )}
                         </div>
                         <p
                           className="text-[11px] truncate"
                           style={{ color: "var(--text-muted)" }}
                         >
-                          {agent.profession} &bull; {agent.brand}
+                          {promos.has(agent.id)
+                            ? `🎁 бонус от ${promos.get(agent.id)?.sponsor_name}`
+                            : `${agent.profession} • ${agent.brand}`}
                         </p>
                       </div>
 

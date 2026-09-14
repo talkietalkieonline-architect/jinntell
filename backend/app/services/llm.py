@@ -212,6 +212,85 @@ async def deepseek_tools(messages: list, tools: list, model: str = None, max_tok
         return {"content": msg.get("content") or "", "tool_calls": msg.get("tool_calls") or []}
 
 
+async def _call_anthropic(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
+    """Claude (Anthropic Messages API) — «мозг Архитектора». system отдельным полем, messages user/assistant.
+    ⚠️ Anthropic может требовать не-РФ IP; ключ владельца в app_settings ANTHROPIC_API_KEY."""
+    if not api_key:
+        print("[llm] Anthropic: нет ключа")
+        return ""
+    system_txt = ""
+    conv = []
+    for m in messages:
+        role = m.get("role")
+        content = str(m.get("content", "") or "")
+        if role == "system":
+            system_txt += (("\n\n" if system_txt else "") + content)
+        else:
+            conv.append({"role": ("assistant" if role == "assistant" else "user"), "content": content})
+    if not conv:
+        conv = [{"role": "user", "content": ""}]
+    body = {"model": model, "max_tokens": max(max_tokens, 4096), "messages": conv}
+    if system_txt:
+        body["system"] = system_txt
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        r = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            json=body,
+        )
+        if r.status_code != 200:
+            print(f"[llm] Anthropic error: {r.status_code} {r.text[:300]}")
+            return ""
+        data = r.json()
+        parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
+        text = "".join(parts).strip()
+        print(f"[llm] Anthropic OK: {model}")
+        return _clean_reasoning(text)
+
+
+async def _call_moonshot(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
+    """Kimi / Moonshot AI (OpenAI-совместимый). Китайский провайдер, из РФ обычно доступен."""
+    if not api_key:
+        return ""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            "https://api.moonshot.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
+        )
+        if r.status_code != 200:
+            print(f"[llm] Moonshot error: {r.status_code} {r.text[:300]}")
+            return ""
+        data = r.json()
+        text = (data["choices"][0].get("message", {}).get("content") or "").strip()
+        print(f"[llm] Moonshot OK: {model}")
+        return _clean_reasoning(text)
+
+
+async def _call_openai_compat(messages: list, model: str, api_key: str, base_url: str,
+                              max_tokens: int = 1000, label: str = "OpenAI-compat") -> str:
+    """Универсальный вызов OpenAI-совместимого эндпоинта.
+    Используется для MiniMax (прямой) и хабов OrcaRouter/OmniRoute (второстепенные — тест/фри)."""
+    if not base_url:
+        return ""
+    url = base_url.rstrip("/") + "/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            url, headers=headers,
+            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
+        )
+        if r.status_code != 200:
+            print(f"[llm] {label} error: {r.status_code} {r.text[:300]}")
+            return ""
+        data = r.json()
+        text = (data["choices"][0].get("message", {}).get("content") or "").strip()
+        print(f"[llm] {label} OK: {model}")
+        return _clean_reasoning(text)
+
+
 async def _call_openai(messages: list, model: str, api_key: str, max_tokens: int = 1000) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
@@ -221,6 +300,48 @@ async def _call_openai(messages: list, model: str, api_key: str, max_tokens: int
         )
         if r.status_code != 200:
             print(f"[llm] OpenAI error: {r.status_code} {r.text[:200]}")
+            return ""
+        return r.json()["choices"][0]["message"]["content"].strip()
+
+
+async def _call_qwen(messages: list, model: str, max_tokens: int = 1000) -> str:
+    """Qwen (Alibaba DashScope, OpenAI-совместимый). Ключ+base из app_settings."""
+    from app.services.settings_store import get_setting
+    key = await get_setting("DASHSCOPE_API_KEY")
+    base = (await get_setting("DASHSCOPE_BASE_URL")) or "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    if not key:
+        return ""
+    async with httpx.AsyncClient(timeout=40.0) as client:
+        r = await client.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7},
+        )
+        if r.status_code != 200:
+            print(f"[llm] Qwen error: {r.status_code} {r.text[:200]}")
+            return ""
+        return r.json()["choices"][0]["message"]["content"].strip()
+
+
+async def qwen_vision(prompt: str, image_url: str, model: str = "qwen-vl-max", max_tokens: int = 800) -> str:
+    """ЗРЕНИЕ через Qwen-VL. image_url — прямая ссылка или data:...;base64,... . Ключ из app_settings."""
+    from app.services.settings_store import get_setting
+    key = await get_setting("DASHSCOPE_API_KEY")
+    base = (await get_setting("DASHSCOPE_BASE_URL")) or "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    if not key or not image_url:
+        return ""
+    content = [
+        {"type": "text", "text": prompt or "Опиши по-русски, что на изображении."},
+        {"type": "image_url", "image_url": {"url": image_url}},
+    ]
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        r = await client.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": [{"role": "user", "content": content}], "max_tokens": max_tokens},
+        )
+        if r.status_code != 200:
+            print(f"[llm] Qwen-VL error: {r.status_code} {r.text[:200]}")
             return ""
         return r.json()["choices"][0]["message"]["content"].strip()
 
@@ -350,19 +471,39 @@ async def _record_usage(user_id, agent_id, provider, model, prompt_tokens, compl
                     from app.services.settings_store import get_setting
                     rates = _j.loads(await get_setting("MODEL_RATES") or "{}")
                     rr = rates.get(model) or rates.get("default") or {}
-                    sell = float(rr.get("sell", 0) or 0)  # за 1 млн, в валюте
-                    kop = round((prompt_tokens + completion_tokens) / 1_000_000.0 * sell * 100)
+                    _dflt = rates.get("default") or {}
+                    _legacy = rr.get("sell")
+                    if _legacy in (None, ""):
+                        _legacy = _dflt.get("sell") or 0
+                    _legacy = float(_legacy or 0)
+
+                    def _pick(f):
+                        v = rr.get(f)
+                        if v in (None, ""):
+                            v = _dflt.get(f)
+                        return float(v) if v not in (None, "") else _legacy
+                    sell_in = _pick("sell_in")
+                    sell_out = _pick("sell_out")
+                    base = (prompt_tokens / 1_000_000.0 * sell_in) + (completion_tokens / 1_000_000.0 * sell_out)
+                    if payer_type == "contractor":
+                        try:
+                            base *= float(await get_setting("BIZ_MARKUP") or 1) or 1
+                        except Exception:
+                            pass
+                    try:
+                        _ov = _j.loads(await get_setting("PRICE_OVERRIDES") or "{}").get(f"{payer_type}:{payer_id}")
+                        if _ov:
+                            if _ov.get("free"):
+                                base = 0.0
+                            elif _ov.get("mult") is not None:
+                                base *= float(_ov.get("mult"))
+                    except Exception:
+                        pass
+                    kop = round(base * 100)
                     if kop > 0:
-                        if payer_type == "contractor":
-                            from app.models.contractor import Contractor
-                            _c = await db.get(Contractor, payer_id)
-                            if _c:
-                                _c.balance_kopecks = (_c.balance_kopecks or 0) - kop
-                        else:
-                            from app.models.user import User as _U
-                            _u = await db.get(_U, payer_id)
-                            if _u:
-                                _u.balance_kopecks = (_u.balance_kopecks or 0) - kop
+                        from app.services import billing as _billing
+                        _desc = f"Джин #{agent_id}" if agent_id else "Генерация"
+                        await _billing.charge_generation(db, payer_type, payer_id, agent_id, kop, _desc)
                 except Exception as _e:
                     print(f"[usage] deduct failed: {_e}")
             await db.commit()
@@ -418,9 +559,17 @@ async def get_llm_reply(
 
     llm_model = model or provider["model"]
     pname = provider["name"]
+    # Хабы моделей (второстепенный маршрут: тест/фри) — по явному префиксу хаба.
+    # Формат id: "<hub>/<vendor>/<model>", напр. "orcarouter/qwen/qwen3.8-max-0902".
+    if llm_model.startswith("orcarouter/"):
+        pname = "orcarouter"; llm_model = llm_model[len("orcarouter/"):]
+    elif llm_model.startswith(("omniroute/", "omnirouter/")):
+        pname = "omniroute"; llm_model = llm_model.split("/", 1)[1]
+    elif llm_model.startswith("minimax"):
+        pname = "minimax"
     # OpenRouter-модели всегда содержат "/" в имени (vendor/model[:free])
     # и должны идти через OpenRouter, а не определяться по префиксу.
-    if "/" in llm_model:
+    elif "/" in llm_model:
         pname = "openrouter"
     elif llm_model.startswith("deepseek"):
         pname = "deepseek"
@@ -430,29 +579,59 @@ async def get_llm_reply(
         pname = "openai"
     elif llm_model.startswith(("llama", "mixtral")):
         pname = "groq"
+    elif llm_model.startswith("qwen"):
+        pname = "qwen"
+    elif llm_model.startswith("claude"):
+        pname = "anthropic"
+    elif llm_model.startswith(("kimi", "moonshot")):
+        pname = "moonshot"
 
+    # Эффективные ключи: админка (app_settings) поверх .env — «поменял в админке = применилось»
+    _dk = (await _get_setting("DEEPSEEK_API_KEY")) or settings.DEEPSEEK_API_KEY
+    _ok = (await _get_setting("OPENROUTER_API_KEY")) or settings.OPENROUTER_API_KEY
+    _gk = (await _get_setting("GEMINI_API_KEY")) or settings.GEMINI_API_KEY
+    _aik = (await _get_setting("OPENAI_API_KEY")) or settings.OPENAI_API_KEY
+    _grk = (await _get_setting("GROQ_API_KEY")) or settings.GROQ_API_KEY
+    _mk = await _get_setting("MOONSHOT_API_KEY")
+    _antk = (await _get_setting("ANTHROPIC_API_KEY")) or getattr(settings, "ANTHROPIC_API_KEY", "") or ""
+    _mmk = await _get_setting("MINIMAX_API_KEY")  # MiniMax (прямой, OpenAI-совместимый)
+    _orcak = await _get_setting("ORCAROUTER_API_KEY")  # хаб OrcaRouter
+    _omnik = await _get_setting("OMNIROUTER_API_KEY")  # хаб OmniRoute (self-host, ключ опционален)
+    _omni_base = (await _get_setting("OMNIROUTER_BASE_URL")) or ""
     try:
-        if pname == "deepseek" and settings.DEEPSEEK_API_KEY:
-            reply = await _call_deepseek(messages, llm_model, settings.DEEPSEEK_API_KEY)
-        elif pname == "openrouter" and settings.OPENROUTER_API_KEY:
-            reply = await _call_openrouter(messages, llm_model, settings.OPENROUTER_API_KEY)
-        elif pname == "gemini" and settings.GEMINI_API_KEY:
-            reply = await _call_gemini(messages, llm_model, settings.GEMINI_API_KEY)
-        elif pname == "groq" and settings.GROQ_API_KEY:
-            reply = await _call_groq(messages, llm_model, settings.GROQ_API_KEY)
-        elif pname == "openai" and settings.OPENAI_API_KEY:
-            reply = await _call_openai(messages, llm_model, settings.OPENAI_API_KEY)
+        if pname == "deepseek" and _dk:
+            reply = await _call_deepseek(messages, llm_model, _dk)
+        elif pname == "openrouter" and _ok:
+            reply = await _call_openrouter(messages, llm_model, _ok)
+        elif pname == "gemini" and _gk:
+            reply = await _call_gemini(messages, llm_model, _gk)
+        elif pname == "groq" and _grk:
+            reply = await _call_groq(messages, llm_model, _grk)
+        elif pname == "openai" and _aik:
+            reply = await _call_openai(messages, llm_model, _aik)
+        elif pname == "qwen":
+            reply = await _call_qwen(messages, llm_model)
+        elif pname == "anthropic":
+            reply = await _call_anthropic(messages, llm_model, _antk)
+        elif pname == "moonshot" and _mk:
+            reply = await _call_moonshot(messages, llm_model, _mk)
+        elif pname == "minimax" and _mmk:
+            reply = await _call_openai_compat(messages, llm_model, _mmk, "https://api.minimax.io/v1", label="MiniMax")
+        elif pname == "orcarouter" and _orcak:
+            reply = await _call_openai_compat(messages, llm_model, _orcak, "https://api.orcarouter.ai/v1", label="OrcaRouter")
+        elif pname == "omniroute" and (_omni_base or _omnik):
+            reply = await _call_openai_compat(messages, llm_model, _omnik, _omni_base or "http://localhost:20128/v1", label="OmniRoute")
         else:
-            if settings.DEEPSEEK_API_KEY:
-                reply = await _call_deepseek(messages, settings.DEEPSEEK_MODEL, settings.DEEPSEEK_API_KEY)
-            elif settings.OPENROUTER_API_KEY:
-                reply = await _call_openrouter(messages, settings.OPENROUTER_MODEL, settings.OPENROUTER_API_KEY)
-            elif settings.GEMINI_API_KEY:
-                reply = await _call_gemini(messages, settings.GEMINI_MODEL, settings.GEMINI_API_KEY)
-            elif settings.OPENAI_API_KEY:
-                reply = await _call_openai(messages, settings.OPENAI_MODEL, settings.OPENAI_API_KEY)
-            elif settings.GROQ_API_KEY:
-                reply = await _call_groq(messages, settings.GROQ_MODEL, settings.GROQ_API_KEY)
+            if _dk:
+                reply = await _call_deepseek(messages, settings.DEEPSEEK_MODEL, _dk)
+            elif _ok:
+                reply = await _call_openrouter(messages, settings.OPENROUTER_MODEL, _ok)
+            elif _gk:
+                reply = await _call_gemini(messages, settings.GEMINI_MODEL, _gk)
+            elif _aik:
+                reply = await _call_openai(messages, settings.OPENAI_MODEL, _aik)
+            elif _grk:
+                reply = await _call_groq(messages, settings.GROQ_MODEL, _grk)
             else:
                 return random.choice(FALLBACK_REPLIES)
         if reply:

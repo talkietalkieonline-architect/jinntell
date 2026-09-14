@@ -543,6 +543,17 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
     _uid = int(_uu.group(1)) if _uu else 0
     from app.services.billing import resolve_payer, payer_balance
     _ptype, _pid = resolve_payer(agent, _uid)
+    # Спонсорский грант: при первом использовании спонсируемого джина юзеру начисляется бонус (до проверки баланса)
+    if _ptype == "user" and _pid and getattr(agent, "is_paid", False):
+        try:
+            from app.core.database import async_session as _asess
+            from app.services import billing as _bl
+            async with _asess() as _gdb:
+                _g = await _bl.maybe_grant_sponsor(_gdb, _pid, agent.id)
+                if _g:
+                    await _gdb.commit()
+        except Exception as _ge:
+            print(f"[ws] sponsor grant err: {_ge}")
     _blocked = bool(_ptype in ("contractor", "user") and _pid and await payer_balance(_ptype, _pid) <= 0)
     _agent_kwargs = dict(
         agent_name=agent.name,
@@ -587,10 +598,53 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
             reply_text = agent.unavailable_message or "Извините, сейчас я не на связи — загляните чуть позже 🙂"
     else:
         reply_text = None
+        # Поисковый джинн (Яндекс): прямой чат = веб-поиск + выжимка его персоной со ссылками
+        if getattr(agent, "id", 0) == 40 or ((getattr(agent, "jinntell_link", "") or "") == "search"):
+            try:
+                from app.services.websearch import search as _wsearch
+                _sr = await _wsearch(user_message, max_results=6)
+                if _sr.get("ok") and _sr.get("results"):
+                    _src = "\n".join(f"- {x.get('title','')} — {x.get('url','')}: {(x.get('snippet','') or '')[:200]}" for x in _sr["results"])
+                    _sq = {**_agent_kwargs,
+                           "user_message": (f"Запрос пользователя: {user_message}\n\nРезультаты веб-поиска:\n{_src}\n\n"
+                                            "Ответь так: СНАЧАЛА 2–3 предложения сути простым разговорным языком "
+                                            "(это зачитается голосом — без ссылок и без URL внутри). "
+                                            "ЗАТЕМ с новой строки «Источники:» и список ссылок. Коротко и по делу."),
+                           "rag_context": _src}
+                    reply_text = await get_agent_reply(**_sq)
+                elif _sr.get("reason") in ("off", "no_key"):
+                    reply_text = "Веб-поиск не подключён — задайте провайдер и ключ в админке."
+                else:
+                    reply_text = "По этому запросу ничего не нашёл в поиске."
+            except Exception as _e:
+                print(f"[search-jinn] {_e}")
+        # Wordstat-джин: прямой чат = спрос по фразе (Яндекс.Вордстат: топ-запросы + ассоциации), его персоной
+        if reply_text is None and ((getattr(agent, "jinntell_link", "") or "") == "wordstat"):
+            try:
+                from app.services import wordstat as _ws
+                _wr = await _ws.top_requests(user_message, num=15)
+                if _wr.get("ok"):
+                    def _wfmt(items):
+                        return "\n".join(f"- {i['phrase']}: {format(i['count'], ',').replace(',', ' ')}" for i in items[:12])
+                    _wtotal = format(_wr["total"], ",").replace(",", " ")
+                    _wdata = (f"Фраза: {_wr['phrase']}\nОбщий спрос (показов/мес): {_wtotal}\n\n"
+                              f"Топ-запросы:\n{_wfmt(_wr['top'])}\n\nАссоциации:\n{_wfmt(_wr['assoc'])}")
+                    _wq = {**_agent_kwargs,
+                           "user_message": (f"Данные Яндекс.Вордстат по запросу «{user_message}»:\n{_wdata}\n\n"
+                                            "Объясни простыми словами: какой спрос на тему, какие запросы популярны и что это значит "
+                                            "для бизнеса/контента. Сначала 2–3 фразы сути (это озвучится), затем цифры списком."),
+                           "rag_context": _wdata}
+                    reply_text = await get_agent_reply(**_wq)
+                elif _wr.get("reason") == "no_key":
+                    reply_text = "Вордстат не подключён — нужен ключ Search API в админке."
+                else:
+                    reply_text = "Не удалось получить данные Вордстата по этому запросу."
+            except Exception as _e:
+                print(f"[wordstat-jinn] {_e}")
         # Q&A-кэш (2-я память): для консультантов (specialist/business) на СВЕЖИЙ вопрос без длинной истории —
         # похожий вопрос уже был → берём готовый ответ, не генерим (экономия). См. [[design_data_and_memory_layers]].
         _qa_ok = (getattr(agent, "agent_type", "") in ("specialist", "business")) and len(history) <= 2
-        if _qa_ok:
+        if reply_text is None and _qa_ok:
             try:
                 from app.services import qa_cache
                 _hit = await qa_cache.lookup(agent.id, user_message)
@@ -598,6 +652,20 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
                     reply_text = _hit["answer"]  # переиспользуем (Guardian уже проверял при сохранении)
             except Exception as e:
                 print(f"[qa_cache] lookup skip: {e}")
+        # Умные джинны: если у джина заданы инструменты (tools_json) — отвечаем через tool-loop (агент сам ищет/считает).
+        # ИЗОЛЯЦИЯ: срабатывает ТОЛЬКО при непустом tools_json; у всех текущих джиннов оно пустое → старый путь без изменений.
+        if reply_text is None:
+            try:
+                _tj = getattr(agent, "tools_json", None)
+                _enabled = json.loads(_tj) if _tj else []
+            except Exception:
+                _enabled = []
+            if _enabled:
+                try:
+                    from app.services import agent_tools
+                    reply_text = await agent_tools.reply_with_tools(None, agent, _agent_kwargs, _enabled)
+                except Exception as _e_at:
+                    print(f"[agent_tools] fail, fallback to plain: {_e_at}")
         if reply_text is None:
             reply_text = await get_agent_reply(**_agent_kwargs)
             # Guardian: анти-галлюцинации для ответов с базой знаний (сверка + строгая перегенерация)

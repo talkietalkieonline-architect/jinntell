@@ -25,6 +25,7 @@ const MyAgentsModal = dynamic(() => import("@/components/communicator/MyAgentsMo
 const AgentCityModal = dynamic(() => import("@/components/communicator/AgentCityModal"));
 const ContactsModal = dynamic(() => import("@/components/communicator/ContactsModal"));
 const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
+const StoreModal = dynamic(() => import("@/components/communicator/StoreModal"));
 const VideoNoteRecorder = dynamic(() => import("@/components/communicator/VideoNoteRecorder"), { ssr: false });
 const VideoCall = dynamic(() => import("@/components/communicator/VideoCall"), { ssr: false });
 
@@ -74,6 +75,7 @@ export default function Home() {
   const [screen, setScreen] = useState<AppScreen>("splash");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<string | null>(null);
+  const [storeOpen, setStoreOpen] = useState(false);
   const [netOnline, setNetOnline] = useState(true);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [digestId, setDigestId] = useState<number | null>(null);
@@ -103,6 +105,7 @@ export default function Home() {
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [forwardMsg, setForwardMsg] = useState<ChatMessage | null>(null);
   const [channelPosts, setChannelPosts] = useState<ChannelPost[]>([]);
+  const [channelLimit, setChannelLimit] = useState(20);
   const [mutedRooms, setMutedRooms] = useState<string[]>([]);
   const [favIds, setFavIds] = useState<Set<number>>(new Set());
   const [call, setCall] = useState<{ status: "calling" | "incoming" | "active"; role: "caller" | "callee"; peerId: number; peerName: string; offer?: string } | null>(null);
@@ -125,27 +128,48 @@ export default function Home() {
   useEffect(() => { viewRef.current = view; }, [view]);
   const openChatsRef = useRef(openChats);
   useEffect(() => { openChatsRef.current = openChats; }, [openChats]);
+  useEffect(() => { setChannelLimit(20); }, [room]);  // новый канал — начинаем с 20
   useEffect(() => {
     const m = room.match(/^agent-(\d+)/);
     if (!m) { setChannelPosts([]); return; }
     const aid = Number(m[1]);
-    getChannelPosts(aid).then((p) => { setChannelPosts(p); if (p.length) markChannelRead(aid).catch(() => {}); }).catch(() => setChannelPosts([]));
-  }, [room]);
+    getChannelPosts(aid, channelLimit).then((p) => { setChannelPosts(p); if (p.length) markChannelRead(aid).catch(() => {}); }).catch(() => setChannelPosts([]));
+  }, [room, channelLimit]);
   const callRef = useRef(call);
   useEffect(() => { callRef.current = call; }, [call]);
   const callStartRef = useRef(0);
   useEffect(() => { setChatSearchOpen(false); }, [room]);
 
-  const assistantName = user?.assistant_name || "Джим";
+  // Имя помощника «липкое»: пока профиль не догрузился (мобильный холодный старт), берём последнее известное из localStorage, а не дефолт «Джим»
+  const assistantName = user?.assistant_name || (typeof window !== "undefined" ? (() => { try { return localStorage.getItem("jinntell_assistant_name") || ""; } catch { return ""; } })() : "") || "Джим";
+  useEffect(() => { if (user?.assistant_name) { try { localStorage.setItem("jinntell_assistant_name", user.assistant_name); } catch { /* noop */ } } }, [user?.assistant_name]);
   const assistantRoom = getJimRoom();
   const onbKey = () => { const uid = getUserId(); return uid ? `jinntell_onboarded_${uid}` : "jinntell_onboarded"; };
-  const [onboarding, setOnboarding] = useState<null | "name">(null);
+  const [onboarding, setOnboarding] = useState<null | "name" | "gender" | "city" | "interests" | "aname" | "atraits">(null);
+  const onboardingRef = useRef(onboarding);
+  useEffect(() => { onboardingRef.current = onboarding; }, [onboarding]);
+  // Авто-микрофон (хендс-фри): каждый bump просит BottomBar начать диктовку после озвучки вопроса
+  const [autoListen, setAutoListen] = useState(0);
+  // Голосовой слой онбординга: озвучиваем вопросы помощника (TTS), после озвучки авто-открываем микрофон; ответ — голосом через диктовку (STT в BottomBar → поле → отправка)
+  const speak = useCallback(async (text: string) => {
+    try {
+      let voice = user?.assistant_voice || "";
+      if (!voice && typeof window !== "undefined") { try { voice = localStorage.getItem("jinntell_assistant_voice") || ""; } catch { /* noop */ } }
+      const u = await ttsBlobUrl(text.replace(/[🪄🌆🙂😄]/gu, "").trim(), voice || "male_low", "good");
+      if (u) {
+        const a = new Audio(u);
+        a.onended = () => { if (onboardingRef.current) setAutoListen((v) => v + 1); };
+        a.play().catch(() => {});
+      }
+    } catch { /* noop */ }
+  }, [user?.assistant_voice]);
+  const askOnb = useCallback((text: string) => { pushAssistant(text); void speak(text); }, [pushAssistant, speak]);
   useEffect(() => {
     if (!user) return;
     try { if (localStorage.getItem(onbKey())) return; } catch { return; }
     if (!user.display_name && !user.first_name) {
       setOnboarding("name");
-      setTimeout(() => pushAssistant(`Привет! Я ваш помощник${assistantName ? ` ${assistantName}` : ""}. Как к вам обращаться?`), 500);
+      setTimeout(() => askOnb(`Привет! Я ваш помощник${assistantName ? ` ${assistantName}` : ""}. Добро пожаловать в JinnTell — город ИИ-джиннов 🪄 Давай знакомиться: как тебя зовут?`), 500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -220,6 +244,8 @@ export default function Home() {
           finishCall();
         } else if (type === "feed_ping") {
           window.dispatchEvent(new Event("jinntell_feed_ping"));
+        } else if (type === "day_ping") {
+          window.dispatchEvent(new Event("jinntell_day_ping"));
         } else if (type === "chat_ping" && data.room) {
           const pinged = data.room;
           if (isMuted(pinged)) return;
@@ -274,6 +300,18 @@ export default function Home() {
     setView("chat");
     setAgentsOpen(false);
     setCityOpen(false);
+  }, [setRoom]);
+
+  /** Обсуждение поста канала: общая (публичная) комната по посту — люди спорят между собой, джин не отвечает */
+  const openDiscussion = useCallback((post: { id: number; title: string }, agentId: number) => {
+    const r = `disc-a${agentId}-p${post.id}`;
+    setOpenChats((prev) =>
+      prev.some((c) => c.room === r)
+        ? prev.map((c) => (c.room === r ? { ...c, ts: Date.now() } : c))
+        : [...prev, { room: r, agentId: 0, name: `💬 ${post.title.slice(0, 40)}`, color: "#5ea0e8", ts: Date.now() }]
+    );
+    setRoom(r);
+    setView("chat");
   }, [setRoom]);
 
   /** Кнопка «позвать джинна»: из 1:1 чата создаём комнату, из комнаты — приглашаем */
@@ -455,14 +493,59 @@ export default function Home() {
   }, [findContact, openDM, summonJinn, sendMessage, pushAssistant, room, assistantRoom]);
 
   const handleSend = useCallback((text: string) => {
-    if (onboarding === "name") {
-      const nm = text.trim().replace(/^(меня зовут|зовут меня|это|я)\s+/i, "").replace(/[.,!?]+$/, "").trim();
-      try { localStorage.setItem(onbKey(), "1"); } catch { /* noop */ }
-      setOnboarding(null);
-      if (!nm || /^(пропустить|позже|потом|не важно|skip)$/i.test(nm)) { pushAssistant("Хорошо! Имя всегда можно задать в настройках. Чем помочь?"); return; }
-      updateMe({ display_name: nm }).catch(() => {});
-      pushAssistant(`Приятно познакомиться, ${nm}! Чем могу помочь?`);
-      return;
+    if (onboarding) {
+      const raw = text.trim();
+      const skip = /^(пропустить|позже|потом|не важно|неважно|skip|—|-)$/i.test(raw);
+      if (onboarding === "name") {
+        const nm = raw.replace(/^(меня зовут|зовут меня|моё имя|мое имя|это|я)\s+/i, "").replace(/[.,!?]+$/, "").trim();
+        if (skip || !nm) { askOnb("Хорошо, имя зададим позже. А как к тебе обращаться — в мужском, женском или нейтральном роде?"); setOnboarding("gender"); return; }
+        updateMe({ display_name: nm, first_name: nm }).catch(() => {});
+        askOnb(`Приятно познакомиться, ${nm}! Фиксирую имя в настройках. Как к тебе обращаться — в мужском, женском или нейтральном роде?`);
+        setOnboarding("gender"); return;
+      }
+      if (onboarding === "gender") {
+        let g = ""; if (/муж/i.test(raw)) g = "male"; else if (/жен/i.test(raw)) g = "female"; else if (/нейтр|любо|всё равно|все равно/i.test(raw)) g = "neutral";
+        if (g) updateMe({ gender: g }).catch(() => {});
+        askOnb("Понял, сохранил. Из какого ты города?");
+        setOnboarding("city"); return;
+      }
+      if (onboarding === "city") {
+        const city = skip ? "" : raw.replace(/^(город|из|я из|живу в|живу)\s+/i, "").replace(/[.,!?]+$/, "").trim();
+        if (city) updateMe({ city }).catch(() => {});
+        askOnb("Отлично, записал город. Теперь — что тебе интересно? Назови пару тем через запятую (или «пропустить») — остальное я замечу сама.");
+        setOnboarding("interests"); return;
+      }
+      if (onboarding === "interests") {
+        if (!skip && raw) {
+          const ints = raw.split(/[,\n;]|\sи\s/i).map((x) => x.trim()).filter((x) => x && x.length < 40).slice(0, 12);
+          if (ints.length) updateMe({ interests: ints.join(",") }).catch(() => {});
+          askOnb(`Записал интересы: ${ints.join(", ") || "—"}. И последнее — про меня 🙂 Как меня называть? (или «пропустить»)`);
+        } else {
+          askOnb("Хорошо, интересы можно добавить позже. И последнее — про меня 🙂 Как меня называть? (или «пропустить»)");
+        }
+        setOnboarding("aname"); return;
+      }
+      if (onboarding === "aname") {
+        if (!skip && raw) {
+          const an = raw.replace(/^(меня зовут|зовут|называй меня|моё имя|мое имя|имя|это|ты)\s+/i, "").replace(/[.,!?]+$/, "").trim();
+          if (an && an.length <= 30) updateMe({ assistant_name: an }).catch(() => {});
+          askOnb(`Отлично, буду ${an || "на связи"}! Сохранил. Какой характер мне придать? Например: с юмором, тёплый, по делу. (или «пропустить»)`);
+        } else {
+          askOnb("Хорошо, имя оставим как есть. Какой характер мне придать? Например: с юмором, тёплый, по делу. (или «пропустить»)");
+        }
+        setOnboarding("atraits"); return;
+      }
+      if (onboarding === "atraits") {
+        try { localStorage.setItem(onbKey(), "1"); } catch { /* noop */ }
+        setOnboarding(null);
+        if (!skip && raw && raw.length <= 200) {
+          updateMe({ assistant_traits: raw }).catch(() => {});
+          askOnb(`Принято: ${raw}. Сохранил в настройках. Готово, рад знакомству! Голос мне можно выбрать в Настройках — там его слышно. Добро пожаловать в JinnTell 🌆`);
+        } else {
+          askOnb("Хорошо, характер и голос всегда можно настроить в Настройках. Добро пожаловать в JinnTell — спрашивай о чём угодно 🌆");
+        }
+        return;
+      }
     }
     const inAssistant = view === "feed" || room === assistantRoom;
     if (inAssistant) {
@@ -485,7 +568,7 @@ export default function Home() {
       return;
     }
     sendMessage(text);
-  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct, onboarding, pushAssistant]);
+  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct, onboarding, pushAssistant, askOnb]);
 
   // Команда помощнику ПРЯМО из чата (короткий тап микрофона): помощник действует в ЭТОЙ комнате (add_to_chat и др.)
   const runAssistantInChat = useCallback((t: string) => {
@@ -784,6 +867,7 @@ export default function Home() {
         onLogout={() => { logout(); setScreen("login"); }}
         onSwitchUser={() => { try { localStorage.removeItem("jinntell_phone"); } catch { /* noop */ } logout(); setScreen("login"); }}
         onOpenSettings={(sec) => { setSettingsSection(sec ?? null); setSettingsOpen(true); }}
+        onOpenStore={() => setStoreOpen(true)}
         onOpenOldFavorites={() => { setAgentsInitialTab("jinns"); setAgentsOpen(true); }}
       />
 
@@ -867,6 +951,12 @@ export default function Home() {
           onCloseSearch={() => setChatSearchOpen(false)}
           onForward={(m) => setForwardMsg(m)}
           channelPosts={channelPosts}
+          channelName={agentInfo?.name}
+          channelDescription={(agentInfo as { description?: string } | null)?.description || undefined}
+          onLoadMorePosts={() => setChannelLimit((l) => l + 20)}
+          hasMorePosts={channelPosts.length >= channelLimit}
+          onAskAgent={agentInfo ? () => openAgentChat(agentInfo.id, { name: agentInfo.name, color: agentInfo.color }) : undefined}
+          onDiscussPost={agentInfo ? (post) => openDiscussion(post, agentInfo.id) : undefined}
           headerSlot={room === assistantRoom ? (
             <ChatJournal openChats={openChats} archivedChats={archivedChats} onSelect={selectChat} onReopen={reopenChat} />
           ) : null}
@@ -884,6 +974,7 @@ export default function Home() {
           onAttachMedia={attachMedia}
           onHeightChange={setBottomBarH}
           onMicStateChange={(active) => setMicActive(active)}
+          autoListenTick={autoListen}
           onRecordNote={(auto?: boolean) => { setRecorderAuto(!!auto); setRecorderOpen(true); }}
           onCall={startCall}
           canCall={room.startsWith("dm-")}
@@ -970,6 +1061,7 @@ export default function Home() {
       {invitesOpen && <InvitesModal onClose={() => setInvitesOpen(false)} onOpenAgent={openAgentChat} />}
       {feedOpen && <FeedModal onClose={() => setFeedOpen(false)} onOpenChat={(r) => { setFeedOpen(false); setRoom(r); setView("chat"); }} />}
 
+      {storeOpen && <StoreModal onClose={() => setStoreOpen(false)} />}
       {settingsOpen && (
       <SettingsModal
         isOpen={settingsOpen}

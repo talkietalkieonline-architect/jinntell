@@ -81,6 +81,17 @@ class Settings(BaseSettings):
 
     SITE_URL: str = "https://jinntell.com"
 
+    # SMTP (восстановление пароля и системные письма)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 465
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+
+    # Yandex Cloud Billing (мониторинг баланса в админке через сервис-аккаунт)
+    YANDEX_SA_KEY_JSON: str = ""
+    YANDEX_BILLING_ACCOUNT_ID: str = ""
+
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
 
     class Config:

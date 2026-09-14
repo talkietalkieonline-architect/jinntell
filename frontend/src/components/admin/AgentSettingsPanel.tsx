@@ -85,6 +85,16 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
   const [cities, setCities] = useState<{ id: number; name: string }[]>([]);
   useEffect(() => { getCities().then((c) => setCities(c)).catch(() => {}); }, []);
 
+  // Персистентность мини-чата: загрузка при смене агента + сохранение при изменениях
+  const chatKey = `jinntell_admin_chat_${agentId}`;
+  useEffect(() => {
+    try { const raw = localStorage.getItem(`jinntell_admin_chat_${agentId}`); setChatMessages(raw ? JSON.parse(raw) : []); }
+    catch { setChatMessages([]); }
+  }, [agentId]);
+  useEffect(() => {
+    try { localStorage.setItem(chatKey, JSON.stringify(chatMessages.slice(-50))); } catch { /* noop */ }
+  }, [chatMessages, chatKey]);
+
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
     const userMsg = chatInput.trim();
@@ -338,6 +348,9 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
                 <span className="w-2 h-2 rounded-full bg-green-500" />
                 <span className="text-sm font-medium">Диалог с {agent.name}</span>
                 <span className="text-xs text-gray-500 ml-auto">Прямое общение с моделью</span>
+                {chatMessages.length > 0 && (
+                  <button onClick={() => { setChatMessages([]); try { localStorage.removeItem(chatKey); } catch { /* noop */ } }} className="text-xs text-gray-500 hover:text-gray-300 ml-2">Очистить</button>
+                )}
               </div>
               <div className="h-64 overflow-y-auto p-4 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch" }}>
                 {chatMessages.length === 0 && (

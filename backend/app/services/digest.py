@@ -90,3 +90,27 @@ async def create_document(user_id: int, title: str, content: str,
         await db.commit()
         await db.refresh(d)
         return {"ok": True, "id": d.id, "query": t, "created_at": d.created_at.isoformat()}
+
+
+async def save_deliverable(user_id: int, title: str, kind: str = "doc",
+                           media_url: str | None = None, text: str = "",
+                           source_agent_id: int | None = None, source_agent_name: str = "") -> dict:
+    """Сохранить в «Портфель» результат работы ЛЮБОГО джина ЛЮБОГО типа:
+    doc (текст) | image | video | file | link. media_url — для не-текстовых."""
+    t = (title or "").strip() or (text or "").strip()[:60] or (kind or "результат")
+    kind = (kind or "doc").strip().lower()
+    if kind not in ("doc", "image", "video", "file", "link"):
+        kind = "doc"
+    if kind != "doc" and not media_url:
+        return {"ok": False, "reason": "no_media"}
+    color = {"doc": "#8a6fd0", "image": "#3aa0e0", "video": "#e0563a", "file": "#4a9e7f", "link": "#e0a13a"}.get(kind, "#8a6fd0")
+    sections = [{"agent_id": source_agent_id, "agent_name": (source_agent_name or "Джинн"),
+                 "color": color, "text": (text or "")}]
+    async with async_session() as db:
+        d = Digest(user_id=user_id, query=t[:500], kind=kind, media_url=media_url,
+                   source_agent_id=source_agent_id, source_agent_name=(source_agent_name or "")[:120],
+                   sections=json.dumps(sections, ensure_ascii=False))
+        db.add(d)
+        await db.commit()
+        await db.refresh(d)
+    return {"ok": True, "id": d.id, "query": t, "kind": kind, "created_at": d.created_at.isoformat()}

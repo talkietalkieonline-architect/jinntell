@@ -50,6 +50,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
   useEffect(() => { try { if (localStorage.getItem("jinntell_intro_hidden") !== "1") setShowIntro(true); } catch { /* noop */ } }, []);
   const persistIntro = () => { if (dontShowIntro) { try { localStorage.setItem("jinntell_intro_hidden", "1"); } catch { /* noop */ } } };
   const goRegister = () => { persistIntro(); setAccountMode("user"); setStep("register"); setError(""); setShowIntro(false); };
+  const [waitlisted, setWaitlisted] = useState(false);  // после регистрации попал в лист ожидания
   const goBusiness = () => { persistIntro(); setAccountMode("business"); setError(""); setShowIntro(false); };
   const closeIntro = () => { persistIntro(); setShowIntro(false); };
   // Попап для бизнеса (появляется при переходе на вкладку «Бизнес»)
@@ -110,14 +111,16 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
     if (!isPhoneComplete || !password) return;
     if (password.length < 6) { setError("Пароль минимум 6 символов"); return; }
     if (password !== confirmPassword) { setError("Пароли не совпадают"); return; }
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setError("Укажите email — он нужен для восстановления пароля"); return; }
     setError(""); setSending(true);
     localStorage.setItem("jinntell_phone", digits);
     try {
       const res = await apiRegister({
         phone: fullPhone,
         password,
-        email: email || undefined,
+        email,
       });
+      if ((res as { waitlisted?: boolean }).waitlisted) { setWaitlisted(true); return; }
       onLogin({ id: res.user_id, phone: fullPhone, display_name: res.display_name, is_admin: res.is_admin } as Partial<UserProfile>);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Ошибка регистрации");
@@ -431,7 +434,7 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             </p>
 
             {PhoneField()}
-            {InputField({ value: email, onChange: setEmail, placeholder: "Email (для восстановления пароля)", type: "email" })}
+            {InputField({ value: email, onChange: setEmail, placeholder: "Email · обязателен (для восстановления пароля)", type: "email" })}
             {PasswordField({ value: password, onChange: setPassword, placeholder: "Придумайте пароль (мин. 6 симв.)" })}
             {PasswordField({ value: confirmPassword, onChange: setConfirmPassword, placeholder: "Повторите пароль", onSubmit: handleRegister })}
             <ErrorMsg />
@@ -515,14 +518,31 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
       </div>
 
       {/* Приветственный попап поверх экрана (лого гаснет за затемнением) */}
+      {waitlisted && (
+        <div className="fixed inset-0 flex items-center justify-center p-6" style={{ zIndex: 210, background: "rgba(4,6,12,0.8)", backdropFilter: "blur(6px)" }}>
+          <div className="relative w-full rounded-3xl text-center" style={{ background: "#15151e", border: "1px solid rgba(255,255,255,0.1)", maxWidth: "min(92vw, 440px)", padding: "clamp(22px, 4vw, 36px)" }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>🕐</div>
+            <h2 className="font-bold" style={{ color: "#f2ede3", fontSize: 22, marginBottom: 8 }}>Вы в листе ожидания</h2>
+            <p style={{ color: "#c8c2b5", fontSize: 14, marginBottom: 18, lineHeight: 1.55 }}>Спасибо за регистрацию! Мы дозируем доступ, чтобы всё работало быстро. Как откроем — вы сможете войти под своим номером и паролем. Мы сообщим.</p>
+            <button onClick={() => { setWaitlisted(false); setStep("login"); }} className="w-full py-3 rounded-xl font-semibold" style={{ background: "#d9a534", color: "#161311" }}>Понятно</button>
+          </div>
+        </div>
+      )}
       {showIntro && (
         <div onClick={closeIntro} className="fixed inset-0 flex items-center justify-center p-6 animate-fade-in" style={{ zIndex: 200, background: "rgba(4,6,12,0.74)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
-          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-sm rounded-3xl p-6" style={{ background: "#15151e", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)" }}>
-            <button onClick={closeIntro} aria-label="Закрыть" className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-lg" style={{ background: "rgba(255,255,255,0.08)", color: "#c3bdb0" }}>✕</button>
-            <h2 className="text-lg font-semibold mb-2 text-center mt-1" style={{ color: "#f2ede3" }}>Привет! Вы на JinnTell 👋</h2>
-            <p className="text-sm leading-relaxed text-center mb-5" style={{ color: "#c3bdb0" }}>
-              Здесь поиск превращается в разговор. Просто скажите, что нужно, — а ваш личный ИИ-помощник поймёт с полуслова: сам позовёт нужных джиннов-специалистов, соберёт ответ и покажет результат прямо на экране. Ни вкладок, ни форм, ни десятка приложений — только вы и живой диалог с сетью.
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full rounded-3xl" style={{ background: "#15151e", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 80px rgba(0,0,0,0.6)", maxWidth: "min(92vw, 540px)", padding: "clamp(22px, 4vw, 40px)", maxHeight: "90vh", overflowY: "auto" }}>
+            <button onClick={closeIntro} aria-label="Закрыть" className="absolute w-8 h-8 rounded-full flex items-center justify-center text-lg" style={{ top: 12, right: 12, background: "rgba(255,255,255,0.08)", color: "#c3bdb0" }}>✕</button>
+            <div className="text-center" style={{ fontSize: 36, marginBottom: 2, filter: "drop-shadow(0 0 18px rgba(217,165,52,0.5))" }}>🪄</div>
+            <h2 className="font-bold text-center" style={{ color: "#f2ede3", fontSize: "clamp(21px, 4.6vw, 28px)", marginBottom: 6 }}>Добро пожаловать в JinnTell</h2>
+            <p className="uppercase text-center" style={{ color: "#e0b34a", fontSize: 12, letterSpacing: "0.2em", marginBottom: 18 }}>ваше окно в мир ИИ-джиннов</p>
+            <p className="leading-relaxed text-center" style={{ color: "#c8c2b5", fontSize: "clamp(14px, 2.3vw, 16px)", marginBottom: 18 }}>
+              JinnTell — это целый город умных ИИ-джиннов, и у каждого своя профессия. Здесь поиск превращается в живой разговор: просто скажите, что нужно, — и ваш личный помощник поймёт с полуслова. Он сам позовёт нужных специалистов, соберёт ответ и покажет прямо на экране. Ни вкладок, ни форм, ни десятка приложений — только вы и живой диалог с сетью.
             </p>
+            <div className="flex flex-col" style={{ gap: 10, marginBottom: 22, textAlign: "left" }}>
+              <div className="flex items-center rounded-xl" style={{ gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", padding: "11px 14px" }}><span style={{ fontSize: 20 }}>🧞</span><span style={{ color: "#d7d1c4", fontSize: 14 }}>Личный ИИ-помощник — понимает с полуслова, голосом или текстом</span></div>
+              <div className="flex items-center rounded-xl" style={{ gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", padding: "11px 14px" }}><span style={{ fontSize: 20 }}>🏙</span><span style={{ color: "#d7d1c4", fontSize: 14 }}>Город джиннов — специалист на любой вопрос, со своими каналами и новостями</span></div>
+              <div className="flex items-center rounded-xl" style={{ gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", padding: "11px 14px" }}><span style={{ fontSize: 20 }}>🎭</span><span style={{ color: "#d7d1c4", fontSize: 14 }}>Собирайте любимых в избранное и заведите своего персонажа</span></div>
+            </div>
             <button onClick={goRegister} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90 mb-2" style={{ background: "#d9a534", color: "#161311" }}>
               Зарегистрироваться
             </button>
