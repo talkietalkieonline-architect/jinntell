@@ -23,6 +23,7 @@ import ChatJournal from "@/components/communicator/ChatJournal";
 const SettingsModal = dynamic(() => import("@/components/communicator/SettingsModal"));
 const MyAgentsModal = dynamic(() => import("@/components/communicator/MyAgentsModal"));
 const AgentCityModal = dynamic(() => import("@/components/communicator/AgentCityModal"));
+const CityScapeModal = dynamic(() => import("@/components/communicator/CityScapeModal"));
 const ContactsModal = dynamic(() => import("@/components/communicator/ContactsModal"));
 const BusinessDashboardModal = dynamic(() => import("@/components/communicator/BusinessDashboardModal"));
 const StoreModal = dynamic(() => import("@/components/communicator/StoreModal"));
@@ -83,6 +84,21 @@ export default function Home() {
   const [feedOpen, setFeedOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
+  const [cityscapeOpen, setCityscapeOpen] = useState(false);
+  const [cityPreselect, setCityPreselect] = useState<number | null>(null);
+  // Диплинк входа в Город по QR: https://jinntell.ru/?open=city → сразу открыть Справочник
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("open") === "city") {
+        setCityOpen(true);
+        params.delete("open");
+        const q = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (q ? "?" + q : ""));
+      }
+    } catch { /* noop */ }
+  }, [isLoggedIn]);
   const [contactsOpen, setContactsOpen] = useState(false);
   const [businessOpen, setBusinessOpen] = useState(false);
   const [inviteContext, setInviteContext] = useState<{ type: "agent"; agentId: number } | { type: "room"; roomId: number } | null>(null);
@@ -93,6 +109,7 @@ export default function Home() {
   const [openChats, setOpenChats] = useState<OpenChat[]>([]);
   const [archivedChats, setArchivedChats] = useState<OpenChat[]>([]);
   const [view, setView] = useState<"feed" | "chat" | "flow">("feed");
+  const [funnelHidden, setFunnelHidden] = useState(false);  // воронка «стать помощником» в чате джина
   const [booting, setBooting] = useState(true); // гейт первого кадра: не мигать главной перед Потоком
   const flowReturnRef = useRef<{ view: "feed" | "chat" | "flow"; room: string }>({ view: "feed", room: "" });
   const assistantBusyRef = useRef(false);
@@ -288,7 +305,7 @@ export default function Home() {
   }, [archivedChats]);
 
   /** Открыть личный чат с агентом (добавить в ленту открытых + переключиться) */
-  const openAgentChat = useCallback((agentId: number, meta?: { name?: string; color?: string }) => {
+  const openAgentChat = useCallback((agentId: number, meta?: { name?: string; color?: string }, opts?: { flow?: boolean }) => {
     const uid = getUserId();
     const r = uid ? `agent-${agentId}-u${uid}` : `agent-${agentId}`;
     setOpenChats((prev) =>
@@ -297,7 +314,8 @@ export default function Home() {
         : [...prev, { room: r, agentId, name: meta?.name || "Джинн", color: meta?.color || "#6c7bff", ts: Date.now() }]
     );
     setRoom(r);
-    setView("chat");
+    if (opts?.flow) { flowReturnRef.current = { view: "feed", room: "" }; setView("flow"); }
+    else { setView("chat"); }
     setAgentsOpen(false);
     setCityOpen(false);
   }, [setRoom]);
@@ -794,9 +812,11 @@ export default function Home() {
       const pendingAgent = localStorage.getItem("jinntell_open_agent");
       if (pendingAgent) {
         localStorage.removeItem("jinntell_open_agent");
+        const mode = localStorage.getItem("jinntell_open_mode");
+        localStorage.removeItem("jinntell_open_mode");
         const agentId = parseInt(pendingAgent, 10);
         if (!isNaN(agentId)) {
-          openAgentChat(agentId);
+          openAgentChat(agentId, undefined, { flow: mode === "flow" });
         }
       }
     }
@@ -900,14 +920,36 @@ export default function Home() {
           onSend={(t) => handleSend(t)}
           lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
           mediaList={(() => { const out: { url: string; type: string }[] = []; for (let i = messages.length - 1; i >= 0 && out.length < 8; i--) { const mm = messages[i]; if (mm.mediaUrl) out.unshift({ url: mm.mediaUrl, type: mm.mediaType || "image" }); } return out; })()}
-          assistantName={assistantName}
-          assistantPhoto={assistantPhoto}
-          voiceId={user?.assistant_voice}
+          assistantName={room.startsWith("agent-") && agentInfo ? agentInfo.name : assistantName}
+          assistantPhoto={room.startsWith("agent-") && agentInfo ? (agentInfo.photo_url ?? null) : assistantPhoto}
+          voiceId={room.startsWith("agent-") && agentInfo ? agentInfo.tts_voice_id : user?.assistant_voice}
         />
       )}
 
+      {/* Воронка: в прямом чате с джином помощник предлагает стать личным помощником */}
+      {(view === "chat" || view === "flow") && room.startsWith("agent-") && room !== assistantRoom && !funnelHidden && user?.is_guest && (
+        <div style={{ position: "fixed", top: 14, left: 14, zIndex: 130, maxWidth: 268, display: "flex", alignItems: "flex-start", gap: 8, pointerEvents: "auto" }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "0 0 auto", overflow: "hidden", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#e6bd57,#d9a534)", boxShadow: "0 6px 18px -6px rgba(217,165,52,.7)", color: "#201603", fontWeight: 800 }}>
+            {assistantPhoto ? <img src={assistantPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "✦"}
+          </div>
+          <div style={{ background: "rgba(18,18,26,.94)", color: "#f2ede3", borderRadius: 14, borderTopLeftRadius: 4, padding: "9px 11px", boxShadow: "0 14px 34px -14px rgba(0,0,0,.7)", backdropFilter: "blur(6px)", fontSize: 12.5, lineHeight: 1.4 }}>
+            <div>Могу стать твоим <b>ежедневным помощником</b> — подскажу, напомню, найду нужное.</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button
+                onClick={() => { flowReturnRef.current = { view: "feed", room: "" }; setRoom(assistantRoom); setView("flow"); setFunnelHidden(true); }}
+                style={{ border: "none", borderRadius: 9, padding: "6px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#d9a534", color: "#201603" }}
+              >Да, хочу</button>
+              <button
+                onClick={() => setFunnelHidden(true)}
+                style={{ border: "1px solid rgba(255,255,255,.18)", borderRadius: 9, padding: "6px 10px", fontSize: 12, cursor: "pointer", background: "transparent", color: "#c3bdb0" }}
+              >Позже</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Плавающая перетаскиваемая кнопка Поток — везде, кроме самого Потока */}
-      {view !== "flow" && (
+      {view !== "flow" && !user?.is_guest && (
         <FlowFab onOpen={() => { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); }} />
       )}
 
@@ -1093,7 +1135,9 @@ export default function Home() {
       {cityOpen && (
       <AgentCityModal
         isOpen={cityOpen}
-        onClose={() => setCityOpen(false)}
+        initialAgentId={cityPreselect}
+        onOpenCityscape={() => setCityscapeOpen(true)}
+        onClose={() => { setCityOpen(false); setCityPreselect(null); }}
         onOpenBusiness={() => {
           setCityOpen(false);
           setBusinessOpen(true);
@@ -1104,6 +1148,16 @@ export default function Home() {
           setCityOpen(false);
           window.location.href = "/admin";
         }}
+      />
+      )}
+
+      {/* Город — пространственный прототип (сфера с джинами) */}
+      {cityscapeOpen && (
+      <CityScapeModal
+        isOpen={cityscapeOpen}
+        onClose={() => setCityscapeOpen(false)}
+        onOpenDirectory={() => { setCityscapeOpen(false); setCityOpen(true); }}
+        onPick={(id) => { setCityscapeOpen(false); setCityPreselect(id); setCityOpen(true); }}
       />
       )}
 

@@ -17,6 +17,7 @@ class UserOut(BaseModel):
     custom_accent: str
     is_online: bool
     is_admin: bool = False
+    is_guest: bool = False
     has_password: bool = False
     # Персональные данные
     email: Optional[str] = None
@@ -65,6 +66,7 @@ class UserOut(BaseModel):
             custom_accent=user.custom_accent,
             is_online=user.is_online,
             is_admin=user.is_admin,
+            is_guest=getattr(user, "is_guest", False),
             email=user.email,
             first_name=user.first_name,
             last_name=user.last_name,

@@ -8,6 +8,7 @@ import {
   contractorLogin,
   getOAuthVKUrl,
   getOAuthYandexUrl,
+  guestLogin,
   type UserProfile,
 } from "@/services/api";
 
@@ -546,6 +547,10 @@ export default function LoginScreen({ onLogin, onBusinessLogin }: { onLogin: (us
             <button onClick={goRegister} className="w-full py-3 rounded-xl font-semibold transition-all hover:opacity-90 mb-2" style={{ background: "#d9a534", color: "#161311" }}>
               Зарегистрироваться
             </button>
+            <button onClick={async () => { setError(""); setSending(true); try { const res = await guestLogin(); persistIntro(); onLogin({ id: res.user_id, display_name: res.display_name } as Partial<UserProfile>); } catch { setError("Не удалось войти гостем"); } finally { setSending(false); } }} disabled={sending} className="w-full py-3 rounded-xl font-medium transition-all hover:opacity-90 mb-1" style={{ background: "transparent", color: "#d7d1c4", border: "1px solid rgba(255,255,255,0.18)" }}>
+              {sending ? "Входим…" : "Зайти гостем — осмотреться"}
+            </button>
+            <p className="text-center mb-3" style={{ color: "#8a8478", fontSize: 11 }}>Без регистрации: Город и бесплатные джинны. История сохранится, когда зарегистрируетесь.</p>
             <div className="flex items-center justify-center gap-4 mb-3 text-xs">
               <button onClick={closeIntro} style={{ color: "#c3bdb0" }}>Уже есть аккаунт → Войти</button>
               <span style={{ color: "#4a463e" }}>·</span>

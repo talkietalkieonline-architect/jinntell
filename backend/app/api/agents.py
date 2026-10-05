@@ -2,7 +2,7 @@
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -269,8 +269,8 @@ async def create_my_jinn(user: User = Depends(get_current_user), db: AsyncSessio
     await db.commit()
     await db.refresh(agent)
     try:
-        from app.services import discovery
-        await discovery.index_one(agent)
+        from app.services import jinn_birth
+        await jinn_birth.birth(db, agent)
     except Exception as e:
         print(f"[discovery] my-jinn index failed: {e}")
     return AgentDetailOut.model_validate(agent)
@@ -286,6 +286,31 @@ async def get_agent_by_link(slug: str, user: Optional[User] = Depends(get_curren
     if not agent or not await can_access_agent(db, agent, user.id if user else None):
         raise HTTPException(404, "Агент не найден")
     return AgentOut.model_validate(agent)
+
+
+_PUBLIC_BASE = "https://jinntell.ru"
+
+
+@router.get("/link/{slug}/qr.svg")
+async def agent_qr(slug: str, db: AsyncSession = Depends(get_db)):
+    """QR-код адреса джина в Городе (jinntell.ru/a/{slug}) — SVG, публичный. Для печати/наклейки в ТЦ."""
+    import io
+    import segno
+
+    result = await db.execute(
+        select(Agent).where(Agent.jinntell_link == slug, Agent.is_active == True)
+    )
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(404, "Агент не найден")
+    url = f"{_PUBLIC_BASE}/a/{slug}"
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(buf, kind="svg", scale=6, border=2, dark="#1c2230", light=None)
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.get("/{agent_id}", response_model=AgentOut)
@@ -343,8 +368,8 @@ async def update_agent(
 
     await db.flush()
     try:
-        from app.services import discovery
-        await discovery.index_one(agent)
+        from app.services import jinn_birth
+        await jinn_birth.birth(db, agent)
     except Exception as e:
         print(f"[discovery] index_one failed: {e}")
     return AgentDetailOut.model_validate(agent)

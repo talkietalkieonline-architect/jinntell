@@ -32,11 +32,22 @@ class Agent(Base):
     city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
     unavailable_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # КОНТУР 1: прямая оплата ВЛАДЕЛЬЦУ (реквизиты+QR), платформа НЕ участвует (не платёжный агент)
+    pay_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    pay_requisites: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # телефон СБП / счёт / текст
+    pay_qr_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)       # ссылка на статический QR владельца
+    pay_mode: Mapped[str] = mapped_column(String(10), default="dynamic", server_default="dynamic")  # fixed|dynamic
+    pay_amount: Mapped[int] = mapped_column(Integer, default=0, server_default="0")  # фикс-сумма (₽) при mode=fixed
+    # Промо-дайджест «зазывалы» (режим Прогулка): единый пич для ДВУХ вариантов — по QR (без гео) и проход мимо (гео)
+    promo_digest: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # AI / LLM
     system_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
     llm_max_tokens: Mapped[int] = mapped_column(Integer, default=1000)
+    # Лимиты общения (анти-слив/длинные разговоры/офф-топ). Настраиваются в ЛК и админом
+    session_msg_limit: Mapped[int] = mapped_column(Integer, default=30, server_default="30")   # реплик за один разговор
+    daily_msg_limit: Mapped[int] = mapped_column(Integer, default=50, server_default="50")      # сообщений/сутки на пользователя
     greeting: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # TTS (Text-to-Speech)
@@ -100,6 +111,9 @@ class Agent(Base):
 
     # Exclusions
     exclusions_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Тематический фокус (B): периметр тем + строгий режим (офф-топ отсекается ДО генерации)
+    topic_scope: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    topic_strict: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # Modes
     mode_walk_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

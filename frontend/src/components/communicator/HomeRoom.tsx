@@ -531,9 +531,9 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
         {renderColumn("c")}
         {dayOpen && <MyDayModal onClose={() => setDayOpen(false)} />}
 
-        {/* Переход в Город — на всю ширину под колонками */}
-        <button onClick={onOpenCity} className="w-full mt-3 sm:mt-1 sm:col-span-2 md:col-span-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition-all hover:scale-[1.01]" style={{ background: "var(--accent)", color: "var(--bg-deep)", padding: "16px", minHeight: 52, marginTop: 14, boxShadow: "0 6px 24px -6px color-mix(in srgb, var(--accent) 60%, transparent)" }}>
-          🏙 Перейти в Город джиннов
+        {/* Переход в Город — на всю ширину (открывает Справочник; «Город» — внутри него) */}
+        <button onClick={onOpenCity} className="w-full sm:col-span-2 md:col-span-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition-all hover:scale-[1.01]" style={{ background: "var(--accent)", color: "var(--bg-deep)", padding: "16px", minHeight: 52, marginTop: 14, boxShadow: "0 6px 24px -6px color-mix(in srgb, var(--accent) 60%, transparent)" }}>
+          🏙 Перейти в Город
         </button>
         <div aria-hidden className="sm:col-span-2 md:col-span-3" style={{ flex: "0 0 auto", height: `calc(env(safe-area-inset-bottom, 0px) + ${bottomPad + 56}px)` }} />
       </div>

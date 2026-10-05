@@ -246,6 +246,24 @@ async def contractor_billing(
     months_ru = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
                  "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
+    # Тариф: модели джиннов контрагента → сколько стоит один ответ (для калькулятора «предоплата → ответы»)
+    AVG_ANSWER_TOKENS = 2000
+    _am = (await db.execute(
+        select(Agent.llm_model).where(
+            Agent.contractor_id == contractor.id, Agent.is_active == True
+        ).distinct()
+    )).all()
+    tariff = []
+    for row in _am:
+        mdl = row[0] or "default"
+        spm = _sell(mdl)
+        tariff.append({
+            "model": mdl,
+            "sell_per_mtok": _r2(spm),
+            "avg_answer_tokens": AVG_ANSWER_TOKENS,
+            "rub_per_answer": round(AVG_ANSWER_TOKENS / 1_000_000.0 * spm, 4),
+        })
+
     return {
         "currency": currency,
         "balance": _r2((contractor.balance_kopecks or 0) / 100.0),
@@ -265,6 +283,8 @@ async def contractor_billing(
                 key=lambda x: x["amount"], reverse=True),
         },
         "all_time": {"total": _r2(all_total), "tokens": all_tokens},
+        "tariff": tariff,
+        "avg_answer_tokens": AVG_ANSWER_TOKENS,
     }
 
 
@@ -312,6 +332,10 @@ async def contractor_update_agent(
         "outfit_style", "outfit_top", "outfit_bottom", "outfit_shoes", "outfit_accessory",
         "unavailable_message",
         "visibility",
+        "pay_enabled", "pay_requisites", "pay_qr_url", "pay_mode", "pay_amount",
+        "promo_digest",
+        "session_msg_limit", "daily_msg_limit",
+        "topic_scope", "topic_strict",
     }
 
     for field in body.model_fields_set:
@@ -328,8 +352,8 @@ async def contractor_update_agent(
     await db.flush()
     await db.refresh(agent)
     try:
-        from app.services import discovery
-        await discovery.index_one(agent)
+        from app.services import jinn_birth
+        await jinn_birth.birth(db, agent)
     except Exception as _e:
         print(f"[discovery] index_one (contractor) skip: {_e}")
     return AgentDetailOut.model_validate(agent)

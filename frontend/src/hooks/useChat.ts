@@ -101,6 +101,7 @@ export interface AgentRoomInfo {
   color: string;
   photo_url?: string;
   greeting?: string;
+  promo_digest?: string;
   tts_voice_id?: string;
   tts_emotion?: string;
 }
@@ -187,14 +188,15 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
         if (data.agent_info) {
           const info = data.agent_info as AgentRoomInfo;
           setAgentInfo(info);
-          if (info.greeting) {
+          const opening = info.promo_digest || info.greeting;
+          if (opening) {
             setMessages((prev) => {
               if (prev.length > 0) return prev;
               return [{
                 id: "agent-greeting",
                 sender: "agent" as const,
                 name: info.name,
-                text: info.greeting!,
+                text: opening,
                 color: info.color || "var(--accent)",
                 timestamp: new Date(),
               }];

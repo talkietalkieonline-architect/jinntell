@@ -119,6 +119,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
 
   const [myAgents, setMyAgents] = useState<AgentFullOut[]>([]);
   const [billing, setBilling] = useState<ContractorBilling | null>(null);
+  const [calcPrepay, setCalcPrepay] = useState(100000);  // калькулятор «предоплата → ответы»
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<AgentFullOut | null>(null);
   const [editVisibility, setEditVisibility] = useState("public");
@@ -143,9 +144,19 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [editModel, setEditModel] = useState("gpt-4o-mini");
   // Скилы
   const [skillsText, setSkillsText] = useState("");
+  const [payEnabled, setPayEnabled] = useState(false);
+  const [payRequisites, setPayRequisites] = useState("");
+  const [payQr, setPayQr] = useState("");
+  const [payMode, setPayMode] = useState("dynamic");
+  const [payAmount, setPayAmount] = useState(0);
   // Отмена
   const [exclusionsText, setExclusionsText] = useState("");
   // Режимы
+  const [promoDigest, setPromoDigest] = useState("");  // дайджест-зазывала (режим Прогулка): QR + гео
+  const [sessionMsgLimit, setSessionMsgLimit] = useState(30);  // лимит реплик за разговор
+  const [dailyMsgLimit, setDailyMsgLimit] = useState(50);      // лимит сообщений/сутки на клиента
+  const [topicScope, setTopicScope] = useState("");            // тематический периметр (о чём джин)
+  const [topicStrict, setTopicStrict] = useState(false);       // строгий фокус (офф-топ → возврат к теме)
   const [modesState, setModesState] = useState<Record<string, {enabled: boolean; rules: string; context: string}>>({
     walk: {enabled: false, rules: "", context: ""},
     shopping: {enabled: false, rules: "", context: ""},
@@ -330,12 +341,22 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     setEditGreeting(agent.greeting || "");
     setEditPrompt(agent.system_prompt || "");
     setEditModel(agent.llm_model || "gpt-4o-mini");
+    setPromoDigest(agent.promo_digest || "");
+    setSessionMsgLimit(agent.session_msg_limit ?? 30);
+    setDailyMsgLimit(agent.daily_msg_limit ?? 50);
+    setTopicScope(agent.topic_scope || "");
+    setTopicStrict(!!agent.topic_strict);
     setEditMaxTokens(agent.llm_max_tokens || 1000);
     setEditVisibility(((agent as { visibility?: string }).visibility) || "public");
     setPhotoUrl(agent.photo_url || null);
     contractorGetWardrobe(agent.id).then(setWardrobe).catch(() => setWardrobe([]));
     setSkillsText(agent.skills_text || "");
     setExclusionsText(agent.exclusions_text || "");
+    setPayEnabled(!!(agent as { pay_enabled?: boolean }).pay_enabled);
+    setPayRequisites((agent as { pay_requisites?: string | null }).pay_requisites || "");
+    setPayQr((agent as { pay_qr_url?: string | null }).pay_qr_url || "");
+    setPayMode((agent as { pay_mode?: string }).pay_mode || "dynamic");
+    setPayAmount((agent as { pay_amount?: number }).pay_amount || 0);
     setModesState({
       walk: {enabled: agent.mode_walk_enabled ?? false, rules: agent.mode_walk_rules || "", context: agent.mode_walk_context || ""},
       shopping: {enabled: agent.mode_shopping_enabled ?? false, rules: agent.mode_shopping_rules || "", context: agent.mode_shopping_context || ""},
@@ -438,6 +459,16 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
         visibility: editVisibility,
         skills_text: skillsText || undefined,
         exclusions_text: exclusionsText || undefined,
+        pay_enabled: payEnabled,
+        pay_requisites: payRequisites || undefined,
+        pay_qr_url: payQr || undefined,
+        pay_mode: payMode,
+        pay_amount: payAmount,
+        promo_digest: promoDigest || undefined,
+        session_msg_limit: sessionMsgLimit,
+        daily_msg_limit: dailyMsgLimit,
+        topic_scope: topicScope || undefined,
+        topic_strict: topicStrict,
         mode_walk_enabled: modesState.walk.enabled,
         mode_walk_rules: modesState.walk.rules || undefined,
         mode_walk_context: modesState.walk.context || undefined,
@@ -711,6 +742,21 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   <div className="rounded-xl px-4 py-2.5 text-[11px]" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "rgba(252,165,165,1)" }}>
                     Что агент НЕ должен делать: стоп-слова, запрещённые темы, конкуренты.
                   </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] uppercase tracking-wider block" style={{ color: "var(--text-muted)" }}>Тематический периметр</label>
+                      <button onClick={() => setTopicStrict(!topicStrict)}
+                        className="text-[10px] px-2 py-1 rounded-full font-medium"
+                        style={{ background: topicStrict ? "var(--accent)" : "var(--bg-glass-border)", color: topicStrict ? "var(--bg-deep)" : "var(--text-muted)" }}>
+                        {topicStrict ? "СТРОГИЙ ФОКУС: ВКЛ" : "СТРОГИЙ ФОКУС: ВЫКЛ"}
+                      </button>
+                    </div>
+                    <textarea value={topicScope} onChange={(e) => setTopicScope(e.target.value)} rows={3}
+                      placeholder="О чём этот джинн: магазины, акции, услуги, навигация и часы работы ТРК…"
+                      className="w-full rounded-xl px-4 py-2.5 text-sm bg-transparent outline-none resize-none"
+                      style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                    <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>При «строгом фокусе» вопросы вне темы джинн вежливо вернёт к делу — не тратя дорогую генерацию.</p>
+                  </div>
                   <textarea value={exclusionsText} onChange={(e) => setExclusionsText(e.target.value)} rows={8}
                     placeholder="Не использовать слова: 'блин', 'типа'...\nНе обсуждать: политику, конкурентов...\nНе давать скидки без согласования..."
                     className="w-full rounded-xl px-4 py-2.5 text-sm bg-transparent outline-none resize-none font-mono"
@@ -738,6 +784,18 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                             {m.enabled ? "ВКЛ" : "ВЫКЛ"}
                           </button>
                         </div>
+                        {mode === "walk" && (
+                          <div className="rounded-lg p-2.5 mb-2" style={{ background: "rgba(217,165,52,0.08)", border: "1px solid rgba(217,165,52,0.3)" }}>
+                            <div className="text-[11px] font-semibold mb-1" style={{ color: "var(--accent)" }}>📣 Дайджест-зазывала</div>
+                            <div className="text-[10px] mb-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                              Единый призыв «что сегодня у нас». Работает в ОБОИХ вариантах: <b>по QR</b> (посетитель сканирует — джин рассказывает и приглашает) и <b>при проходе мимо</b> (гео-стук). Озвучивается при открытии.
+                            </div>
+                            <textarea value={promoDigest} onChange={(e) => setPromoDigest(e.target.value)} rows={4}
+                              placeholder="Сегодня в ТРК: скидки на обувь до 35%, −20% на детскую школьную одежду, новое поступление в Lime… Спроси подробнее — расскажу прямо сейчас! Забери подарки отделов в галерею. Ждём тебя!"
+                              className="w-full rounded-lg px-3 py-2 text-[11px] outline-none resize-none"
+                              style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                          </div>
+                        )}
                         {m.enabled && (
                           <div className="flex flex-col gap-2">
                             <textarea value={m.rules} onChange={(e) => setModesState({...modesState, [mode]: {...m, rules: e.target.value}})} rows={2}
@@ -799,6 +857,22 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                       ))}
                     </div>
                     <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Короче ответы — меньше расход баланса.</p>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider mb-1.5 block" style={{ color: "var(--text-muted)" }}>Лимиты общения</label>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <div className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>Реплик за разговор</div>
+                        <input type="number" min={0} value={sessionMsgLimit} onChange={(e) => setSessionMsgLimit(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-[10px] mb-1" style={{ color: "var(--text-muted)" }}>Сообщений/сутки на клиента</div>
+                        <input type="number" min={0} value={dailyMsgLimit} onChange={(e) => setDailyMsgLimit(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                      </div>
+                    </div>
+                    <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>Защита от слишком долгих разговоров и злоупотреблений. 0 — без лимита.</p>
                   </div>
                 </div>
               )}
@@ -1136,6 +1210,35 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                 </div>
               )}
 
+              {/* Оплата (контур 1 — напрямую владельцу) */}
+              <div className="rounded-xl p-4 mt-4" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                <label className="flex items-center gap-2 text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
+                  <input type="checkbox" checked={payEnabled} onChange={(e) => setPayEnabled(e.target.checked)} />
+                  💳 Оплата напрямую (реквизиты + QR)
+                </label>
+                <p className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>Оплата услуги идёт НАПРЯМУЮ владельцу (мимо платформы). Джинн выставит счёт этим QR/реквизитами.</p>
+                {payEnabled && (
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px]" style={{ color: "var(--text-muted)" }}>Реквизиты (телефон СБП / счёт / текст)
+                      <input value={payRequisites} onChange={(e) => setPayRequisites(e.target.value)} placeholder="напр. СБП +7 900 000-00-00 (Сбер)" className="w-full mt-1 px-2 py-1.5 rounded bg-[var(--bg-deep)] border border-[var(--bg-glass-border)] text-sm" style={{ color: "var(--text-primary)" }} /></label>
+                    <label className="text-[11px]" style={{ color: "var(--text-muted)" }}>Ссылка на QR (статический QR из банка)
+                      <input value={payQr} onChange={(e) => setPayQr(e.target.value)} placeholder="https://…/qr.png" className="w-full mt-1 px-2 py-1.5 rounded bg-[var(--bg-deep)] border border-[var(--bg-glass-border)] text-sm" style={{ color: "var(--text-primary)" }} /></label>
+                    <div className="flex gap-2 items-end">
+                      <label className="text-[11px]" style={{ color: "var(--text-muted)" }}>Сумма
+                        <select value={payMode} onChange={(e) => setPayMode(e.target.value)} className="block mt-1 px-2 py-1.5 rounded bg-[var(--bg-deep)] border border-[var(--bg-glass-border)] text-sm" style={{ color: "var(--text-primary)" }}>
+                          <option value="dynamic">по договорённости</option>
+                          <option value="fixed">фиксированная</option>
+                        </select></label>
+                      {payMode === "fixed" && (
+                        <label className="text-[11px]" style={{ color: "var(--text-muted)" }}>₽
+                          <input type="number" value={payAmount} onChange={(e) => setPayAmount(Number(e.target.value) || 0)} className="block w-28 mt-1 px-2 py-1.5 rounded bg-[var(--bg-deep)] border border-[var(--bg-glass-border)] text-sm" style={{ color: "var(--text-primary)" }} /></label>
+                      )}
+                    </div>
+                    <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Включите джину инструмент «Выставить счёт» во вкладке «Функции».</p>
+                  </div>
+                )}
+              </div>
+
               {/* Кнопка сохранения */}
               <button onClick={handleSave} disabled={saving} className="w-full py-3 rounded-xl text-sm font-semibold mt-5 transition-all"
                 style={{ background: saving ? "var(--bg-glass-border)" : "var(--accent)", color: saving ? "var(--text-muted)" : "var(--bg-deep)" }}>
@@ -1311,6 +1414,59 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   </div>
                 </div>
               )}
+
+              {/* ── Калькулятор: предоплата → сколько ответов ── */}
+              {billing?.tariff && billing.tariff.length > 0 && (() => {
+                const VAT = 1.2;
+                const t = billing.tariff[0];
+                const perAnswer = t.rub_per_answer * VAT;        // ₽/ответ с НДС
+                const perMtok = t.sell_per_mtok * VAT;           // ₽/млн токенов с НДС
+                const prepay = Number.isFinite(calcPrepay) && calcPrepay > 0 ? calcPrepay : 0;
+                const answers = perAnswer > 0 ? Math.round(prepay / perAnswer) : 0;
+                const tokens = perMtok > 0 ? Math.round((prepay / perMtok) * 1_000_000) : 0;
+                const nf = (n: number) => n.toLocaleString("ru-RU");
+                return (
+                  <div className="rounded-2xl px-4 py-4 mb-5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                    <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>На сколько хватит предоплаты</p>
+                    <p className="text-[11px] mb-3" style={{ color: "var(--text-secondary)" }}>
+                      1 ответ ≈ {nf(t.avg_answer_tokens)} токенов · ≈ {perAnswer.toFixed(2).replace(".", ",")} {billing.currency}/ответ (с НДС 20%)
+                    </p>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center rounded-xl px-3 py-2 flex-1" style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)" }}>
+                        <input
+                          type="number" min={0} step={1000} value={calcPrepay}
+                          onChange={(e) => setCalcPrepay(Math.max(0, Number(e.target.value) || 0))}
+                          className="flex-1 bg-transparent outline-none text-base font-semibold"
+                          style={{ color: "var(--text-primary)", width: "100%" }}
+                        />
+                        <span className="text-sm ml-1 shrink-0" style={{ color: "var(--text-muted)" }}>{billing.currency}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5 mb-3 flex-wrap">
+                      {[30000, 100000, 300000].map((v) => (
+                        <button key={v} onClick={() => setCalcPrepay(v)}
+                          className="px-3 py-1.5 rounded-full text-[11px] font-medium transition-all"
+                          style={{ background: calcPrepay === v ? "var(--accent)" : "var(--bg-deep)", color: calcPrepay === v ? "var(--bg-deep)" : "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>
+                          {nf(v)} {billing.currency}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)" }}>
+                        <p className="text-xl font-bold" style={{ color: "var(--accent)" }}>≈ {nf(answers)}</p>
+                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>ответов посетителям</p>
+                      </div>
+                      <div className="rounded-xl px-3 py-2.5 text-center" style={{ background: "var(--bg-deep)", border: "1px solid var(--bg-glass-border)" }}>
+                        <p className="text-xl font-bold" style={{ color: "var(--text-primary)" }}>≈ {nf(tokens)}</p>
+                        <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>токенов</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] mt-2.5" style={{ color: "var(--text-muted)" }}>
+                      Ориентир по средней длине ответа. Озвучка (голос) тарифицируется дополнительно; при росте объёмов — дешевле.
+                    </p>
+                  </div>
+                );
+              })()}
 
               <p className="text-[10px] uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
                 Ваши агенты ({myAgents.length})

@@ -100,6 +100,37 @@ async def channel_mark_read(agent_id: int, user: User = Depends(get_current_user
     return {"ok": True, "last_post_id": latest}
 
 
+@router.get("/feed")
+async def news_feed(limit: int = 30, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Единая ЛЕНТА НОВОСТЕЙ: свежие посты из ПОДПИСАННЫХ каналов (избранное) в один поток.
+    Если подписок нет — показываем все публичные каналы (чтобы лента не была пустой)."""
+    all_chans = [c for c in (await db.execute(select(ChannelPost.agent_id).distinct())).scalars().all() if c]
+    if not all_chans:
+        return {"items": []}
+    favs = set((await db.execute(
+        select(UserFavorite.agent_id).where(UserFavorite.user_id == user.id, UserFavorite.agent_id.in_(all_chans))
+    )).scalars().all())
+    target = list(favs) if favs else all_chans
+    rows = (await db.execute(
+        select(ChannelPost).where(ChannelPost.agent_id.in_(target))
+        .order_by(ChannelPost.created_at.desc()).limit(min(limit, 200))
+    )).scalars().all()
+    # имена/цвета каналов
+    ag_ids = {r.agent_id for r in rows}
+    agents = {a.id: a for a in (await db.execute(select(Agent).where(Agent.id.in_(ag_ids)))).scalars().all()}
+    out = []
+    for r in rows:
+        a = agents.get(r.agent_id)
+        out.append({
+            "id": r.id, "agent_id": r.agent_id,
+            "agent_name": (a.name if a else "Канал"), "agent_color": (a.color if a else "#5ea0e8"),
+            "title": r.title, "body": r.body, "url": r.url,
+            "link_room": f"agent-{r.agent_id}-u{user.id}",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return {"items": out, "subscribed": bool(favs)}
+
+
 @router.get("/{agent_id}", response_model=list[ChannelPostOut])
 async def channel_posts(agent_id: int, limit: int = 30, db: AsyncSession = Depends(get_db)):
     res = await db.execute(

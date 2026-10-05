@@ -53,12 +53,26 @@ export default function JinnTellLinkPage() {
       });
   }, [slug]);
 
-  /** Начать чат — сохраняем intent и переходим на главную */
-  const handleStartChat = () => {
+  /** Открыть джина: mode "flow" = голос-первый Поток, "chat" = обычный чат.
+   *  page.tsx подхватит intent из localStorage и разведёт по режиму. */
+  const openAgent = async (mode: "flow" | "chat") => {
     if (agent) {
-      // Сохраняем в localStorage — page.tsx подхватит и откроет чат
       localStorage.setItem("jinntell_open_agent", String(agent.id));
+      localStorage.setItem("jinntell_open_mode", mode);
+      const loc = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("loc") : null;
+      if (loc) localStorage.setItem("jinntell_open_loc", loc);
+      else localStorage.removeItem("jinntell_open_loc");
     }
+    // Гость: если не вошёл — заводим временный доступ (только Город + бесплатные джинны), чтобы сразу пообщаться
+    try {
+      if (!localStorage.getItem("jinntell_token")) {
+        const r = await fetch(`${API_BASE}/api/auth/guest`, { method: "POST" });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.access_token) localStorage.setItem("jinntell_token", d.access_token);
+        }
+      }
+    } catch { /* оффлайн — уйдём на обычный вход */ }
     router.push("/");
   };
 
@@ -207,9 +221,9 @@ export default function JinnTellLinkPage() {
           </span>
         </div>
 
-        {/* CTA Button */}
+        {/* CTA — голос-первый (главное) + написать */}
         <button
-          onClick={handleStartChat}
+          onClick={() => openAgent("flow")}
           className="w-full py-4 rounded-2xl text-lg font-bold transition-all active:scale-[0.98]"
           style={{
             background: `linear-gradient(135deg, ${agentColor}, ${agentColor}cc)`,
@@ -217,18 +231,41 @@ export default function JinnTellLinkPage() {
             boxShadow: `0 4px 20px ${agentColor}40`,
           }}
         >
-          💬 Начать чат
+          🎙 Спросить голосом
+        </button>
+        <button
+          onClick={() => openAgent("chat")}
+          className="w-full mt-2 py-3 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98]"
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            color: "#f5f0e8",
+            border: `1px solid ${agentColor}30`,
+          }}
+        >
+          💬 Написать
         </button>
 
-        {/* JinnTell link copy */}
-        <div className="mt-4">
+        {/* QR-код адреса — наведи камеру / распечатай для точки */}
+        <div className="mt-6 flex flex-col items-center">
+          <div className="p-3 rounded-2xl" style={{ background: "rgba(255,255,255,0.92)" }}>
+            <img
+              src={`${API_BASE}/api/agents/link/${agent.jinntell_link}/qr.svg`}
+              alt={`QR ${agent.name}`}
+              width={132}
+              height={132}
+              style={{ display: "block" }}
+            />
+          </div>
+          <div className="text-[11px] mt-2" style={{ color: "rgba(245,240,232,0.4)" }}>
+            Наведи камеру — попадёшь сюда же
+          </div>
           <button
             onClick={() => {
               const url = `${window.location.origin}/a/${agent.jinntell_link}`;
               navigator.clipboard.writeText(url);
             }}
-            className="text-xs transition-opacity hover:opacity-80"
-            style={{ color: "rgba(245,240,232,0.3)" }}
+            className="text-xs mt-2 transition-opacity hover:opacity-80"
+            style={{ color: "rgba(245,240,232,0.35)" }}
           >
             📋 Скопировать ссылку
           </button>

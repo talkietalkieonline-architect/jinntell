@@ -39,6 +39,8 @@ export default function AgentCityModal({
   onStartChat,
   isAdmin,
   onOpenAdmin,
+  initialAgentId,
+  onOpenCityscape,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -46,6 +48,8 @@ export default function AgentCityModal({
   onStartChat?: (agentId: number) => void;
   isAdmin?: boolean;
   onOpenAdmin?: () => void;
+  initialAgentId?: number | null;
+  onOpenCityscape?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProfession, setSelectedProfession] = useState("Все");
@@ -62,6 +66,7 @@ export default function AgentCityModal({
   const [cityTab, setCityTab] = useState<"city" | "federal">("city");
   const [geoLoading, setGeoLoading] = useState(false);
   useEffect(() => { if (user?.city) setUserCity(user.city); }, [user?.city]);
+  useEffect(() => { if (isOpen && initialAgentId) setSelectedAgent(initialAgentId); }, [isOpen, initialAgentId]);
 
   // Данные из API (useAgents хук с fallback на хардкод)
   const { agents, total, businessCount, citizenCount } = useAgents();
@@ -140,14 +145,14 @@ export default function AgentCityModal({
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center p-4"
+      className="fixed inset-0 flex items-center justify-center p-0 sm:p-4"
       style={{ zIndex: 100 }}
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/70" />
 
       <div
-        className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl overflow-hidden"
+        className="relative w-full h-full max-w-none sm:max-w-2xl sm:h-auto sm:max-h-[94vh] flex flex-col rounded-none sm:rounded-2xl overflow-hidden"
         style={{
           background: "var(--panel-bg)",
           border: "1px solid var(--panel-border)",
@@ -176,13 +181,22 @@ export default function AgentCityModal({
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Город Джиннов
+                Справочник города
               </h2>
               <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
                 Всего {counts.total} &bull; Бизнес {counts.business} &bull; Жители {counts.citizen}
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {onOpenCityscape && (
+                <button
+                  onClick={onOpenCityscape}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-90"
+                  style={{ background: "var(--bg-glass)", color: "var(--text-primary)", border: "1px solid var(--accent)" }}
+                >
+                  🏙 Город
+                </button>
+              )}
               {isAdmin && onOpenAdmin && (
                 <button
                   onClick={() => { onClose(); onOpenAdmin(); }}
@@ -335,17 +349,25 @@ export default function AgentCityModal({
 
         {/* Контент — скроллируемый */}
         <div className="flex-1 overflow-y-auto px-6 pb-6">
-          {/* Экран деталей агента */}
-          {agentDetails ? (
-            <div className="animate-fade-in">
-              <button
-                onClick={() => setSelectedAgent(null)}
-                className="text-sm mb-4 flex items-center gap-1"
-                style={{ color: "var(--accent)" }}
-              >
-                ‹ Назад к списку
-              </button>
-
+          {/* Список всегда; Прихожая — плавающее окно ~2/3 */}
+          {agentDetails && (
+            <div className="fixed inset-0 z-[110] flex items-end sm:items-center justify-center" onClick={() => setSelectedAgent(null)}>
+              <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.6)" }} />
+              <div onClick={(e) => e.stopPropagation()} className="relative w-full sm:max-w-md flex flex-col overflow-hidden animate-fade-in rounded-t-3xl sm:rounded-3xl" style={{ height: "72vh", maxHeight: "72vh", background: "var(--panel-bg)", border: "1px solid var(--panel-border)" }}>
+                <button onClick={() => setSelectedAgent(null)} title="В Справочник города" className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)", color: "#fff" }}>✕</button>
+                <div className="flex-1 overflow-y-auto px-5 pt-5 pb-6">
+              {/* Верх прихожей: видео-приветствие → фото → аватар */}
+              <div className="relative w-full rounded-2xl overflow-hidden mb-4" style={{ height: 220, background: `linear-gradient(135deg, ${agentDetails.color}33, var(--bg-glass))` }}>
+                {agentDetails.intro_video_url ? (
+                  <video src={agentDetails.intro_video_url} autoPlay muted loop playsInline className="w-full h-full object-cover" />
+                ) : agentDetails.photo_url ? (
+                  <img src={agentDetails.photo_url} alt={agentDetails.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold" style={{ background: `${agentDetails.color}33`, border: `2px solid ${agentDetails.color}`, color: agentDetails.color }}>{agentDetails.name[0]}</div>
+                  </div>
+                )}
+              </div>
               {/* Карточка агента */}
               <div className="flex items-start gap-4 mb-5">
                 <div
@@ -395,70 +417,44 @@ export default function AgentCityModal({
                 {agentDetails.description}
               </p>
 
-              {/* Интро-ролик (мини-презентация) */}
-              {agentDetails.intro_video_url && (
-                <video
-                  src={agentDetails.intro_video_url}
-                  controls
-                  playsInline
-                  loop
-                  className="w-full rounded-xl mb-4"
-                  style={{ maxHeight: 260, background: "#000", objectFit: "cover" }}
-                />
-              )}
+              {/* видео-приветствие показано вверху прихожей */}
 
-              {/* Действия */}
-              <div className="flex flex-col gap-1">
-                {[
-                  "Смотреть презентацию",
-                  isFav(agentDetails.id) ? "Уже у тебя в избранном" : "Добавить в Мои Джинны",
-                  "Начать чат",
-                  "Оценить агента",
-                  "Пожаловаться",
-                ].map((action) => {
-                  const isDisabled = action === "Уже у тебя в избранном";
-                  const isDanger = action === "Пожаловаться";
-                  const isAdd = action === "Добавить в Мои Джинны";
-
-                  return (
-                    <button
-                      key={action}
-                      disabled={isDisabled}
-                      className="w-full text-left px-4 py-3 rounded-xl text-sm transition-all"
-                      style={{
-                        color: isDanger
-                          ? "var(--danger)"
-                          : isDisabled
-                            ? "var(--text-muted)"
-                            : isAdd
-                              ? "var(--accent)"
-                              : "var(--text-primary)",
-                        cursor: isDisabled ? "default" : "pointer",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isDisabled) e.currentTarget.style.background = "var(--bg-glass-hover)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "transparent";
-                      }}
-                      onClick={() => {
-                        if (isAdd) {
-                          toggleAdd(agentDetails.id);
-                        }
-                        if (action === "Начать чат") {
-                          if (agentDetails.is_paid) { setPaidConfirm({ id: agentDetails.id, name: agentDetails.name }); }
-                          else { setSelectedAgent(null); onStartChat?.(agentDetails.id); }
-                        }
-                      }}
-                    >
-                      {action}
-                    </button>
-                  );
-                })}
+              {/* Двери прихожей */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    if (agentDetails.is_paid) { setPaidConfirm({ id: agentDetails.id, name: agentDetails.name }); }
+                    else { setSelectedAgent(null); onStartChat?.(agentDetails.id); }
+                  }}
+                  className="w-full px-4 py-3 rounded-xl text-sm font-semibold flex items-center gap-2"
+                  style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
+                >
+                  💬 Поговорить
+                </button>
+                <button
+                  onClick={() => { if (!isFav(agentDetails.id)) toggleAdd(agentDetails.id); }}
+                  disabled={isFav(agentDetails.id)}
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
+                  style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: isFav(agentDetails.id) ? "var(--text-muted)" : "var(--accent)" }}
+                >
+                  {isFav(agentDetails.id) ? "⭐ Уже в избранном" : "⭐ В избранное"}
+                </button>
+                <button
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
+                  style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}
+                >
+                  🛍 Витрина / магазин <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>скоро</span>
+                </button>
+                <div className="flex gap-2 mt-1">
+                  <button className="flex-1 px-3 py-2 rounded-xl text-[12px]" style={{ background: "transparent", color: "var(--text-muted)" }}>Оценить</button>
+                  <button className="flex-1 px-3 py-2 rounded-xl text-[12px]" style={{ background: "transparent", color: "var(--danger)" }}>Пожаловаться</button>
+                </div>
+              </div>
+                </div>
               </div>
             </div>
-          ) : (
-            <>
+          )}
+          <>
               {/* Рекомендуем — горизонтальная лента, только без активного поиска/фильтра */}
               {recommended.length > 0 && !searchQuery && selectedType === "all" && selectedProfession === "Все" && (
                 <div className="mb-4">
@@ -590,7 +586,6 @@ export default function AgentCityModal({
                 </div>
               )}
             </>
-          )}
         </div>
       </div>
     </div>

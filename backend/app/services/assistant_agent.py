@@ -53,6 +53,10 @@ TOOLS = [
             "media_type": {"type": "string", "enum": ["image", "video"], "description": "Тип медиа (по умолчанию image)."}
         }, "required": []}}},
     {"type": "function", "function": {
+        "name": "generate_video", "description": "СГЕНЕРИРОВАТЬ короткий видео-ролик по описанию — когда готовое видео не нашлось и пользователь СОГЛАСИЛСЯ на генерацию. Ролик покажется на экране и сохранится в Портфель. Генерация ~минуту — предупреди пользователя, что немного подождать.",
+        "parameters": {"type": "object", "properties": {
+            "prompt": {"type": "string", "description": "Что сгенерировать (напр. «прыгающие щенята на лужайке, солнечно»)"}}, "required": ["prompt"]}}},
+    {"type": "function", "function": {
         "name": "chat_media", "description": "Достать и показать МЕДИА (фото/видео) из переписки с человеком-контактом. Используй, когда просят «покажи последнее фото/видео из чата с X», «что мне присылал(а) X». Находит последнее медиа нужного типа в диалоге с этим контактом и показывает на экране.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Имя контакта (человека), из чата с которым достать медиа."}, "media_type": {"type": "string", "enum": ["image", "video", "any"], "description": "image (фото) / video (видео) / any (любое последнее). По умолчанию any."}}, "required": ["name"]}}},
     {"type": "function", "function": {
@@ -886,6 +890,36 @@ async def _deep_search(user_id: int, query: str) -> str:
     return summary
 
 
+async def _generate_video(user_id: int, prompt: str) -> tuple[str, dict | None]:
+    """Текст → картинка (qwen-image) → видео (wan i2v) → перехост → Портфель (kind=video)."""
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return ("Уточни, что сгенерировать.", None)
+    try:
+        from app.services import image_gen, wan_video
+        from app.services import digest as _dg
+        if not await wan_video.enabled():
+            return ("Генерация видео сейчас выключена (включается в админке).", None)
+        imgs = await image_gen.generate(prompt, n=1)
+        if not imgs:
+            return ("Не удалось подготовить кадр для видео (генерация картинок выключена или ошибка).", None)
+        vurl = await wan_video.generate_i2v(imgs[0], prompt)
+        if not vurl:
+            return ("Не удалось сгенерировать видео.", None)
+        local = await wan_video.rehost(vurl) or vurl
+        try:
+            await _dg.save_deliverable(user_id, prompt[:60], kind="video", media_url=local, text=prompt,
+                                       source_agent_name="🎬 Видео-генератор")
+            from app.websocket.manager import manager
+            await manager.broadcast(f"user-{user_id}", {"type": "feed_ping"})
+        except Exception as e:
+            print(f"[generate_video] save err: {e}")
+        return (f"Готово — сгенерировал видео «{prompt[:50]}» и сохранил в Портфель.", {"url": local, "type": "video"})
+    except Exception as e:
+        print(f"[generate_video] err: {e}")
+        return ("Не удалось сгенерировать видео сейчас.", None)
+
+
 async def _show_media(user_id: int, args: dict) -> tuple[str, dict | None]:
     """Возвращает (текст-результат, media|None). media = {'url':..., 'type':...}."""
     url = (args.get("url") or "").strip()
@@ -918,9 +952,9 @@ async def _show_media(user_id: int, args: dict) -> tuple[str, dict | None]:
                     return (f"Нашёл видео по запросу «{q}».", {"url": vids[0]["url"], "type": "video"})
             except Exception as e:
                 print(f"[show_media] video search err: {e}")
-            # видео не нашли — предложить генерацию (полный пайплайн генерации — следующий шаг)
-            return (f"Готового видео по «{q}» не нашёл. Предложи пользователю: «могу сгенерировать короткий ролик — "
-                    f"он сохранится в Портфель». Не генерируй сам сейчас, просто предложи.", None)
+            # видео не нашли — предложить генерацию (инструмент generate_video)
+            return (f"Готового видео по «{q}» не нашёл. Предложи пользователю сгенерировать короткий ролик "
+                    f"(инструмент generate_video) — он сохранится в Портфель. Генерируй ТОЛЬКО после согласия.", None)
         try:
             from app.services.websearch import search as _wsearch
             sr = await _wsearch(q, max_results=5)
@@ -1100,6 +1134,10 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                     result = "Не удалось создать документ (пустой текст?)."
             elif name == "show_media":
                 result, _m = await _show_media(user_id, args)
+                if _m:
+                    media = _m
+            elif name == "generate_video":
+                result, _m = await _generate_video(user_id, args.get("prompt", ""))
                 if _m:
                     media = _m
             elif name == "chat_media":

@@ -63,6 +63,17 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS owned_store_items TEXT DEFAULT '[]'",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(8) DEFAULT 'ru'",
             "ALTER TABLE assistant_requests ADD COLUMN IF NOT EXISTS auto_resolved BOOLEAN DEFAULT false",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS pay_enabled BOOLEAN DEFAULT false",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS pay_requisites TEXT",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS pay_qr_url TEXT",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS pay_mode VARCHAR(10) DEFAULT 'dynamic'",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS pay_amount INTEGER DEFAULT 0",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS promo_digest TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT false",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS session_msg_limit INTEGER DEFAULT 30",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS daily_msg_limit INTEGER DEFAULT 50",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS topic_scope TEXT",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS topic_strict BOOLEAN DEFAULT false",
         ]:
             try:
                 await conn.execute(_sqltext(_stmt))

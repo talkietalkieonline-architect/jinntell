@@ -200,8 +200,8 @@ async def admin_create_agent(
     await db.flush()
     await db.refresh(agent)
     try:
-        from app.services import discovery
-        await discovery.index_one(agent)
+        from app.services import jinn_birth
+        await jinn_birth.birth(db, agent)
     except Exception as _e:
         print(f"[discovery] index_one (create) skip: {_e}")
     return AgentDetailOut.model_validate(agent)
@@ -227,8 +227,8 @@ async def admin_update_agent(
 
     await db.flush()
     try:
-        from app.services import discovery
-        await discovery.index_one(agent)
+        from app.services import jinn_birth
+        await jinn_birth.birth(db, agent)
     except Exception as _e:
         print(f"[discovery] index_one (update) skip: {_e}")
     return AgentDetailOut.model_validate(agent)
@@ -1375,6 +1375,8 @@ INTEGRATION_KEYS = [
     {"key": "REQUESTS_AUTORESOLVE", "label": "Обращения: авто-обработка Архитектором/Супер-помощником без админа (on/off, по умолч on). Код/инструмент («Строитель») всегда требует человека"},
     {"key": "WALLET_CURRENCY", "label": "Валюта кошелька: RUB (₽, по умолч), GEL (₾ Грузия), USD, EUR, AMD. Провайдер пополнения привязан к валюте (RUB→ЮKassa)"},
     {"key": "TOKEN_PRICE_KOPECKS", "label": "Цена 1 бонусного токена в копейках (конвертация витринных токенов в стоимость; по умолч. 10)"},
+    {"key": "GUEST_MSG_LIMIT", "label": "Лимит сообщений для ГОСТЯ (без регистрации) в сутки; после — предложение завести аккаунт. По умолч. 10"},
+    {"key": "TOPIC_MIN_SIM", "label": "Тематический фокус: порог схожести (0..1) для офф-топа. Ниже порога И без RAG-хита → джин вежливо возвращает к теме. По умолч. 0.25"},
     {"key": "YOOKASSA_SHOP_ID", "label": "ЮKassa — shopId (пополнение баланса пользователей рублями)"},
     {"key": "YOOKASSA_SECRET_KEY", "label": "ЮKassa — секретный ключ (Basic-auth; вебхук на /api/wallet/yookassa-webhook)"},
     {"key": "JINA_API_KEY", "label": "Jina — API-ключ"},
@@ -2177,3 +2179,51 @@ async def council_get(sid: int, admin: User = Depends(get_admin_user), db: Async
     return {"id": s.id, "topic": s.topic, "mode": s.mode, "participants": _load(s.participants),
             "transcript": _load(s.transcript), "summary": s.summary,
             "created_at": s.created_at.isoformat() if s.created_at else None}
+
+
+@router.post("/agents/{agent_id}/birth")
+async def admin_birth_agent(agent_id: int, verify: bool = True, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Провести джина через процедуру РОЖДЕНИЯ (дефолты -> плательщик -> индекс -> самотест)."""
+    agent = (await db.execute(select(Agent).where(Agent.id == agent_id))).scalar_one_or_none()
+    if not agent:
+        raise HTTPException(404, "Агент не найден")
+    from app.services import jinn_birth
+    rep = await jinn_birth.birth(db, agent, verify=verify)
+    await db.commit()
+    return rep
+
+
+@router.post("/agents/birth-all")
+async def admin_birth_all(verify: bool = False, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Прогнать рождение по всем активным джинам (прописка в поиск + дефолты)."""
+    agents = (await db.execute(select(Agent).where(Agent.is_active == True))).scalars().all()
+    from app.services import jinn_birth
+    out = []
+    for a in agents:
+        try:
+            r = await jinn_birth.birth(db, a, verify=verify)
+            out.append({"id": a.id, "ok": True, "warnings": r.get("warnings")})
+        except Exception as e:
+            out.append({"id": a.id, "ok": False, "err": str(e)[:120]})
+    await db.commit()
+    return {"count": len(out), "results": out}
+
+
+from pydantic import BaseModel as _BaseModel
+
+
+class _DraftIn(_BaseModel):
+    brief: str
+    is_paid: bool = False
+    visibility: str = "public"
+    model: str = ""
+    agent_type: str = "specialist"
+
+
+@router.post("/agents/draft")
+async def admin_draft_agent(body: _DraftIn, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Архитектор-фабрика: по краткому ТЗ сгенерировать персону, создать джина и провести рождение (verify)."""
+    from app.services import jinn_factory
+    rep = await jinn_factory.draft(db, body.brief, is_paid=body.is_paid, visibility=body.visibility, model=(body.model or None), agent_type=body.agent_type)
+    await db.commit()
+    return rep

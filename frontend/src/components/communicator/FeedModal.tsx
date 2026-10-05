@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, type FeedEvent, type ChannelUnread } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getNewsFeed, type FeedEvent, type ChannelUnread, type NewsFeedItem } from "@/services/api";
 
 const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
 
@@ -17,6 +17,8 @@ function timeAgo(iso: string): string {
 export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void; onOpenChat?: (room: string) => void }) {
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
+  const [news, setNews] = useState<NewsFeedItem[]>([]);
+  const [newsLimit, setNewsLimit] = useState(20);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void
     getChannelsUnread().then((c) => { if (alive) setChannels(c); }).catch(() => {});
     return () => { alive = false; };
   }, []);
+  useEffect(() => { let alive = true; getNewsFeed(newsLimit).then((r) => { if (alive) setNews(r.items); }).catch(() => {}); return () => { alive = false; }; }, [newsLimit]);
 
   const handleDismiss = async (id: number) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
@@ -40,6 +43,26 @@ export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void
         </div>
 
         <div className="flex flex-col gap-3">
+          {news.length > 0 && (
+            <div className="rounded-2xl p-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+              <div className="text-[11px] uppercase tracking-wider font-semibold mb-2" style={{ color: "var(--text-muted)" }}>📰 Свежее из каналов</div>
+              <div className="flex flex-col gap-1">
+                {news.map((n) => (
+                  <button key={n.id} onClick={() => { onOpenChat?.(n.link_room); onClose(); }} className="text-left rounded-lg p-2 transition-all hover:bg-[var(--bg-glass-hover)]">
+                    <div className="text-[13px] font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{n.title}</div>
+                    <div className="text-[10px] mt-0.5 flex items-center gap-1.5" style={{ color: "var(--text-muted)" }}>
+                      <span style={{ color: n.agent_color }}>● {n.agent_name}</span>
+                      {n.created_at && <span>· {timeAgo(n.created_at)}</span>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {news.length >= newsLimit && (
+                <button onClick={() => setNewsLimit((l) => l + 20)} className="w-full mt-2 py-1.5 rounded-lg text-[12px] font-medium" style={{ background: "var(--bg-glass-hover)", color: "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>↓ Ещё новости</button>
+              )}
+            </div>
+          )}
+
           {channels.map((ch) => (
             <button key={ch.agent_id} onClick={() => { onOpenChat?.(ch.link_room); onClose(); }} className="rounded-2xl p-3.5 flex items-center gap-3 text-left transition-all hover:scale-[1.01]" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style={{ background: `${ch.color}22`, border: `1.5px solid ${ch.color}55`, color: ch.color }}>📰</div>
@@ -53,7 +76,7 @@ export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void
 
           {loading ? (
             <p className="text-[13px] text-center py-6" style={{ color: "var(--text-muted)", opacity: 0.55 }}>Загрузка…</p>
-          ) : events.length === 0 && channels.length === 0 ? (
+          ) : events.length === 0 && channels.length === 0 && news.length === 0 ? (
             <div className="rounded-2xl p-6 text-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
               <p className="text-[13px]" style={{ color: "var(--text-muted)", opacity: 0.7 }}>Пока тихо. Важные события появятся здесь.</p>
             </div>

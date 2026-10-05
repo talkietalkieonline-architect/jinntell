@@ -139,6 +139,16 @@ TOOL_REGISTRY = {
                 "text": {"type": "string", "description": "Текст (для kind=doc или как описание к медиа)"}},
                 "required": ["title", "kind"]}}},
     },
+    "issue_invoice": {
+        "category": "write", "risk": "low", "label": "Выставить счёт (QR владельца)",
+        "schema": {"type": "function", "function": {
+            "name": "issue_invoice",
+            "description": "Выставить клиенту СЧЁТ на оплату УСЛУГИ — показать прямые реквизиты/QR ВЛАДЕЛЬЦА (оплата идёт напрямую владельцу, мимо платформы). Вызывай, когда договорились об оплате услуги/работы. amount — сумма в рублях (для динамической оплаты; при фикс-режиме берётся заданная владельцем).",
+            "parameters": {"type": "object", "properties": {
+                "amount": {"type": "number", "description": "Сумма к оплате в рублях (если не фикс)"},
+                "note": {"type": "string", "description": "За что оплата (короткое описание)"}},
+                "required": []}}},
+    },
     "make_document": {
         "category": "write", "risk": "low", "label": "Составить документ",
         "schema": {"type": "function", "function": {
@@ -172,13 +182,13 @@ TOOL_REGISTRY = {
 # --- Профессия = пресет способностей ---
 PROFESSION_PRESETS = {
     "consultant": {"label": "Консультант", "tools": ["search_knowledge", "web_search", "lookup", "calc", "escalate", "save_to_portfolio"]},
-    "seller":     {"label": "Продавец",    "tools": ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "save_to_portfolio"]},
-    "manager":    {"label": "Менеджер",    "tools": ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "save_to_portfolio"]},
+    "seller":     {"label": "Продавец",    "tools": ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "save_to_portfolio", "issue_invoice"]},
+    "manager":    {"label": "Менеджер",    "tools": ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "save_to_portfolio", "issue_invoice"]},
     "support":    {"label": "Поддержка",   "tools": ["search_knowledge", "lookup", "create_lead", "remember_client", "escalate", "save_to_portfolio"]},
 }
 
 # Реально исполняемые. book_slot пока заглушка.
-_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio"}
+_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice"}
 
 
 def build_tools(enabled: list) -> list:
@@ -295,6 +305,31 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
             except Exception as e:
                 print(f"[agent_tools] save_to_portfolio err: {e}")
                 return "Не удалось сохранить в Портфель."
+        if name == "issue_invoice":
+            if not getattr(agent, "pay_enabled", False):
+                return "У этого джина не настроена прямая оплата — уточни у владельца."
+            mode = getattr(agent, "pay_mode", "dynamic") or "dynamic"
+            if mode == "fixed":
+                amt = int(getattr(agent, "pay_amount", 0) or 0)
+            else:
+                try:
+                    amt = int(float(args.get("amount") or 0))
+                except Exception:
+                    amt = 0
+            req = (getattr(agent, "pay_requisites", "") or "").strip()
+            qr = (getattr(agent, "pay_qr_url", "") or "").strip()
+            note = (args.get("note") or "").strip()
+            parts = ["💳 Счёт на оплату" + (f" ({note})" if note else "") + ":"]
+            if amt > 0:
+                parts.append(f"Сумма: {amt} ₽.")
+            elif mode == "dynamic":
+                return "Уточни сумму к оплате (amount), чтобы выставить счёт."
+            if req:
+                parts.append(f"Реквизиты: {req}.")
+            if qr:
+                parts.append(f"QR для оплаты: {qr}")
+            parts.append("Оплата идёт напрямую владельцу; после оплаты сообщи.")
+            return " ".join(parts)
         if name == "make_document":
             title = (args.get("title") or "").strip()
             content = (args.get("content") or "").strip()

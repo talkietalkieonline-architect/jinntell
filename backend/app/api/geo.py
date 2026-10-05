@@ -81,8 +81,10 @@ async def geo_check(
             # Доставка «стука» в чат с джинном
             room = f"agent-{agent.id}-u{user.id}"
             text = (gt.title or "").strip()
-            if gt.message:
-                text = (text + "\n" + gt.message).strip() if text else gt.message.strip()
+            # Тело стука: своё сообщение триггера, иначе — единый промо-дайджест джина (тот же, что по QR)
+            body = (gt.message or "").strip() or (getattr(agent, "promo_digest", None) or "").strip()
+            if body:
+                text = (text + "\n" + body).strip() if text else body
             if not text:
                 text = "У нас есть предложение для вас рядом!"
             if gt.promo_code:

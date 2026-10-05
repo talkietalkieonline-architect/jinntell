@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_current_user_optional
 from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -148,8 +148,8 @@ async def _waitlist_active(db: AsyncSession) -> bool:
 
 
 @router.post("/register")
-async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    """Регистрация: телефон + пароль + email (опционально)"""
+async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db), current=Depends(get_current_user_optional)):
+    """Регистрация: телефон + пароль + email (опционально). Если вошёл гостем — апгрейд той же учётки."""
     phone = _normalize_phone(body.phone)
     if await _is_blocked_ip(_client_ip(request)):
         await _sec_event("security.blocked", f"ip:{_client_ip(request)}")
@@ -165,35 +165,55 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     if len(body.password) < 6:
         raise HTTPException(400, "Пароль должен быть не менее 6 символов")
 
-    # Проверка: телефон уже занят?
+    # Гость? (вошёл гостем) → апгрейдим ту же учётку на месте, сохраняя историю/память/избранное
+    guest = current if (current is not None and getattr(current, "is_guest", False)) else None
+
+    # Проверка: телефон уже занят? (исключая собственную гостевую строку)
     result = await db.execute(select(User).where(User.phone == phone))
     existing = result.scalar_one_or_none()
-    if existing:
+    if existing and (guest is None or existing.id != guest.id):
         raise HTTPException(409, "Пользователь с таким номером уже зарегистрирован")
 
     # Email ОБЯЗАТЕЛЕН — нужен для восстановления пароля
     email = body.email.strip().lower() if body.email else None
     if not email or "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(400, "Укажите корректный email — он нужен для восстановления пароля")
-    if True:
-        email_exists = await db.execute(select(User).where(User.email == email))
-        if email_exists.scalar_one_or_none():
-            raise HTTPException(409, "Этот email уже используется")
+    email_exists = await db.execute(select(User).where(User.email == email))
+    _em = email_exists.scalar_one_or_none()
+    if _em and (guest is None or _em.id != guest.id):
+        raise HTTPException(409, "Этот email уже используется")
 
-    user = User(
-        phone=phone,
-        password_hash=hash_password(body.password),
-        email=email,
-        display_name=body.display_name or "Пользователь",
-        is_verified=True,
-        is_online=True,
-        last_seen=datetime.now(timezone.utc),
-    )
-    db.add(user)
-    await db.flush()
-    await db.refresh(user)
+    if guest is not None:
+        # Апгрейд гостя → полноценный аккаунт (тот же id)
+        user = guest
+        user.phone = phone
+        user.password_hash = hash_password(body.password)
+        user.email = email
+        if body.display_name:
+            user.display_name = body.display_name
+        elif not user.display_name or user.display_name == "Гость":
+            user.display_name = "Пользователь"
+        user.is_guest = False
+        user.is_verified = True
+        user.is_online = True
+        user.last_seen = datetime.now(timezone.utc)
+        await db.flush()
+    else:
+        user = User(
+            phone=phone,
+            password_hash=hash_password(body.password),
+            email=email,
+            display_name=body.display_name or "Пользователь",
+            is_verified=True,
+            is_online=True,
+            last_seen=datetime.now(timezone.utc),
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
 
-    user.jinntell_link = f"user-{user.id}"
+    if not user.jinntell_link:
+        user.jinntell_link = f"user-{user.id}"
 
     # Админ по номеру
     if settings.ADMIN_PHONES and phone in settings.ADMIN_PHONES:
@@ -265,6 +285,38 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
         user_id=user.id,
         display_name=user.display_name,
         is_admin=user.is_admin,
+    )
+
+
+@router.post("/guest", response_model=TokenResponse)
+async def guest_login(request: Request, db: AsyncSession = Depends(get_db)):
+    """Гостевой вход — чтобы пообщаться в Городе с бесплатными джиннами, без телефона и пароля.
+    Создаёт временного пользователя (is_guest=True). Платные джинны недоступны (нулевой баланс).
+    При последующей регистрации ту же учётку можно апгрейдить в полноценную (история сохранится)."""
+    import uuid
+    ip = _client_ip(request)
+    if await _is_blocked_ip(ip):
+        raise HTTPException(403, "Доступ временно заблокирован.")
+    if not await _rate_hit(f"rl:guest:ip:{ip}", 20, 3600):
+        raise HTTPException(429, _TOO_MANY)
+    user = User(
+        phone=f"g-{uuid.uuid4().hex[:14]}",
+        display_name="Гость",
+        password_hash="",
+        is_guest=True,
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
+    user.is_online = True
+    user.last_seen = datetime.now(timezone.utc)
+    await db.flush()
+    token = create_access_token(user.id)
+    return TokenResponse(
+        access_token=token,
+        user_id=user.id,
+        display_name=user.display_name,
+        is_admin=False,
     )
 
 

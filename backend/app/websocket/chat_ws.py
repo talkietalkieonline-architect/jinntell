@@ -55,6 +55,122 @@ async def _load_agent(agent_id: int) -> Optional[Agent]:
         return result.scalar_one_or_none()
 
 
+def _cosine(a, b) -> float:
+    import math
+    if not a or not b:
+        return 0.0
+    n = min(len(a), len(b))
+    dot = sum(a[i] * b[i] for i in range(n))
+    na = math.sqrt(sum(x * x for x in a[:n]))
+    nb = math.sqrt(sum(x * x for x in b[:n]))
+    return dot / (na * nb) if na and nb else 0.0
+
+
+async def _is_off_topic(agent, message: str, rag_context) -> bool:
+    """Семантический пре-гейт офф-топа. True = вне периметра (отсечь ДО генерации).
+    Сильный RAG-хит = точно по теме (override). Иначе косинус сообщение↔периметр < порога (TOPIC_MIN_SIM, деф 0.25)."""
+    scope = (getattr(agent, "topic_scope", "") or "").strip()
+    if not scope:
+        return False
+    if rag_context and len((rag_context or "").strip()) > 30:
+        return False  # RAG нашёл релевантное → по теме
+    try:
+        import json as _json
+        import hashlib
+        from app.services.embedding import get_embedding
+        from app.services.settings_store import get_setting
+        from redis import asyncio as aioredis
+        from app.core.config import settings as _st
+        anchor = f"{agent.name}. {agent.profession}. {scope}"
+        r = aioredis.from_url(_st.REDIS_URL, decode_responses=True)
+        h = hashlib.md5(anchor.encode("utf-8")).hexdigest()[:16]
+        key = f"topicemb:{agent.id}:{h}"
+        cached = await r.get(key)
+        if cached:
+            scope_vec = _json.loads(cached)
+        else:
+            scope_vec = await get_embedding(anchor)
+            if scope_vec:
+                await r.set(key, _json.dumps(scope_vec), ex=604800)
+        msg_vec = await get_embedding(message)
+        try:
+            await r.close()
+        except Exception:
+            pass
+        if not scope_vec or not msg_vec:
+            return False
+        sim = _cosine(scope_vec, msg_vec)
+        try:
+            thr = float(await get_setting("TOPIC_MIN_SIM") or 0.25)
+        except Exception:
+            thr = 0.25
+        return sim < thr
+    except Exception as e:
+        print(f"[ws] off-topic check err: {e}")
+        return False
+
+
+async def _check_limits(agent, room: str, uid: int) -> Optional[str]:
+    """Жёсткие лимиты общения (ДО генерации). Возвращает текст-заглушку при превышении, иначе None.
+    Счётчики в Redis: гость (глобально), сутки на пользователя к джину, «разговор» (окно 2ч по комнате)."""
+    if not uid:
+        return None
+    try:
+        from redis import asyncio as aioredis
+        from app.core.config import settings as _st
+        r = aioredis.from_url(_st.REDIS_URL, decode_responses=True)
+    except Exception:
+        return None
+    try:
+        from datetime import date as _date
+        day = _date.today().isoformat()
+        # гость?
+        is_guest = False
+        try:
+            async with async_session() as _db:
+                _u = await _db.get(User, uid)
+                is_guest = bool(getattr(_u, "is_guest", False)) if _u else False
+        except Exception:
+            is_guest = False
+        if is_guest:
+            try:
+                from app.services.settings_store import get_setting
+                gl = int(float(await get_setting("GUEST_MSG_LIMIT") or 10))
+            except Exception:
+                gl = 10
+            gk = f"lim:g:{uid}:{day}"
+            gc = await r.incr(gk)
+            if gc == 1:
+                await r.expire(gk, 86400)
+            if gl > 0 and gc > gl:
+                return "Чтобы продолжить общение — заведи аккаунт в JinnTell. Это быстро, и я стану твоим личным помощником 🙂"
+        dl = int(getattr(agent, "daily_msg_limit", 50) or 0)
+        if dl > 0:
+            dk = f"lim:d:{agent.id}:{uid}:{day}"
+            dc = await r.incr(dk)
+            if dc == 1:
+                await r.expire(dk, 86400)
+            if dc > dl:
+                return "На сегодня лимит общения исчерпан. Возвращайтесь завтра — я на связи!"
+        sl = int(getattr(agent, "session_msg_limit", 30) or 0)
+        if sl > 0:
+            sk = f"lim:s:{room}"
+            sc = await r.incr(sk)
+            if sc == 1:
+                await r.expire(sk, 7200)
+            if sc > sl:
+                return "Мы уже неплохо пообщались 🙂 Давайте сделаем паузу — вернитесь чуть позже, и продолжим."
+        return None
+    except Exception as e:
+        print(f"[ws] limits err: {e}")
+        return None
+    finally:
+        try:
+            await r.close()
+        except Exception:
+            pass
+
+
 async def _can_access_agent(agent: Agent, user_id: int) -> bool:
     """Доступ к агенту: скрытые — только владелец и список доступа."""
     if agent.visibility != "hidden":
@@ -555,6 +671,22 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         except Exception as _ge:
             print(f"[ws] sponsor grant err: {_ge}")
     _blocked = bool(_ptype in ("contractor", "user") and _pid and await payer_balance(_ptype, _pid) <= 0)
+    # Лимиты общения (сессия/сутки/гость) — жёстко, до вызова модели
+    _limit_reply = None
+    try:
+        _limit_reply = await _check_limits(agent, room, _uid)
+    except Exception as _le:
+        print(f"[ws] limits check err: {_le}")
+    # Тематический фокус (B): офф-топ отсекаем ДО дорогой генерации (семантический пре-гейт)
+    _topic_reply = None
+    try:
+        if not _limit_reply and not _blocked and getattr(agent, "topic_strict", False):
+            if await _is_off_topic(agent, user_message, rag_context):
+                _sc = (getattr(agent, "topic_scope", "") or "").strip()
+                _topic_reply = (f"Я по теме: {_sc[:140]} 🙂 Спросите про это — с радостью помогу."
+                                if _sc else "Давайте вернёмся к моей теме 🙂")
+    except Exception as _te:
+        print(f"[ws] topic gate err: {_te}")
     _agent_kwargs = dict(
         agent_name=agent.name,
         agent_profession=agent.profession,
@@ -591,7 +723,11 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
             _agent_kwargs["system_prompt"] = (_agent_kwargs.get("system_prompt") or agent.system_prompt or "") + f"\n\nЗапрещённые темы проекта (НЕ обсуждай, вежливо уходи от них): {', '.join(_gb)}."
     except Exception:
         pass
-    if _blocked:
+    if _limit_reply:
+        reply_text = _limit_reply
+    elif _topic_reply:
+        reply_text = _topic_reply
+    elif _blocked:
         if _ptype == "user" and getattr(agent, "is_paid", False):
             reply_text = "🔒 Это платный джинн, а на балансе недостаточно средств. Пополните баланс, чтобы продолжить общение."
         else:
@@ -808,6 +944,7 @@ async def chat_websocket(websocket: WebSocket, room: str):
             "color": agent.color,
             "photo_url": agent.photo_url,
             "greeting": agent.greeting,
+            "promo_digest": getattr(agent, "promo_digest", None),
             "tts_voice_id": agent.tts_voice_id,
             "tts_emotion": agent.tts_emotion,
         }

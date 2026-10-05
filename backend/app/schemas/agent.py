@@ -19,6 +19,16 @@ class AgentOut(BaseModel):
     city: Optional[str] = None
     is_paid: bool = False
     unavailable_message: Optional[str] = None
+    pay_enabled: bool = False
+    pay_requisites: Optional[str] = None
+    pay_qr_url: Optional[str] = None
+    pay_mode: str = "dynamic"
+    pay_amount: int = 0
+    promo_digest: Optional[str] = None
+    session_msg_limit: int = 30
+    daily_msg_limit: int = 50
+    topic_scope: Optional[str] = None
+    topic_strict: bool = False
     jinntell_link: Optional[str] = None
     rating: float
     rating_count: int
@@ -29,6 +39,7 @@ class AgentOut(BaseModel):
     video_enabled: bool = False
     video_mode: str = "bubble"
     intro_video_url: Optional[str] = None
+    photo_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -158,6 +169,16 @@ class AgentUpdate(BaseModel):
     city: Optional[str] = Field(None, max_length=120)
     is_paid: Optional[bool] = None
     unavailable_message: Optional[str] = Field(None, max_length=500)
+    pay_enabled: Optional[bool] = None
+    pay_requisites: Optional[str] = Field(None, max_length=1000)
+    pay_qr_url: Optional[str] = Field(None, max_length=1000)
+    pay_mode: Optional[str] = Field(None, max_length=10)
+    pay_amount: Optional[int] = None
+    promo_digest: Optional[str] = Field(None, max_length=2000)
+    session_msg_limit: Optional[int] = None
+    daily_msg_limit: Optional[int] = None
+    topic_scope: Optional[str] = Field(None, max_length=2000)
+    topic_strict: Optional[bool] = None
 
     system_prompt: Optional[str] = Field(None, max_length=5000)
     llm_model: Optional[str] = Field(None, max_length=100)

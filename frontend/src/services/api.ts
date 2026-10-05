@@ -132,6 +132,14 @@ export async function login(phone: string, password: string): Promise<TokenRespo
   return res;
 }
 
+/** Гостевой вход — осмотреться в Городе без регистрации (историю потом можно забрать в аккаунт) */
+export async function guestLogin(): Promise<TokenResponse> {
+  const res = await apiFetch<TokenResponse>("/api/auth/guest", { method: "POST" });
+  setToken(res.access_token);
+  _saveSession(res);
+  return res;
+}
+
 /** Запрос кода восстановления на email */
 export function forgotPassword(email: string): Promise<MessageResponse> {
   return apiFetch("/api/auth/forgot-password", {
@@ -230,8 +238,19 @@ export interface AgentOut {
   scope?: string;
   city?: string | null;
   is_paid?: boolean;
+  pay_enabled?: boolean;
+  pay_requisites?: string | null;
+  pay_qr_url?: string | null;
+  pay_mode?: string;
+  pay_amount?: number;
+  promo_digest?: string | null;
+  session_msg_limit?: number;
+  daily_msg_limit?: number;
+  topic_scope?: string | null;
+  topic_strict?: boolean;
   corporate?: boolean;
   intro_video_url?: string | null;
+  photo_url?: string | null;
 }
 
 export interface CityOut { id: number; name: string; slug: string; lat?: number | null; lng?: number | null; is_active?: boolean }
@@ -380,6 +399,17 @@ export interface AgentFullOut extends AgentOut {
 
 /** Обновление настроек персонажа агента */
 export interface AgentPersonaUpdate {
+  // Оплата (контур 1 — прямая владельцу)
+  pay_enabled?: boolean;
+  pay_requisites?: string;
+  pay_qr_url?: string;
+  pay_mode?: string;
+  pay_amount?: number;
+  promo_digest?: string;
+  session_msg_limit?: number;
+  daily_msg_limit?: number;
+  topic_scope?: string;
+  topic_strict?: boolean;
   // AI / текст
   description?: string;
   greeting?: string;
@@ -513,6 +543,8 @@ export function getChannelPosts(agentId: number, limit = 30): Promise<ChannelPos
 }
 export interface ChannelUnread { agent_id: number; name: string; color: string; unread: number; link_room: string }
 export function getChannelsUnread(): Promise<ChannelUnread[]> { return apiFetch("/api/channels/unread"); }
+export interface NewsFeedItem { id: number; agent_id: number; agent_name: string; agent_color: string; title: string; body?: string | null; url?: string | null; link_room: string; created_at: string | null; }
+export function getNewsFeed(limit = 30): Promise<{ items: NewsFeedItem[]; subscribed?: boolean }> { return apiFetch(`/api/channels/feed?limit=${limit}`); }
 export function getChannels(): Promise<ChannelUnread[]> { return apiFetch("/api/channels"); }
 export function markChannelRead(agentId: number): Promise<{ ok: boolean }> { return apiFetch(`/api/channels/${agentId}/read`, { method: "POST" }); }
 export interface IntentResult { action: string; target: string; text: string; query: string }
@@ -1054,6 +1086,8 @@ export interface ContractorBilling {
     by_model: { model: string; amount: number; tokens: number; calls: number }[];
   };
   all_time: { total: number; tokens: number };
+  tariff?: { model: string; sell_per_mtok: number; avg_answer_tokens: number; rub_per_answer: number }[];
+  avg_answer_tokens?: number;
 }
 /** Контрагент: счёт и баланс */
 export function contractorGetBilling(): Promise<ContractorBilling> {
@@ -1413,6 +1447,7 @@ export interface UserProfile {
   custom_accent?: string;
   is_online: boolean;
   is_admin: boolean;
+  is_guest?: boolean;
   bio?: string;
   // Персональные данные
   email?: string;
