@@ -816,7 +816,8 @@ export default function Home() {
         localStorage.removeItem("jinntell_open_mode");
         const agentId = parseInt(pendingAgent, 10);
         if (!isNaN(agentId)) {
-          openAgentChat(agentId, undefined, { flow: mode === "flow" });
+          if (mode === "home") { setCityPreselect(agentId); setCityOpen(true); }
+          else { openAgentChat(agentId, undefined, { flow: mode === "flow" }); }
         }
       }
     }
@@ -1143,6 +1144,7 @@ export default function Home() {
           setBusinessOpen(true);
         }}
         onStartChat={handlePickAgent}
+        onTalk={(id) => { setCityOpen(false); setCityPreselect(null); openAgentChat(id, undefined, { flow: true }); }}
         isAdmin={isAdmin}
         onOpenAdmin={() => {
           setCityOpen(false);

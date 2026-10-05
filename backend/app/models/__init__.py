@@ -29,3 +29,4 @@ from app.models.wallet_ledger import WalletLedger
 from app.models.bonus_grant import BonusGrant
 from app.models.sponsor_campaign import SponsorCampaign
 from app.models.council_session import CouncilSession
+from app.models.fuel_queue import FuelQueueEntry

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 /**
@@ -34,6 +34,8 @@ export default function JinnTellLinkPage() {
   const [agent, setAgent] = useState<AgentPublic | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [entering] = useState(true);  // авто-вход сразу в Прихожую (дом)
+  const didEnter = useRef(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -55,7 +57,7 @@ export default function JinnTellLinkPage() {
 
   /** Открыть джина: mode "flow" = голос-первый Поток, "chat" = обычный чат.
    *  page.tsx подхватит intent из localStorage и разведёт по режиму. */
-  const openAgent = async (mode: "flow" | "chat") => {
+  const openAgent = async (mode: "home" | "flow" | "chat") => {
     if (agent) {
       localStorage.setItem("jinntell_open_agent", String(agent.id));
       localStorage.setItem("jinntell_open_mode", mode);
@@ -75,6 +77,12 @@ export default function JinnTellLinkPage() {
     } catch { /* оффлайн — уйдём на обычный вход */ }
     router.push("/");
   };
+
+  // Авто-вход: сразу открываем Прихожую (дом) без промежуточного экрана
+  useEffect(() => {
+    if (agent && !didEnter.current) { didEnter.current = true; openAgent("home"); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent]);
 
   // ── Loading ──
   if (loading) {
@@ -116,7 +124,19 @@ export default function JinnTellLinkPage() {
     );
   }
 
-  // ── Agent Card ──
+  // ── Авто-вход в Прихожую (дом) — показываем короткий лоадер и уходим в приложение ──
+  if (entering) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a" }}>
+        <div className="text-center">
+          <div className="text-2xl font-bold mb-2" style={{ color: agent.color || "#d4a843" }}>{agent.name}</div>
+          <div className="text-sm" style={{ color: "rgba(245,240,232,0.6)" }}>Входим в дом джина…</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Agent Card (fallback, не показывается при авто-входе) ──
   const agentColor = agent.color || "#d4a843";
   const initial = agent.name.charAt(0).toUpperCase();
   const stars = "★".repeat(Math.round(agent.rating)) + "☆".repeat(5 - Math.round(agent.rating));
@@ -221,14 +241,25 @@ export default function JinnTellLinkPage() {
           </span>
         </div>
 
-        {/* CTA — голос-первый (главное) + написать */}
+        {/* CTA — зайти в дом джина (главное) + голос/чат */}
         <button
-          onClick={() => openAgent("flow")}
+          onClick={() => openAgent("home")}
           className="w-full py-4 rounded-2xl text-lg font-bold transition-all active:scale-[0.98]"
           style={{
             background: `linear-gradient(135deg, ${agentColor}, ${agentColor}cc)`,
             color: "#0a0a0a",
             boxShadow: `0 4px 20px ${agentColor}40`,
+          }}
+        >
+          🏠 Зайти в дом джина
+        </button>
+        <button
+          onClick={() => openAgent("flow")}
+          className="w-full mt-2 py-3 rounded-2xl text-sm font-semibold transition-all active:scale-[0.98]"
+          style={{
+            background: "rgba(255,255,255,0.05)",
+            color: "#f5f0e8",
+            border: `1px solid ${agentColor}30`,
           }}
         >
           🎙 Спросить голосом

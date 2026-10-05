@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.database import engine, Base, async_session
 from app.api.auth import router as auth_router
+from app.api.queue import router as queue_router
 from app.api.agents import router as agents_router
 from app.api.chat import router as chat_router
 from app.api.users import router as users_router
@@ -74,6 +75,8 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS daily_msg_limit INTEGER DEFAULT 50",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS topic_scope TEXT",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS topic_strict BOOLEAN DEFAULT false",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS queue_enabled BOOLEAN DEFAULT false",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS queue_limit_liters INTEGER DEFAULT 30",
         ]:
             try:
                 await conn.execute(_sqltext(_stmt))
@@ -136,6 +139,7 @@ app.include_router(contractor_agents_router)
 app.include_router(rag_router)
 app.include_router(tts_router)
 app.include_router(stt_router)
+app.include_router(queue_router)
 app.include_router(feed_router)
 app.include_router(rooms_router)
 app.include_router(contacts_router)

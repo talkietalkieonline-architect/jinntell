@@ -41,6 +41,7 @@ export default function AgentCityModal({
   onOpenAdmin,
   initialAgentId,
   onOpenCityscape,
+  onTalk,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -50,6 +51,7 @@ export default function AgentCityModal({
   onOpenAdmin?: () => void;
   initialAgentId?: number | null;
   onOpenCityscape?: () => void;
+  onTalk?: (agentId: number) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProfession, setSelectedProfession] = useState("Все");
@@ -171,7 +173,7 @@ export default function AgentCityModal({
               {(user?.balance_kopecks ?? 0) <= 0 && <p className="text-[11px] mb-3" style={{ color: "var(--danger)" }}>Баланс пуст — пополните, иначе джинн не ответит.</p>}
               <div className="flex gap-2">
                 <button onClick={() => setPaidConfirm(null)} className="flex-1 py-2 rounded-xl text-sm" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>Отмена</button>
-                <button onClick={() => { const id = paidConfirm.id; setPaidConfirm(null); setSelectedAgent(null); onStartChat?.(id); }} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Продолжить</button>
+                <button onClick={() => { const id = paidConfirm.id; setPaidConfirm(null); setSelectedAgent(null); onTalk?.(id); }} className="flex-1 py-2 rounded-xl text-sm font-semibold" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Продолжить</button>
               </div>
             </div>
           </div>
@@ -424,12 +426,22 @@ export default function AgentCityModal({
                 <button
                   onClick={() => {
                     if (agentDetails.is_paid) { setPaidConfirm({ id: agentDetails.id, name: agentDetails.name }); }
-                    else { setSelectedAgent(null); onStartChat?.(agentDetails.id); }
+                    else { setSelectedAgent(null); onTalk?.(agentDetails.id); }
                   }}
                   className="w-full px-4 py-3 rounded-xl text-sm font-semibold flex items-center gap-2"
                   style={{ background: "var(--accent)", color: "var(--bg-deep)" }}
                 >
-                  💬 Поговорить
+                  🎙 Задать вопрос
+                </button>
+                <button
+                  onClick={() => {
+                    if (agentDetails.is_paid) { setPaidConfirm({ id: agentDetails.id, name: agentDetails.name }); }
+                    else { setSelectedAgent(null); onStartChat?.(agentDetails.id); }
+                  }}
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
+                  style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }}
+                >
+                  💬 Написать / голосовое
                 </button>
                 <button
                   onClick={() => { if (!isFav(agentDetails.id)) toggleAdd(agentDetails.id); }}
@@ -443,7 +455,13 @@ export default function AgentCityModal({
                   className="w-full px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
                   style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}
                 >
-                  🛍 Витрина / магазин <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>скоро</span>
+                  📽 Презентация <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>скоро</span>
+                </button>
+                <button
+                  className="w-full px-4 py-3 rounded-xl text-sm font-medium flex items-center gap-2"
+                  style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}
+                >
+                  🛍 Витрина / магазин <span className="text-[10px] ml-auto" style={{ color: "var(--text-muted)" }}>позже</span>
                 </button>
                 <div className="flex gap-2 mt-1">
                   <button className="flex-1 px-3 py-2 rounded-xl text-[12px]" style={{ background: "transparent", color: "var(--text-muted)" }}>Оценить</button>

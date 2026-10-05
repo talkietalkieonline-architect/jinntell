@@ -134,6 +134,8 @@ class Agent(Base):
 
     # Фото агента (внешность = загруженное фото; аватар + источник видео)
     photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    queue_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    queue_limit_liters: Mapped[int] = mapped_column(Integer, default=30)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

@@ -177,6 +177,13 @@ TOOL_REGISTRY = {
             "parameters": {"type": "object", "properties": {
                 "when": {"type": "string"}, "contact": {"type": "string"}}, "required": ["when", "contact"]}}},
     },
+    "queue_register": {
+        "schema": {"type": "function", "function": {
+            "name": "queue_register",
+            "description": "Записать авто в очередь на заправку на этой АЗС (нужны гос-номер, тип топлива, литры). Вызывай, когда пользователь согласился записаться.",
+            "parameters": {"type": "object", "properties": {
+                "car_plate": {"type": "string"}, "fuel_type": {"type": "string"}, "liters": {"type": "number"}}, "required": ["car_plate", "fuel_type", "liters"]}}},
+    },
 }
 
 # --- Профессия = пресет способностей ---
@@ -188,7 +195,7 @@ PROFESSION_PRESETS = {
 }
 
 # Реально исполняемые. book_slot пока заглушка.
-_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice"}
+_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register"}
 
 
 def build_tools(enabled: list) -> list:
@@ -280,6 +287,8 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
             except Exception as e:
                 print(f"[agent_tools] lead log err: {e}")
             return "Заявка записана — компания свяжется с клиентом."
+        if name == "queue_register":
+            return await _queue_register_exec(agent, user_id, args.get("car_plate"), args.get("fuel_type"), args.get("liters"))
         if name == "save_to_portfolio":
             if not user_id:
                 return "Не могу сохранить — нет пользователя в контексте."
@@ -440,3 +449,72 @@ async def reply_with_tools(db, agent, agent_kwargs: dict, enabled: list, max_ite
         except Exception:
             final = ""
     return final or "Готов помочь — уточните, пожалуйста, вопрос."
+
+
+# --- Очередь на заправку (инструмент queue_register) ---
+async def _queue_register_exec(agent, user_id, plate, fuel, liters) -> str:
+    import re as _re
+    import secrets as _secrets
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from sqlalchemy import select as _select, func as _safunc
+    from app.core.database import async_session as _async_session
+    from app.models.fuel_queue import FuelQueueEntry as _FQ
+
+    plate_raw = (plate or "").strip().upper()
+    plate_norm = _re.sub(r"[^A-ZА-Я0-9]", "", plate_raw)
+    if len(plate_norm) < 4:
+        return "Назовите, пожалуйста, гос-номер автомобиля (например, А123ВС177)."
+    fuel = (fuel or "").strip()
+    if not fuel:
+        return "Какое топливо вам нужно? (например, АИ-95)"
+    try:
+        lit = float(liters)
+    except Exception:
+        lit = 0
+    if lit <= 0:
+        return "Сколько литров заправить?"
+    limit = int(getattr(agent, "queue_limit_liters", 30) or 30)
+    if lit > limit:
+        return f"На этой АЗС лимит {limit} л за раз. Укажите объём до {limit} л."
+    try:
+        async with _async_session() as s:
+            since = _dt.now(_tz.utc) - _td(hours=2)
+            dup = (await s.execute(_select(_FQ).where(
+                _FQ.car_plate == plate_norm,
+                _FQ.created_at >= since,
+                _FQ.status == "waiting"))).scalars().first()
+            if dup:
+                return f"Номер {plate_raw} уже в очереди (код {dup.code}). Повторная запись — не раньше чем через 2 часа."
+            waiting = (await s.execute(_select(_safunc.count(_FQ.id)).where(
+                _FQ.agent_id == agent.id, _FQ.status == "waiting"))).scalar() or 0
+            number = int(waiting) + 1
+            code = "Q-" + _secrets.token_hex(3).upper()
+            e = _FQ(agent_id=agent.id, user_id=user_id or None, car_plate=plate_norm,
+                    fuel_type=fuel, liters=lit, number=number, code=code, status="waiting")
+            s.add(e)
+            await s.commit()
+    except Exception as ex:
+        print(f"[queue_register] err: {ex}")
+        return "Не удалось записать в очередь, попробуйте ещё раз."
+    qr_url = f"https://jinntell.ru/api/queue/{code}/qr.svg"
+    cap = f"Ваш талон в очередь — №{number}, код {code}. Покажите на АЗС, заправитесь без очереди."
+    try:
+        if user_id:
+            from app.models.message import Message as _Msg
+            from app.websocket.manager import manager as _mgr
+            room = f"agent-{agent.id}-u{user_id}"
+            async with _async_session() as s2:
+                m = _Msg(room=room, sender_type="agent", sender_agent_id=agent.id,
+                         sender_name=getattr(agent, "name", "Джинн"), text=cap,
+                         media_url=qr_url, media_type="image")
+                s2.add(m); await s2.commit(); await s2.refresh(m)
+                _mid = m.id; _created = m.created_at.isoformat()
+            await _mgr.broadcast(room, {"type": "message", "id": _mid, "room": room,
+                "sender_type": "agent", "sender_agent_id": agent.id,
+                "sender_name": getattr(agent, "name", "Джинн"), "text": cap,
+                "media_url": qr_url, "media_type": "image",
+                "created_at": _created, "agent_color": getattr(agent, "color", None)})
+    except Exception as _ex:
+        print(f"[queue_register] media send err: {_ex}")
+    return (f"Записал в очередь! Номер: {number}, код: {code}. Талон с QR — выше в чате; "
+            f"покажите оператору на АЗС. Чтобы талон сохранился в сообщениях — зарегистрируйтесь в JinnTell.")
