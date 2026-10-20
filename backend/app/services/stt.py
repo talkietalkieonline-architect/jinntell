@@ -32,6 +32,24 @@ async def _to_oggopus(audio: bytes) -> bytes:
         if proc.returncode == 0 and out:
             return out
         log.warning("[stt] ffmpeg rc=%s: %s", proc.returncode, (err or b"")[:200])
+        # Запасной путь: часть mp4/m4a (запись с iPhone) читается только из файла, не из потока
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".m4a", delete=False) as tf:
+            tf.write(audio)
+            path = tf.name
+        try:
+            proc2 = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                "-i", path, "-vn", "-ac", "1", "-c:a", "libopus", "-f", "ogg", "pipe:1",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            out2, err2 = await proc2.communicate()
+            if proc2.returncode == 0 and out2:
+                return out2
+            log.warning("[stt] ffmpeg (файл) rc=%s: %s", proc2.returncode, (err2 or b"")[:200])
+        finally:
+            os.unlink(path)
     except FileNotFoundError:
         log.warning("[stt] ffmpeg не найден — отправляю аудио как есть")
     except Exception as e:

@@ -162,7 +162,8 @@ def _clean_reasoning(text: str) -> str:
     result = chr(10).join(clean_lines).strip()
 
     # Обрезанный хвост (незаконченное предложение)
-    if result and result[-1] not in '.!?»"' + chr(10):
+    # JSON/скобки — законченный структурный ответ, не «предложение» (иначе ломается разбор JSON)
+    if result and result[-1] not in '.!?»"]})' + chr(10):
         last_dot = max(result.rfind('.'), result.rfind('!'), result.rfind('?'))
         if last_dot > len(result) // 2:
             result = result[:last_dot + 1]

@@ -16,6 +16,8 @@ export interface ChatMessage {
   mediaType?: "image" | "video" | "note" | "voice";
   /** Реплика из другой комнаты (контекст) — показываем приглушённо */
   context?: boolean;
+  /** Какой джинн сказал (для голоса и подсветки говорящего в Потоке) */
+  agentId?: number;
 }
 
 /** Стабильные высоты волновых столбиков (без рандома при каждом рендере) */
@@ -36,12 +38,12 @@ function ttsVoice(sender?: string): string {
   return localStorage.getItem("jinntell_assistant_voice") || "ermil";
 }
 
-async function playServerTTS(text: string, voice: string = "ermil", emotion: string = "neutral", id: string | number | null = null) {
+async function playServerTTS(text: string, voice: string = "ermil", emotion: string = "neutral", id: string | number | null = null, agentId: number | null = null) {
   try { _ttsAudio?.pause(); } catch {}
   _ttsAudio = null;
   _playingMsgId = id;
   window.dispatchEvent(new Event("jinntell_tts_start"));
-  const url = await ttsBlobUrl(text, voice, emotion);
+  const url = await ttsBlobUrl(text, voice, emotion, agentId);
   if (!url) {
     const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
     if (synth) {
@@ -587,7 +589,7 @@ export default function ChatArea({
       if (msg.sender !== "user" && msg.text) {
         const v = msg.sender === "agent" ? (agentInfo?.tts_voice_id || "ermil") : ttsVoice(msg.sender);
         const emo = msg.sender === "agent" ? (agentInfo?.tts_emotion || "neutral") : "neutral";
-        playServerTTS(msg.text, v, emo, msg.id);
+        playServerTTS(msg.text, v, emo, msg.id, msg.sender === "agent" ? (agentInfo?.id ?? null) : null);
       }
     }
   }, [messages, autoSpeak]);

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useChat } from "@/hooks/useChat";
 import SplashScreen from "@/components/auth/SplashScreen";
@@ -181,6 +181,19 @@ export default function Home() {
     } catch { /* noop */ }
   }, [user?.assistant_voice]);
   const askOnb = useCallback((text: string) => { pushAssistant(text); void speak(text); }, [pushAssistant, speak]);
+  // Сервер просит помощника сказать (напоминания АЗС и т.п.): показать + озвучить его голосом; вкладка свёрнута — уведомление браузера
+  const assistantSayRef = useRef<(text: string) => void>(() => {});
+  useEffect(() => {
+    assistantSayRef.current = (text: string) => {
+      pushAssistant(text);
+      void speak(text);
+      try {
+        if (typeof document !== "undefined" && document.hidden && "Notification" in window && Notification.permission === "granted") {
+          new Notification(assistantName, { body: text });
+        }
+      } catch { /* noop */ }
+    };
+  }, [pushAssistant, speak, assistantName]);
   useEffect(() => {
     if (!user) return;
     try { if (localStorage.getItem(onbKey())) return; } catch { return; }
@@ -262,6 +275,9 @@ export default function Home() {
         } else if (type === "feed_ping") {
           window.dispatchEvent(new Event("jinntell_feed_ping"));
         } else if (type === "day_ping") {
+          window.dispatchEvent(new Event("jinntell_day_ping"));
+        } else if (type === "assistant_say" && (data as { text?: string }).text) {
+          assistantSayRef.current((data as { text?: string }).text || "");
           window.dispatchEvent(new Event("jinntell_day_ping"));
         } else if (type === "chat_ping" && data.room) {
           const pinged = data.room;
@@ -434,11 +450,18 @@ export default function Home() {
   const closeChatRef = useRef<(r: string) => void>(() => {});
 
   /** Ввод к помощнику: перехват голосовых/текстовых команд */
+  // откуда пришла просьба «найди джина»: из Потока ИЛИ со словом «поток» («пригласи в поток джина АЗС») —
+  // джин появляется в Потоке; иначе — в чате (viewRef — выше)
+  const flowIntentRef = useRef(false);
   const summonJinn = useCallback(async (name: string): Promise<boolean> => {
     try {
       const q = name.toLowerCase().trim();
+      const qNums: string[] = q.match(/\d+/g) || [];
       const relevant = (ag: { name: string; profession?: string }) => {
         const hay = (ag.name + " " + (ag.profession || "")).toLowerCase();
+        // номер в просьбе («АЗС 1») обязан совпасть с номером в имени — иначе откроем не ту станцию
+        const nameNums: string[] = ag.name.match(/\d+/g) || [];
+        if (qNums.some((n) => !nameNums.includes(n))) return false;
         return q.split(/\s+/).some((w) => w.length >= 3 && hay.includes(w))
           || hay.split(/\s+/).some((w) => w.length >= 3 && q.includes(w));
       };
@@ -446,15 +469,43 @@ export default function Home() {
       let a = res.agents.find((x) => x.name.toLowerCase() === q)
         || res.agents.find(relevant);
       if (!a) { const d = await discoverAgents(name, 3); a = d.find(relevant); }
-      if (a) { openAgentChat(a.id, { name: a.name, color: a.color }); setCommandHint(`Позвал джинна: ${a.name}`); return true; }
+      if (a) {
+        const toFlow = viewRef.current === "flow" || flowIntentRef.current;
+        flowIntentRef.current = false;
+        openAgentChat(a.id, { name: a.name, color: a.color }, { flow: toFlow });
+        setCommandHint(`Позвал джинна: ${a.name}`);
+        return true;
+      }
     } catch { /* noop */ }
     return false;
   }, [openAgentChat]);
 
-  const runDirectives = useCallback(async (directives: { action: string; name?: string; to?: string; text?: string }[]) => {
+  const runDirectives = useCallback(async (directives: { action: string; name?: string; to?: string; text?: string; agent_id?: number; mode?: string; room?: string; all?: boolean; names?: string[] }[]) => {
     const uid = getUserId();
     for (const d of directives) {
       const nm = (d.name || d.to || "").trim();
+      if (d.action === "open_room" && d.room) {
+        // помощник собрал круглый стол — Поток переключается на комнату с джиннами
+        flowIntentRef.current = false;
+        setRoom(d.room);
+        setView("flow");
+        setCommandHint(`Круглый стол: ${(d.names || []).join(", ")}`);
+        continue;
+      }
+      if (d.action === "release") {
+        // отпустили всех — назад к разговору вдвоём (после короткой реплики помощника)
+        if (d.all) { awaitingReleaseRef.current = false; pendingReleaseRef.current = -1; setTimeout(() => setRoom(assistantRoom), 150); }
+        continue;
+      }
+      if (d.action === "open_chat" && d.agent_id) {
+        // сервер уже точно определил джинна Города — открываем его, без угадывания по словам
+        // режим задаёт помощник (flow — Поток, chat — чат); иначе — по тому, где сейчас человек
+        const toFlow = d.mode === "flow" ? true : d.mode === "chat" ? false : (viewRef.current === "flow" || flowIntentRef.current);
+        flowIntentRef.current = false;
+        openAgentChat(Number(d.agent_id), { name: nm || undefined }, { flow: toFlow });
+        setCommandHint(`Позвал джинна: ${nm}`);
+        continue;
+      }
       if (d.action === "open_chat") {
         const c = nm ? findContact(nm) : undefined;
         if (c) openDM(c); else await summonJinn(nm);
@@ -468,7 +519,7 @@ export default function Home() {
         const c = nm ? findContact(nm) : undefined; if (c && d.text) dmSend(c.id, d.text);
       }
     }
-  }, [findContact, openDM, summonJinn]);
+  }, [findContact, openDM, summonJinn, openAgentChat, setRoom, assistantRoom]);
 
   const classifyAndAct = useCallback(async (t: string) => {
     let intent;
@@ -509,6 +560,31 @@ export default function Home() {
     }
     sendMessage(t);
   }, [findContact, openDM, summonJinn, sendMessage, pushAssistant, room, assistantRoom]);
+
+  // ── Круглый стол в Потоке: помощник — ведущий; отпустить джинна(ов) — по его вопросу «Отпустить?» ──
+  const awaitingReleaseRef = useRef(false);
+  const pendingReleaseRef = useRef<number>(-1);  // ≥0: после ответа джинна на «спасибо/всё» спросить «отпустить?»
+  const askRelease = useCallback(() => {
+    const names = room.startsWith("room-") ? roomMembers.map((m) => m.name) : (agentInfo ? [agentInfo.name] : []);
+    const who = names.length ? names.map((n) => `«${n}»`).join(", ") : "джинна";
+    awaitingReleaseRef.current = true;
+    pushAssistant(`Отпустить ${who}? Скажите «да» — или «оставь».`);
+  }, [room, roomMembers, agentInfo, pushAssistant]);
+  const releaseAll = useCallback(() => {
+    awaitingReleaseRef.current = false;
+    pendingReleaseRef.current = -1;
+    pushAssistant("Отпускаю. Дальше говорим вдвоём.");
+    setTimeout(() => setRoom(assistantRoom), 150);  // реплика успевает встать в очередь озвучки до смены комнаты
+  }, [pushAssistant, setRoom, assistantRoom]);
+  // «Дженни, …» в разговоре с джинном(ами): помощник отвечает НА МЕСТЕ (не уводит из Потока), может пригласить/отпустить
+  const askAssistantInFlow = useCallback((t: string) => {
+    setCommandHint("💭 думаю…");
+    assistantAct(t, undefined, "flow", room).then((r) => {
+      setCommandHint("");
+      if (r.reply) pushAssistant(r.reply);
+      if (r.directives && r.directives.length) runDirectives(r.directives);
+    }).catch(() => setCommandHint(""));
+  }, [room, pushAssistant, runDirectives]);
 
   const handleSend = useCallback((text: string) => {
     if (onboarding) {
@@ -565,6 +641,18 @@ export default function Home() {
         return;
       }
     }
+    // Разговор с джинном(ами) в Потоке: ответ на «Отпустить?»; «спасибо / всё» → после ответа джинна помощник спросит «Отпустить?»
+    if (view === "flow" && (room.startsWith("agent-") || room.startsWith("room-"))) {
+      const raw = text.trim().toLowerCase().replace(/[.!?,]+$/g, "");
+      if (awaitingReleaseRef.current) {
+        awaitingReleaseRef.current = false;
+        if (/^(да|ага|угу|отпусти|отпускай|давай|конечно|можно)/.test(raw)) { releaseAll(); return; }
+        if (/^(нет|не надо|оставь|пусть|не отпускай)/.test(raw)) { pushAssistant("Хорошо, оставляю на связи."); return; }
+      }
+      if (/^(спасибо|благодарю|всё|все|хватит|пока|до свидания)/.test(raw) && raw.split(/\s+/).length <= 4) {
+        pendingReleaseRef.current = messages.length;
+      }
+    }
     const inAssistant = view === "feed" || room === assistantRoom;
     if (inAssistant) {
       let t = text.trim();
@@ -574,11 +662,12 @@ export default function Home() {
       if (/^(?:вкл\w*\s+|включи\s+|открой\s+|запусти\s+)?(?:поток|без рук|hands.?free)\.?$/i.test(t)) { flowReturnRef.current = { view, room }; setRoom(assistantRoom); setView("flow"); setCommandHint(""); return; }
       // Помощник на инструментах (tool-calling): модель сама выбирает действия и компонует их
       if (assistantBusyRef.current) return; // не накладываем второй запрос поверх (гасит петлю/наложение)
+      flowIntentRef.current = /поток/i.test(t);  // «пригласи/позови … в поток» → найденный джин откроется в Потоке
       if (view === "feed") { setRoom(assistantRoom); setView("chat"); }
       assistantBusyRef.current = true;
       pushUser(t);
       setCommandHint("💭 думаю…");
-      assistantAct(t).then((r) => {
+      assistantAct(t, undefined, view === "flow" ? "flow" : "chat").then((r) => {
         setCommandHint("");
         if (r.reply || r.media_url) pushAssistant(r.reply || "", r.media_url ? { url: r.media_url, type: r.media_type || "image" } : undefined);
         if (r.directives && r.directives.length) runDirectives(r.directives);
@@ -586,7 +675,7 @@ export default function Home() {
       return;
     }
     sendMessage(text);
-  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct, onboarding, pushAssistant, askOnb]);
+  }, [view, room, assistantRoom, assistantName, findContact, openDM, sendMessage, setRoom, summonJinn, classifyAndAct, onboarding, pushAssistant, askOnb, releaseAll, messages]);
 
   // Команда помощнику ПРЯМО из чата (короткий тап микрофона): помощник действует в ЭТОЙ комнате (add_to_chat и др.)
   const runAssistantInChat = useCallback((t: string) => {
@@ -753,6 +842,32 @@ export default function Home() {
   }, []);
   useEffect(() => { setAssistantPhoto(user?.assistant_photo || null); }, [user?.assistant_photo]);
   useEffect(() => { if (user?.assistant_voice) { try { localStorage.setItem("jinntell_assistant_voice", user.assistant_voice); } catch { /* noop */ } } }, [user?.assistant_voice]);
+  // актуальный handleSend для отложенной отправки (вопрос помощнику после возврата из джина в Потоке)
+  const handleSendRef = useRef(handleSend);
+  useEffect(() => { handleSendRef.current = handleSend; }, [handleSend]);
+
+  // Поток: реплики текущей комнаты (озвучиваются очередью) и голоса участников круглого стола
+  const flowUtterances = useMemo(() => messages
+    .filter((m) => m.sender !== "user" && !m.context && (m.text || "").trim())
+    .slice(-12)
+    .map((m) => ({ id: m.id, text: m.text, sender: (m.sender === "agent" ? "agent" : "assistant") as "agent" | "assistant", agentId: m.agentId ?? null, name: m.name })), [messages]);
+  const flowVoiceMap = useMemo(() => {
+    const mp: Record<number, string> = {};
+    for (const m of roomMembers) if (m.tts_voice_id) mp[m.id] = m.tts_voice_id;
+    if (agentInfo?.tts_voice_id) mp[agentInfo.id] = agentInfo.tts_voice_id;
+    return mp;
+  }, [roomMembers, agentInfo]);
+  // «спасибо / всё» → джинн ответил → помощник спрашивает «Отпустить?»
+  useEffect(() => {
+    const at = pendingReleaseRef.current;
+    if (at < 0) return;
+    const last = messages[messages.length - 1];
+    if (messages.length > at + 1 && last && last.sender === "agent") {
+      pendingReleaseRef.current = -1;
+      const t = setTimeout(() => askRelease(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [messages, askRelease]);
   // Вход сразу на Поток (голос-первый). Только для вернувшихся (есть имя) — новичок остаётся в ленте на онбординг имени
   const landedRef = useRef(false);
   useEffect(() => {
@@ -919,18 +1034,28 @@ export default function Home() {
         <FlowScreen
           onExit={() => { const r = flowReturnRef.current; setRoom(r.room || assistantRoom); setView(r.view === "flow" ? "feed" : r.view); }}
           onSend={(t) => handleSend(t)}
-          lastReply={(() => { for (let i = messages.length - 1; i >= 0; i--) { const mm = messages[i]; if (mm.sender !== "user") return mm.text || ""; } return ""; })()}
+          utterances={flowUtterances}
+          voiceMap={flowVoiceMap}
+          homeVoice={user?.assistant_voice || undefined}
+          participants={room.startsWith("room-") ? roomMembers : []}
+          sessionKey={room}
           mediaList={(() => { const out: { url: string; type: string }[] = []; for (let i = messages.length - 1; i >= 0 && out.length < 8; i--) { const mm = messages[i]; if (mm.mediaUrl) out.unshift({ url: mm.mediaUrl, type: mm.mediaType || "image" }); } return out; })()}
-          assistantName={room.startsWith("agent-") && agentInfo ? agentInfo.name : assistantName}
+          assistantName={room.startsWith("room-") ? "Круглый стол" : room.startsWith("agent-") && agentInfo ? agentInfo.name : assistantName}
           assistantPhoto={room.startsWith("agent-") && agentInfo ? (agentInfo.photo_url ?? null) : assistantPhoto}
           voiceId={room.startsWith("agent-") && agentInfo ? agentInfo.tts_voice_id : user?.assistant_voice}
+          agentId={room.startsWith("agent-") && agentInfo ? agentInfo.id : null}
+          agentGreeting={room.startsWith("agent-") && agentInfo ? (agentInfo.greeting || "") : undefined}
+          homeAssistantName={assistantName}
+          homeAssistantPhoto={assistantPhoto}
+          onAddressAssistant={(room.startsWith("agent-") || room.startsWith("room-")) ? (rest: string) => { if (rest) askAssistantInFlow(rest); else askRelease(); } : undefined}
+          showMiniAssistant={!user?.is_guest || funnelHidden}
         />
       )}
 
       {/* Воронка: в прямом чате с джином помощник предлагает стать личным помощником */}
-      {(view === "chat" || view === "flow") && room.startsWith("agent-") && room !== assistantRoom && !funnelHidden && user?.is_guest && (
+      {(view === "chat" || view === "flow") && (room.startsWith("agent-") || room.startsWith("room-")) && room !== assistantRoom && !funnelHidden && user?.is_guest && (
         <div style={{ position: "fixed", top: 14, left: 14, zIndex: 130, maxWidth: 268, display: "flex", alignItems: "flex-start", gap: 8, pointerEvents: "auto" }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "0 0 auto", overflow: "hidden", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#e6bd57,#d9a534)", boxShadow: "0 6px 18px -6px rgba(217,165,52,.7)", color: "#201603", fontWeight: 800 }}>
+          <div onClick={() => (view === "flow" ? askRelease() : setRoom(assistantRoom))} title="Вернуться к помощнику" style={{ cursor: "pointer", width: 40, height: 40, borderRadius: "50%", flex: "0 0 auto", overflow: "hidden", display: "grid", placeItems: "center", background: "linear-gradient(135deg,#e6bd57,#d9a534)", boxShadow: "0 6px 18px -6px rgba(217,165,52,.7)", color: "#201603", fontWeight: 800 }}>
             {assistantPhoto ? <img src={assistantPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : "✦"}
           </div>
           <div style={{ background: "rgba(18,18,26,.94)", color: "#f2ede3", borderRadius: 14, borderTopLeftRadius: 4, padding: "9px 11px", boxShadow: "0 14px 34px -14px rgba(0,0,0,.7)", backdropFilter: "blur(6px)", fontSize: 12.5, lineHeight: 1.4 }}>

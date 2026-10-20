@@ -89,6 +89,7 @@ function apiMsgToChat(msg: MessageOut, myId?: number | null): ChatMessage {
     context: msg.context,
     mediaUrl: msg.media_url || undefined,
     mediaType: (msg.media_type as ChatMessage["mediaType"]) || undefined,
+    agentId: msg.sender_agent_id ?? undefined,
   };
 }
 
@@ -170,6 +171,7 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
           timestamp: new Date(data.created_at),
           mediaUrl: data.media_url || undefined,
           mediaType: data.media_type || undefined,
+          agentId: data.sender_agent_id ?? undefined,
         };
         setMessages((prev) => [...prev, chatMsg]);
         setIsTyping(false);
@@ -183,6 +185,9 @@ export function useChat(initialRoom: string = "general"): UseChatResult {
       } else if (data.type === "clear") {
         setMessages([]);
         setTimeout(() => loadHistoryRef.current?.(), 150);
+      } else if (data.type === "room_members") {
+        // состав круглого стола изменился (помощник пригласил/отпустил джинна)
+        if (Array.isArray(data.room_members)) setRoomMembers(data.room_members as AgentRoomInfo[]);
       } else if (data.type === "user_joined") {
         if (data.room_members) setRoomMembers(data.room_members as AgentRoomInfo[]);
         if (data.agent_info) {

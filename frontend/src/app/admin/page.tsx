@@ -96,13 +96,14 @@ import {
   type TokenConfig,
 } from "@/services/api";
 import AgentSettingsPanel from "@/components/admin/AgentSettingsPanel";
+import CabinetTab from "@/components/admin/CabinetTab";
 
 /* ══════════════════════════════════════════════════════════════
    Админ-панель JinnTell
    Управление агентами, пользователями, статистика
    ══════════════════════════════════════════════════════════════ */
 
-type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities" | "activity" | "dispatch" | "waitlist" | "tariffs" | "docs" | "tokens" | "catalog" | "requests" | "campaigns" | "council";
+type Tab = "agents" | "core_agents" | "contractors" | "users" | "system" | "stats" | "integrations" | "cities" | "activity" | "dispatch" | "waitlist" | "tariffs" | "docs" | "tokens" | "catalog" | "requests" | "campaigns" | "council" | "cabinet";
 
 const CATALOG_CATEGORIES = ["интерфейс", "голос", "одежда", "аксессуар"];
 const CATALOG_TARGETS = ["помощник", "персонаж", "оба"];
@@ -243,6 +244,7 @@ export default function AdminPage() {
   const [modelDrafts, setModelDrafts] = useState<Record<string, { provider: string; cost_in: string; cost_out: string; sell_in: string; sell_out: string; valid_until: string }>>({});
   const [newModel, setNewModel] = useState("");
   const [bizMarkup, setBizMarkup] = useState("1");
+  const [voiceRates, setVoiceRates] = useState<{ stt_call: number; tts_1k: number } | null>(null);
   const [priceOverrides, setPriceOverrides] = useState<Record<string, PriceOverride>>({});
   const [ovKey, setOvKey] = useState("");
   const [ovMult, setOvMult] = useState("");
@@ -272,7 +274,7 @@ export default function AdminPage() {
     try {
       const r = await adminGetModels();
       setModels(r.models); setModelCur(r.currency);
-      setBizMarkup(r.biz_markup || "1"); setPriceOverrides(r.overrides || {}); setProviderKeys(r.provider_keys || {});
+      setBizMarkup(r.biz_markup || "1"); setPriceOverrides(r.overrides || {}); setProviderKeys(r.provider_keys || {}); setVoiceRates(r.voice_rates || null);
       setModelDrafts(Object.fromEntries(r.models.map((m) => [m.model, { provider: m.provider, cost_in: String(m.cost_in), cost_out: String(m.cost_out), sell_in: String(m.sell_in), sell_out: String(m.sell_out), valid_until: m.valid_until }])));
     } catch { /* noop */ }
   };
@@ -693,6 +695,7 @@ export default function AdminPage() {
             { id: "requests" as Tab, label: `Обращения${reqCounts.new ? ` (${reqCounts.new})` : ""}`, icon: "🆘" },
             { id: "campaigns" as Tab, label: "Спонсоры", icon: "🎁" },
             { id: "council" as Tab, label: "Совещательная", icon: "🏛" },
+            { id: "cabinet" as Tab, label: "Шкафчик", icon: "🗄" },
             { id: "tokens" as Tab, label: "Токены", icon: "🪙" },
             { id: "catalog" as Tab, label: "Каталог", icon: "🛍" },
             { id: "tariffs" as Tab, label: "Бизнес-планы", icon: "💳" },
@@ -1004,42 +1007,65 @@ export default function AdminPage() {
               </div>
 
               <p className="text-sm text-gray-400 mb-6">
-                Core-агенты — ядро платформы. Скрыты из Города Агентов. Помощник, администрирование, контент, инфраструктура.
+                Весь штат, работающий в системе и над ней — по департаментам, скрыт из Города. Клик по карточке: настройки, смена модели и чат. Собрать команду за круглым столом — вкладка «Совещательная».
               </p>
 
-              <div className="grid grid-cols-2 gap-4">
-                {coreAgents.map((agent) => (
-                  <div
-                    key={agent.id}
-                    onClick={() => { setSelectedCoreAgent(agent); setCoreSubTab("settings"); }}
-                    className="bg-gray-900 rounded-xl p-5 border border-gray-800 cursor-pointer hover:border-gray-600 transition-all"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shrink-0"
-                        style={{ background: `${agent.color}22`, border: `2px solid ${agent.color}55`, color: agent.color }}
-                      >
-                        {agent.name[0]}
+              {/* Штат, сгруппированный по департаментам. «Помощник» выделен — это мульти-джин у каждого пользователя. */}
+              <div className="flex flex-col gap-7">
+                {[
+                  { key: "assistant", label: "🧞 Помощник", note: "мульти-джин — свой у каждого пользователя", accent: true },
+                  { key: "core", label: "⚙️ Ядро системы", note: "администрирование, контент, инфраструктура, архитектор", accent: false },
+                  { key: "sales", label: "💼 Коммерческий отдел", note: "продажи B2B — работают на систему, вне Города", accent: false },
+                  { key: "marketing", label: "📣 Отдел маркетинга", note: "контент и продвижение — вне Города", accent: false },
+                  { key: "service", label: "🛰 Сервисные", note: "", accent: false },
+                  { key: "__none__", label: "📦 Без департамента", note: "", accent: false },
+                ].map((grp) => {
+                  const list = coreAgents.filter((a) => ((a.department || "__none__") === grp.key));
+                  if (list.length === 0) return null;
+                  return (
+                    <div key={grp.key}>
+                      <div className="flex items-baseline gap-2 mb-3 pb-1.5 border-b border-gray-800">
+                        <h3 className={`text-sm font-semibold ${grp.accent ? "text-amber-300" : "text-gray-200"}`}>{grp.label}</h3>
+                        <span className="text-xs text-gray-500">· {list.length}</span>
+                        {grp.note && <span className="text-xs text-gray-600">— {grp.note}</span>}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-white">{agent.name}</h3>
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">
-                            {agent.uid || `ID:${agent.id}`}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-2">{agent.profession}</p>
-                        <p className="text-sm text-gray-400 line-clamp-2">{agent.description}</p>
-                        <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
-                          <span>Модель: <span className="text-gray-300">{agent.llm_model}</span></span>
-                          <span className={agent.is_active ? "text-green-400" : "text-red-400"}>
-                            {agent.is_active ? "Активен" : "Отключён"}
-                          </span>
-                        </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {list.map((agent) => (
+                          <div
+                            key={agent.id}
+                            onClick={() => { setSelectedCoreAgent(agent); setCoreSubTab("settings"); }}
+                            className={`bg-gray-900 rounded-xl p-5 border cursor-pointer hover:border-gray-600 transition-all ${grp.accent ? "border-amber-700/40" : "border-gray-800"}`}
+                          >
+                            <div className="flex items-start gap-4">
+                              <div
+                                className="w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold shrink-0"
+                                style={{ background: `${agent.color}22`, border: `2px solid ${agent.color}55`, color: agent.color }}
+                              >
+                                {agent.name[0]}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-semibold text-white">{agent.name}</h3>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400">
+                                    {agent.uid || `ID:${agent.id}`}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-500 mb-2">{agent.profession}</p>
+                                <p className="text-sm text-gray-400 line-clamp-2">{agent.description}</p>
+                                <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
+                                  <span>Модель: <span className="text-gray-300">{agent.llm_model}</span></span>
+                                  <span className={agent.is_active ? "text-green-400" : "text-red-400"}>
+                                    {agent.is_active ? "Активен" : "Отключён"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {coreAgents.length === 0 && (
@@ -1452,6 +1478,15 @@ export default function AdminPage() {
                   <input defaultValue={bizMarkup} onBlur={(e) => saveBizMarkup(e.target.value)} className="w-16 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-sm text-white" />
                   <span className="text-[11px] text-gray-600">цена бизнесу = цена юзера × это (1 = одинаково)</span>
                 </div>
+                {voiceRates && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-800">
+                    <span className="text-[12px] text-gray-400">Голос: распознавание, ₽ за фразу</span>
+                    <input key={`stt-${voiceRates.stt_call}`} defaultValue={String(voiceRates.stt_call)} onBlur={(e) => adminSetPricing({ voice_stt_call: Number(e.target.value) || 0 }).then(loadModels).catch(() => { /* noop */ })} className="w-16 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-sm text-white" />
+                    <span className="text-[12px] text-gray-400 ml-3">озвучка, ₽ за 1000 знаков</span>
+                    <input key={`tts-${voiceRates.tts_1k}`} defaultValue={String(voiceRates.tts_1k)} onBlur={(e) => adminSetPricing({ voice_tts_1k: Number(e.target.value) || 0 }).then(loadModels).catch(() => { /* noop */ })} className="w-16 bg-gray-950 border border-gray-700 rounded px-2 py-1 text-sm text-white" />
+                    <span className="text-[11px] text-gray-600 w-full">Цена для плательщика джинна (бизнес / платный специалист); сверху — наценка бизнесу и исключения. Себестоимость у Яндекса по нашей оценке ≈0,5 ₽ за фразу и ≈0,4 ₽ за 1000 знаков. Помощник и бесплатные джинны — не списываются.</span>
+                  </div>
+                )}
               </div>
 
               {/* Индивидуальные цены (исключения) */}
@@ -2098,6 +2133,8 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+
+          {tab === "cabinet" && <CabinetTab />}
 
           {tab === "council" && (
             <div className="space-y-4">

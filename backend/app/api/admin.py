@@ -1320,6 +1320,39 @@ async def admin_test_agent(
     if not agent:
         raise HTTPException(404, "Agent not found")
 
+    # Умный режим: если у агента заданы инструменты (tools_json) — ведём диалог через tool-loop
+    # (агент сам вызывает свои инструменты, напр. Архитектор-фабрика → draft_jinn).
+    # Изоляция: срабатывает ТОЛЬКО при непустом tools_json; у остальных core-агентов он пуст → старый путь.
+    _tj = getattr(agent, "tools_json", None)
+    if _tj:
+        import json as _json
+        try:
+            _enabled = [t for t in (_json.loads(_tj) or []) if isinstance(t, str)]
+        except Exception:
+            _enabled = []
+        if _enabled:
+            from app.services import agent_tools as _atools
+            _akw = {
+                "agent_name": agent.name, "agent_profession": agent.profession,
+                "agent_description": agent.description or "", "system_prompt": agent.system_prompt,
+                "manner_style": agent.manner_style or "friendly",
+                "manner_temperament": agent.manner_temperament or "balanced",
+                "manner_humor": agent.manner_humor if agent.manner_humor is not None else True,
+                "manner_emoji_use": agent.manner_emoji_use if agent.manner_emoji_use is not None else True,
+                "knowledge_text": agent.knowledge_text, "skills_text": agent.skills_text,
+                "exclusions_text": agent.exclusions_text,
+                "llm_model": agent.llm_model or "deepseek-chat",
+                "conversation_history": history, "user_message": message, "user_id": None,
+            }
+            _start = _t.time()
+            try:
+                _reply = await _atools.reply_with_tools(None, agent, _akw, _enabled)
+            except ValueError:
+                _reply = None  # нет валидных инструментов — упадём в обычный путь ниже
+            if _reply:
+                return {"reply": _reply, "model": agent.llm_model, "rag_used": False,
+                        "tools_used": True, "response_time_ms": int((_t.time() - _start) * 1000)}
+
     rag_context = None
     if agent.agent_type == "specialist":
         try:
@@ -1357,6 +1390,7 @@ async def admin_test_agent(
 
 
 INTEGRATION_KEYS = [
+    {"key": "GITHUB_TOKEN", "label": "GitHub — токен (Fine-grained, доступ: Public repositories read-only) — для каналов джиннов (Гит): поиск, Trending-проверка, README, релизы"},
     {"key": "YANDEX_SPEECHKIT_API_KEY", "label": "Yandex SpeechKit — API-ключ"},
     {"key": "YANDEX_SPEECHKIT_FOLDER_ID", "label": "Yandex SpeechKit — Folder ID"},
     {"key": "YANDEX_EMBEDDING_API_KEY", "label": "Yandex Embeddings — API-ключ (роль ai.languageModels.user; folder тот же, что у SpeechKit)"},
@@ -1521,6 +1555,12 @@ async def admin_set_pricing(body: dict = Body(...), admin: User = Depends(get_ad
     if "biz_markup" in body:
         await set_setting("BIZ_MARKUP", str(float(body.get("biz_markup") or 1)))
         return {"ok": True}
+    if "voice_stt_call" in body or "voice_tts_1k" in body:
+        if "voice_stt_call" in body:
+            await set_setting("VOICE_SELL_STT_CALL", str(max(0.0, float(body.get("voice_stt_call") or 0))))
+        if "voice_tts_1k" in body:
+            await set_setting("VOICE_SELL_TTS_1K", str(max(0.0, float(body.get("voice_tts_1k") or 0))))
+        return {"ok": True}
     if "override_key" in body:
         from app.services.settings_store import get_setting as _gso
         ov = _json.loads(await _gso("PRICE_OVERRIDES") or "{}")
@@ -1629,6 +1669,7 @@ async def admin_models(admin: User = Depends(get_admin_user), db: AsyncSession =
     }
     return {"currency": cur, "default": rates.get("default"), "models": out,
             "biz_markup": await _gs2("BIZ_MARKUP") or "1",
+            "voice_rates": await __import__("app.services.voice_billing", fromlist=["voice_rates"]).voice_rates(),
             "overrides": _jj.loads(await _gs2("PRICE_OVERRIDES") or "{}"),
             "provider_keys": provider_keys}
 
@@ -2227,3 +2268,237 @@ async def admin_draft_agent(body: _DraftIn, db: AsyncSession = Depends(get_db), 
     rep = await jinn_factory.draft(db, body.brief, is_paid=body.is_paid, visibility=body.visibility, model=(body.model or None), agent_type=body.agent_type)
     await db.commit()
     return rep
+
+
+
+# ═══════════════════════ АВТОКАНАЛ ДЖИННА (движок channel_engine) ═══════════════════════
+@router.get("/agents/{agent_id}/channel")
+async def admin_get_channel(agent_id: int, admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Настройки автоканала джинна + состояние (последний выпуск, сколько постов)."""
+    from app.services import channel_engine as ce
+    from app.models.channel_post import ChannelPost
+    agent = await db.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Агент не найден")
+    lr = await ce.last_run(agent_id)
+    posts = (await db.execute(select(func.count(ChannelPost.id)).where(ChannelPost.agent_id == agent_id))).scalar() or 0
+    return {"config": ce.load_config(agent), "configured": bool(agent.channel_config),
+            "last_run": lr.isoformat() if lr else None, "posts": int(posts),
+            "public_url": (f"/c/{agent.jinntell_link}" if agent.jinntell_link and agent.visibility == "public" else None)}
+
+
+@router.put("/agents/{agent_id}/channel")
+async def admin_save_channel(agent_id: int, body: dict = Body(...), admin: User = Depends(get_admin_user), db: AsyncSession = Depends(get_db)):
+    """Сохранить настройки автоканала (источники/частота/режим/фильтр)."""
+    import json as _json
+    from app.services import channel_engine as ce
+    agent = await db.get(Agent, agent_id)
+    if not agent:
+        raise HTTPException(404, "Агент не найден")
+    try:
+        cfg = ce.clean_config(body or {})
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, f"Неверные настройки: {e}")
+    agent.channel_config = _json.dumps(cfg, ensure_ascii=False)
+    await db.commit()
+    return {"ok": True, "config": cfg}
+
+
+@router.post("/agents/{agent_id}/channel/test-source")
+async def admin_test_channel_source(agent_id: int, body: dict = Body(...), admin: User = Depends(get_admin_user)):
+    """Проверить один источник: открывается ли с сервера и что в нём сейчас."""
+    from app.services import channel_engine as ce
+    cfg = ce.clean_config({"sources": [body or {}]})
+    if not cfg["sources"]:
+        return {"ok": False, "error": "Источник заполнен не полностью (тип / адрес / запрос)."}
+    try:
+        items = await ce.fetch_source(cfg["sources"][0])
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"Не открывается: {type(e).__name__}: {str(e)[:120]}"}
+    return {"ok": True, "count": len(items), "sample": [i["title"] for i in items[:3]]}
+
+
+@router.post("/agents/{agent_id}/channel/run")
+async def admin_run_channel(agent_id: int, admin: User = Depends(get_admin_user)):
+    """Выпустить канал сейчас (вне расписания)."""
+    from app.services import channel_engine as ce
+    return await ce.run_agent(agent_id, force=True)
+
+
+
+# ═══════════════════════ БАЗА ЗНАНИЙ АРХИТЕКТОРА (живая карта системы) ═══════════════════════
+@router.get("/architect/knowledge")
+async def admin_architect_kb_state(admin: User = Depends(get_admin_user)):
+    """Когда и из чего последний раз собрана база знаний Архитектора."""
+    from app.services.settings_store import get_setting
+    return _json.loads((await get_setting("ARCH_KB_LAST")) or "{}")
+
+
+@router.post("/architect/knowledge/rebuild")
+async def admin_architect_kb_rebuild(admin: User = Depends(get_admin_user)):
+    """Пересобрать базу знаний Архитектора сейчас (карта кода + штат/Город из БД + проектные заметки)."""
+    from app.services import architect_kb
+    return await architect_kb.rebuild()
+
+
+# ═══════════════════════ ШКАФЧИК АРХИТЕКТОРА (готовые джины-профессии с GitHub) ═══════════════════════
+import asyncio as _cab_asyncio
+
+_cab_translating = {"running": False}
+
+
+async def _cab_translate_bg():
+    """Фоновый перевод витрины шкафчика на русский (пачками через LLM)."""
+    if _cab_translating["running"]:
+        return
+    _cab_translating["running"] = True
+    try:
+        from app.core.database import async_session as _cab_session
+        from app.services import template_cabinet as cab
+        while True:
+            async with _cab_session() as s:
+                r = await cab.translate(s, limit=150)
+            if not r["translated"] or not r["left"]:
+                break
+    except Exception as e:  # noqa: BLE001
+        print(f"[cabinet] bg translate err: {e}")
+    finally:
+        _cab_translating["running"] = False
+
+
+@router.get("/cabinet/stats")
+async def admin_cabinet_stats(db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    from app.services import template_cabinet as cab
+    st = await cab.stats(db)
+    st["translating"] = _cab_translating["running"]
+    return st
+
+
+@router.get("/cabinet")
+async def admin_cabinet_list(q: str = "", division: str = "", source: str = "",
+                             limit: int = Query(30, le=100), offset: int = 0,
+                             db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    from app.services import template_cabinet as cab
+    return await cab.search(db, q, division=division, source=source, limit=limit, offset=offset)
+
+
+@router.get("/cabinet/{tid}")
+async def admin_cabinet_get(tid: int, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    from app.models.jinn_template import JinnTemplate
+    from app.services import template_cabinet as cab
+    t = await db.get(JinnTemplate, tid)
+    if not t:
+        raise HTTPException(404, "Заготовка не найдена")
+    return cab.card(t, full=True)
+
+
+@router.put("/cabinet/sources")
+async def admin_cabinet_sources(payload: dict = Body(...), admin: User = Depends(get_admin_user)):
+    from app.services import template_cabinet as cab
+    return {"sources": await cab.set_sources(payload.get("sources") or [])}
+
+
+@router.post("/cabinet/sync")
+async def admin_cabinet_sync(db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Скачать все источники шкафчика (только md-описания, ничего не запускаем) и запустить перевод витрины."""
+    from datetime import datetime, timezone
+    from app.services import template_cabinet as cab
+    from app.services.settings_store import set_setting
+    reports = []
+    for src in await cab.get_sources():
+        try:
+            reports.append(await cab.sync(db, src))
+        except Exception as e:  # noqa: BLE001
+            reports.append({"ok": False, "source": src, "error": str(e)[:200]})
+    await set_setting("CABINET_LAST_SYNC", datetime.now(timezone.utc).isoformat())
+    _cab_asyncio.create_task(_cab_translate_bg())
+    return {"reports": reports}
+
+
+@router.post("/cabinet/{tid}/ban")
+async def admin_cabinet_ban(tid: int, payload: dict = Body(default={}),
+                            db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """В бан: удалить заготовку и не брать её при следующих обновлениях."""
+    from app.models.jinn_template import JinnTemplate
+    from app.services import template_cabinet as cab
+    t = await db.get(JinnTemplate, tid)
+    if not t:
+        raise HTTPException(404, "Заготовка не найдена")
+    return await cab.ban(db, {f"{t.source}::{t.slug}": (payload.get("reason") or "бан вручную из админки")})
+
+
+@router.post("/cabinet/ban-bulk")
+async def admin_cabinet_ban_bulk(payload: dict = Body(...), admin: User = Depends(get_admin_user),
+                                 db: AsyncSession = Depends(get_db)):
+    """Массовый бан {"keys": {"source::slug": "причина"}} — напр. по результатам SkillSpector."""
+    from app.services import template_cabinet as cab
+    keys = payload.get("keys") or {}
+    if not isinstance(keys, dict):
+        raise HTTPException(400, "keys должен быть объектом")
+    return await cab.ban(db, keys)
+
+
+@router.get("/cabinet-banned")
+async def admin_cabinet_banned(admin: User = Depends(get_admin_user)):
+    from app.services import template_cabinet as cab
+    return await cab.get_banned()
+
+
+@router.post("/cabinet/{tid}/adopt")
+async def admin_cabinet_adopt(tid: int, payload: dict = Body(default={}),
+                              db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    """Родить джина из заготовки (адаптация под JinnTell + процедура рождения)."""
+    from app.services import template_cabinet as cab
+    vis = payload.get("visibility") if payload.get("visibility") in ("public", "hidden") else "public"
+    atype = payload.get("agent_type") if payload.get("agent_type") in ("specialist", "business", "core") else "specialist"
+    rep = await cab.adopt(db, tid, (payload.get("brief") or "").strip(), visibility=vis, agent_type=atype,
+                          is_paid=bool(payload.get("is_paid")), model=(payload.get("model") or None))
+    await db.commit()
+    return rep
+
+
+
+# ═══════════ ОТРАСЛЕВАЯ ЗАГОТОВКА ДЖИНА (назначаем мы) + модули/операторы (как у бизнеса) ═══════════
+@router.get("/agents/{agent_id}/modules")
+async def admin_agent_modules(agent_id: int, db: AsyncSession = Depends(get_db), admin: User = Depends(get_admin_user)):
+    from app.services import industry_presets as ip
+    a = await db.get(Agent, agent_id)
+    if not a:
+        raise HTTPException(404, "Агент не найден")
+    return await ip.state(db, a)
+
+
+@router.put("/agents/{agent_id}/modules")
+async def admin_agent_modules_update(agent_id: int, payload: dict = Body(...), db: AsyncSession = Depends(get_db),
+                                     admin: User = Depends(get_admin_user)):
+    from app.services import industry_presets as ip
+    a = await db.get(Agent, agent_id)
+    if not a:
+        raise HTTPException(404, "Агент не найден")
+    try:
+        return await ip.update(db, a, payload, admin=True)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/agents/{agent_id}/operators")
+async def admin_agent_operator_add(agent_id: int, payload: dict = Body(...), db: AsyncSession = Depends(get_db),
+                                   admin: User = Depends(get_admin_user)):
+    from app.services import industry_presets as ip
+    a = await db.get(Agent, agent_id)
+    if not a:
+        raise HTTPException(404, "Агент не найден")
+    try:
+        return await ip.add_operator(db, a, payload.get("phone") or "", payload.get("password") or "", payload.get("name") or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/agents/{agent_id}/operators/{user_id}")
+async def admin_agent_operator_remove(agent_id: int, user_id: int, db: AsyncSession = Depends(get_db),
+                                      admin: User = Depends(get_admin_user)):
+    from app.services import industry_presets as ip
+    a = await db.get(Agent, agent_id)
+    if not a:
+        raise HTTPException(404, "Агент не найден")
+    return await ip.remove_operator(db, a, user_id)

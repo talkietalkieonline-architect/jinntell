@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ttsBlobUrl, mediaUrl, getDay, sttLang, type DayEntry } from "@/services/api";
+import { ttsBlobUrl, mediaUrl, getDay, sttLang, sttRecognize, type DayEntry } from "@/services/api";
 import AppBackground from "@/components/communicator/AppBackground";
 import MyDayModal from "@/components/communicator/MyDayModal";
 
@@ -14,19 +14,72 @@ function echoOverlap(heard: string, spoken: string): number {
   return hit / hw.length;
 }
 
+// Короткая тишина (WAV) — «разблокировать» плеер касанием на iPhone: дальше iOS разрешает ему играть ответы без жеста.
+function silentWavUrl(): string {
+  const n = 800, buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+  const w = (o: number, t: string) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + n, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, "data"); v.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+}
+function isIOSDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 const _FLOW_SPEEDS = [1, 1.5, 2];
 function _flowSpeed(): number { try { return parseFloat(localStorage.getItem("jinntell_play_speed") || "1") || 1; } catch { return 1; } }
 function _setFlowSpeed(v: number) { try { localStorage.setItem("jinntell_play_speed", String(v)); } catch { /* noop */ } }
 
-export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assistantName, assistantPhoto, voiceId }: {
+/** Реплика для озвучки в Потоке (из сообщений текущей комнаты). */
+export interface FlowUtterance { id: string; text: string; sender: "agent" | "assistant"; agentId?: number | null; name?: string }
+/** Участник круглого стола (джинн в комнате). */
+export interface FlowParticipant { id: number; name: string; color?: string; photo_url?: string | null }
+
+export default function FlowScreen({ onExit, onSend, mediaList, assistantName, assistantPhoto, voiceId, agentId, agentGreeting, homeAssistantName, homeAssistantPhoto, onAddressAssistant, showMiniAssistant = true, utterances, voiceMap, homeVoice, participants, sessionKey }: {
   onExit: () => void;
   onSend: (text: string) => void;
-  lastReply: string;
+  utterances: FlowUtterance[];          // реплики текущей комнаты — озвучиваются ОЧЕРЕДЬЮ, каждая своим голосом
+  voiceMap?: Record<number, string>;     // голос каждого джинна-участника
+  homeVoice?: string;                    // голос личного помощника (итоги, вопросы «отпустить?»)
+  participants?: FlowParticipant[];      // ≥2 — круглый стол: плитки участников
+  sessionKey?: string;                   // смена комнаты (помощник ↔ джинн ↔ круглый стол)
   mediaList?: { url: string; type: string }[];
   assistantName: string;
   assistantPhoto?: string | null;
   voiceId?: string;
+  agentId?: number | null;  // разговор с джинном: голос (распознавание/озвучка) идёт в счёт его плательщику
+  agentGreeting?: string;   // приветствие джинна, когда он появляется в Потоке
+  // Джин в Потоке: личный помощник «сворачивается» в левый верхний угол и ждёт —
+  // к нему обращаются касанием кружка или голосом по имени («Дженни, …») → Поток возвращается к помощнику.
+  homeAssistantName?: string;
+  homeAssistantPhoto?: string | null;
+  onAddressAssistant?: (rest: string) => void;
+  showMiniAssistant?: boolean;  // гостю в этом углу показывается воронка «могу стать помощником» — тогда кружок не рисуем
 }) {
+  const homeNameRef = useRef("");
+  homeNameRef.current = (homeAssistantName || "").toLowerCase().trim();
+  const onAddressRef = useRef(onAddressAssistant);
+  onAddressRef.current = onAddressAssistant;
+  const pendingQuestionRef = useRef(false);
+  // Куда отправить фразу: назвали личного помощника (а сейчас говорим с джином) → ему, иначе — текущему собеседнику
+  const dispatchPhrase = (phrase: string) => {
+    const p = phrase.trim();
+    if (!p) return;
+    const home = homeNameRef.current;
+    const low = p.toLowerCase();
+    if (onAddressRef.current && home && low.includes(home)) {
+      const rest = p.slice(low.indexOf(home) + home.length).replace(/^[\s,.!?:;-]+/, "").trim();
+      pendingQuestionRef.current = !!rest;
+      onAddressRef.current(rest);
+      return;
+    }
+    onSendRef.current(p);
+  };
+  const agentIdRef = useRef<number | null>(agentId ?? null);
+  agentIdRef.current = agentId ?? null;
   const [now, setNow] = useState<Date | null>(null);
   const [speed, setSpeed] = useState(1);
   useEffect(() => { setSpeed(_flowSpeed()); }, []);
@@ -42,7 +95,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   const mediaLpTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaLpFiredRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const spokenRef = useRef<string>(lastReply || "");
+  const spokenRef = useRef<string>("");
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
 
@@ -79,13 +132,119 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   const recRef = useRef<SpeechRecognition | null>(null);
   const micPausedRef = useRef(false);  // жёсткая пауза микрофона на время озвучки (анти-эхо)
 
+  // ── Серверное распознавание (iPhone/iPad и браузеры без встроенного): запись → /api/stt (Яндекс) ──
+  // iOS даёт микрофон и звук только по касанию → первое касание кнопки «разблокирует» оба, дальше без рук:
+  // запись сама останавливается на паузе в речи, после ответа джина снова слушаем.
+  const [serverStt, setServerStt] = useState(false);
+  const serverSttRef = useRef(false);
+  const armedRef = useRef(false);
+  const [needTap, setNeedTap] = useState(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const vadRef = useRef<{ ctx: AudioContext; timer: ReturnType<typeof setInterval> } | null>(null);
+  const discardRef = useRef(false);
+  const silentRef = useRef(false);
+  // один плеер на весь Поток: на iOS разблокированный касанием элемент может играть ответы и дальше
+  const getPlayer = () => { if (!audioRef.current) audioRef.current = new Audio(); return audioRef.current; };
+
   // схлопнуть подряд идущие дубли слов («привет привет привет» → «привет»)
   const dedupeWords = (s: string) => s.split(/\s+/).filter((w, i, a) => i === 0 || w.toLowerCase() !== a[i - 1].toLowerCase()).join(" ");
   // голос: проп → синхронизированный из БД localStorage → женский дефолт (не мужской ermil при пустом пропе/гонке входа)
   const resolveVoice = () => voiceId || (typeof window !== "undefined" ? (localStorage.getItem("jinntell_assistant_voice") || "") : "") || "alena";
   // на время озвучки полностью глушим распознавание, потом возвращаем
-  const pauseMic = () => { micPausedRef.current = true; try { recRef.current?.stop(); } catch { /* noop */ } };
-  const resumeMic = () => { micPausedRef.current = false; try { recRef.current?.start(); } catch { /* noop */ } };
+  const pauseMic = () => {
+    micPausedRef.current = true;
+    if (serverSttRef.current) {
+      const r = recorderRef.current;
+      if (r && r.state !== "inactive") { discardRef.current = true; try { r.stop(); } catch { /* noop */ } }
+      return;
+    }
+    try { recRef.current?.stop(); } catch { /* noop */ }
+  };
+  const resumeMic = () => {
+    micPausedRef.current = false;
+    if (serverSttRef.current) {
+      if (armedRef.current) void startServerRec(); else setStatus("idle");
+      return;
+    }
+    try { recRef.current?.start(); } catch { /* noop */ }
+  };
+
+  const stopVad = () => {
+    const v = vadRef.current;
+    if (v) { clearInterval(v.timer); v.ctx.close().catch(() => { /* noop */ }); vadRef.current = null; }
+  };
+  const startServerRec = async () => {
+    if (!armedRef.current || recorderRef.current || speakingRef.current) return;
+    try {
+      if (!streamRef.current) {
+        streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      }
+      const stream = streamRef.current;
+      const types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"];
+      let mime = "";
+      for (const t of types) { if (MediaRecorder.isTypeSupported?.(t)) { mime = t; break; } }
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+      discardRef.current = false; silentRef.current = false;
+      rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      rec.onstop = async () => {
+        recorderRef.current = null; stopVad();
+        if (discardRef.current) return;
+        if (silentRef.current) { setStatus("idle"); setCaption(""); return; }  // никто не говорил — ждём касания
+        const blob = new Blob(chunks, { type: (rec.mimeType || mime || "audio/mp4").split(";")[0] });
+        if (blob.size < 1500) { resumeMic(); return; }
+        setCaption("Распознаю…");
+        try {
+          const text = dedupeWords((await sttRecognize(blob, agentIdRef.current)).trim());
+          if (text && !speakingRef.current) { setCaption(text); dispatchPhrase(text); }
+          else { setCaption(""); resumeMic(); }
+        } catch { setStatus("idle"); setCaption("Не расслышал — нажмите и скажите ещё раз"); }
+      };
+      rec.start(250);
+      recorderRef.current = rec;
+      setStatus("listening"); setCaption("");
+      // Детектор речи: стоп после ~1,2 с тишины, если человек уже говорил; без речи — через 10 с; максимум 30 с.
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AC();
+      try { await ctx.resume(); } catch { /* noop */ }
+      const an = ctx.createAnalyser(); an.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(an);
+      const data = new Uint8Array(an.fftSize);
+      const t0 = Date.now();
+      let spoke = false, lastVoice = t0, floor = 0, floorN = 0;
+      const timer = setInterval(() => {
+        an.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) { const x = (data[i] - 128) / 128; sum += x * x; }
+        const rms = Math.sqrt(sum / data.length), now = Date.now();
+        if (now - t0 < 400) { floor += rms; floorN++; return; }  // первые 0,4 с — уровень фонового шума
+        const thr = Math.max(0.035, (floorN ? floor / floorN : 0) * 2.5);
+        if (rms > thr) { spoke = true; lastVoice = now; }
+        const stop = (spoke && now - lastVoice > 1200) || (!spoke && now - t0 > 10000) || now - t0 > 30000;
+        if (stop && rec.state !== "inactive") { if (!spoke) silentRef.current = true; try { rec.stop(); } catch { /* noop */ } }
+      }, 100);
+      vadRef.current = { ctx, timer };
+    } catch {
+      recorderRef.current = null; stopVad();
+      setStatus("idle"); setCaption("Нет доступа к микрофону — разрешите его в настройках браузера");
+    }
+  };
+  // Касание кнопки микрофона: разблокировать звук (iOS) + начать слушать; повторное касание во время записи — «я закончил».
+  const onMicTap = () => {
+    if (!armedRef.current) {
+      armedRef.current = true; setNeedTap(false);
+      try {
+        const a = getPlayer(); a.onended = null; a.onerror = null;
+        a.src = silentWavUrl();
+        a.play().then(() => a.pause()).catch(() => { /* noop */ });
+      } catch { /* noop */ }
+    }
+    const r = recorderRef.current;
+    if (r && r.state !== "inactive") { try { r.stop(); } catch { /* noop */ } return; }
+    if (speakingRef.current) interrupt();
+    else void startServerRec();
+  };
 
   useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
 
@@ -93,7 +252,17 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) { setStatus("idle"); return; }
+    // iPhone/iPad: встроенное распознавание Safari ненадёжно (нужны Siri+Диктовка, обрывается, нет во встроенных
+    // браузерах) → серверное распознавание. Там, где встроенного нет вовсе, — тоже серверное.
+    if (!SR || isIOSDevice()) {
+      serverSttRef.current = true; setServerStt(true); setNeedTap(true); setStatus("idle");
+      return () => {
+        const r = recorderRef.current;
+        if (r && r.state !== "inactive") { discardRef.current = true; try { r.stop(); } catch { /* noop */ } }
+        stopVad();
+        streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null;
+      };
+    }
     const rec = new (SR as unknown as { new (): SpeechRecognition })();
     rec.lang = sttLang(); rec.continuous = true; rec.interimResults = true;
     recRef.current = rec;
@@ -115,8 +284,15 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const name = (assistantNameRef.current || "").toLowerCase().trim();
         const hasName = !!name && low.includes(name);
         const hasStop = /(стоп|стой|хватит|замолч|тихо|отмена)/.test(low);
+        const home = homeNameRef.current;
+        if (onAddressRef.current && home && newFinal && newFinal.toLowerCase().includes(home)) {
+          stopSpeech();
+          speakingRef.current = false; finalRef.current = "";
+          dispatchPhrase(newFinal);
+          return;
+        }
         if (hasName || hasStop) {
-          try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп озвучки
+          stopSpeech();  // стоп озвучки (вся очередь)
           stopUntilRef.current = Date.now() + 3500;  // не «дозаговаривать» сразу после стопа
           speakingRef.current = false;
           setStatus("listening");
@@ -126,7 +302,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
           if (name && cmd.toLowerCase().includes(name)) cmd = cmd.slice(cmd.toLowerCase().indexOf(name) + name.length).replace(/^[\s,.!?:;-]+/, "").trim();
           if (hasStop) cmd = cmd.replace(/\b(стоп|хватит|подожди|замолчи|отмена|тихо)\b/gi, "").trim();
           setCaption(cmd);
-          if (cmd) { finalRef.current = cmd; if (sendTimerRef.current) clearTimeout(sendTimerRef.current); sendTimerRef.current = setTimeout(() => { const p = finalRef.current.trim(); finalRef.current = ""; if (p) { setCaption(""); onSendRef.current(p); } }, 900); }
+          if (cmd) { finalRef.current = cmd; if (sendTimerRef.current) clearTimeout(sendTimerRef.current); sendTimerRef.current = setTimeout(() => { const p = finalRef.current.trim(); finalRef.current = ""; if (p) { setCaption(""); dispatchPhrase(p); } }, 900); }
         }
         return;
       }
@@ -139,7 +315,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
         const phrase = dedupeWords(finalRef.current.trim());
         finalRef.current = "";
         // не отправляем, если это эхо только что озвученного ответа (микрофон услышал сам TTS)
-        if (phrase && !speakingRef.current && echoOverlap(phrase.toLowerCase(), (spokenRef.current || "")) <= 0.5) { setCaption(""); onSendRef.current(phrase); }
+        if (phrase && !speakingRef.current && echoOverlap(phrase.toLowerCase(), (spokenRef.current || "")) <= 0.5) { setCaption(""); dispatchPhrase(phrase); }
       }, 900);
     };
     rec.onend = () => { if (micPausedRef.current) return; try { rec.start(); } catch { /* уже запущено */ } };
@@ -150,36 +326,105 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     };
   }, []);
 
-  // Озвучка новых ответов — с остановкой предыдущего аудио (без наложения) и флагом анти-эха
-  useEffect(() => {
-    const text = (lastReply || "").trim();
-    if (!text || text === spokenRef.current) return;
-    spokenRef.current = text;
-    if (Date.now() < stopUntilRef.current) { setStatus("listening"); return; }  // после «стоп»/тапа — НЕ заговариваем очередную реплику
-    setCaption(text);
+  // ── ОЧЕРЕДЬ ОЗВУЧКИ ──
+  // Реплики звучат ПО ОДНОЙ, каждая голосом говорящего (круглый стол: несколько джиннов + итог помощника).
+  // Новая реплика не обрывает текущую; «стоп»/тап очищает всю очередь. История новой комнаты не зачитывается.
+  type QItem = { key: string; text: string; voice: string; agentId: number | null; speaker: number | "assistant"; name?: string };
+  const queueRef = useRef<QItem[]>([]);
+  const playingRef = useRef(false);
+  const seenRef = useRef<Set<string>>(new Set());
+  const recentRef = useRef<string[]>([]);
+  const [activeSpeaker, setActiveSpeaker] = useState<number | "assistant" | null>(null);
+  const isRoundtable = (participants?.length || 0) >= 2;
+
+  const voiceOf = (u: FlowUtterance): string => {
+    if (u.sender === "agent") return (u.agentId && voiceMap?.[u.agentId]) || resolveVoice();
+    return homeVoice || resolveVoice();
+  };
+  const playNext = () => {
+    const it = queueRef.current.shift();
+    if (!it) {
+      playingRef.current = false;
+      setActiveSpeaker(null);
+      finalRef.current = "";
+      setStatus("listening");
+      setTimeout(() => { if (!playingRef.current) { speakingRef.current = false; finalRef.current = ""; resumeMic(); } }, 600);
+      return;
+    }
+    playingRef.current = true;
+    speakingRef.current = true;
+    pauseMic();
+    finalRef.current = "";
     setStatus("speaking");
-    try { audioRef.current?.pause(); } catch { /* noop */ }  // стоп предыдущего — без наложения
-    speakingRef.current = true; pauseMic();
-    finalRef.current = "";  // сбросить накопленное (могло быть эхо)
-    let cancelled = false;
+    setActiveSpeaker(it.speaker);
+    setCaption(isRoundtable && it.name ? `${it.name}: ${it.text}` : it.text);
+    recentRef.current = [...recentRef.current, it.text].slice(-4);
+    spokenRef.current = recentRef.current.join(" ");  // анти-эхо: сверяем услышанное с недавно сказанным
     (async () => {
       try {
-        const url = await ttsBlobUrl(text, resolveVoice());
-        if (cancelled) { speakingRef.current = false; return; }
+        const url = await ttsBlobUrl(it.text, it.voice, "neutral", it.agentId);
+        if (!playingRef.current) return;  // остановили, пока синтезировалось
         if (url) {
-          const a = new Audio(url); audioRef.current = a; a.playbackRate = _flowSpeed();
-          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; finalRef.current = ""; resumeMic(); }, 600); };
-          a.onended = done;
-          a.onerror = done;
+          const a = getPlayer(); a.src = url; a.playbackRate = _flowSpeed();
+          a.onended = () => playNext();
+          a.onerror = () => playNext();
           await a.play();
-        } else { setStatus("listening"); speakingRef.current = false; resumeMic(); }
-      } catch { setStatus("listening"); speakingRef.current = false; resumeMic(); }
+        } else playNext();
+      } catch { playNext(); }
     })();
-    return () => { cancelled = true; };
-  }, [lastReply, voiceId]);
+  };
+  const enqueue = (it: QItem) => {
+    queueRef.current.push(it);
+    if (!playingRef.current) playNext();
+  };
+  const stopSpeech = () => {
+    queueRef.current = [];
+    playingRef.current = false;
+    setActiveSpeaker(null);
+    try { audioRef.current?.pause(); } catch { /* noop */ }
+  };
+
+  // Смена комнаты (помощник ↔ джинн ↔ круглый стол): всё, что уже есть в новой комнате, — история, не озвучиваем;
+  // первые 3 с после смены «запоминаем» догружающуюся историю. Текущая реплика (напр. «подключаю…») доигрывает.
+  const sessionRef = useRef<string | undefined>(undefined);
+  const switchedAtRef = useRef(0);
+  useEffect(() => {
+    const list = utterances || [];
+    if (sessionRef.current === undefined || sessionRef.current !== sessionKey) {
+      const switched = sessionRef.current !== undefined;
+      sessionRef.current = sessionKey;
+      list.forEach((u) => seenRef.current.add(u.id));
+      if (switched) { switchedAtRef.current = Date.now(); finalRef.current = ""; }
+      return;
+    }
+    for (const u of list) {
+      if (seenRef.current.has(u.id)) continue;
+      seenRef.current.add(u.id);
+      if (Date.now() - switchedAtRef.current < 3000) continue;  // догружается история новой комнаты
+      if (Date.now() < stopUntilRef.current) continue;           // после «стоп»/тапа — не заговариваем
+      const text = (u.text || "").trim();
+      if (!text) continue;
+      const aid = u.sender === "agent" ? (u.agentId ?? agentId ?? null) : null;
+      enqueue({ key: u.id, text, voice: voiceOf(u), agentId: aid, speaker: u.sender === "agent" ? (aid ?? 0) : "assistant", name: u.name });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [utterances, sessionKey]);
+
+  // Джинн появился в Потоке один на один — здоровается сам (в круглом столе участников объявляет ведущий-помощник)
+  const prevAgentRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    const cur = agentId ?? null;
+    const prev = prevAgentRef.current;
+    prevAgentRef.current = cur;
+    if (prev === undefined || prev === cur || !cur || isRoundtable) return;
+    switchedAtRef.current = Date.now();
+    enqueue({ key: `greet-${cur}-${Date.now()}`, text: (agentGreeting || "").trim() || `Здравствуйте! Я ${assistantName}. Чем могу помочь?`,
+              voice: resolveVoice(), agentId: null, speaker: cur, name: assistantName });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId]);
 
   const interrupt = () => {
-    try { audioRef.current?.pause(); } catch { /* noop */ }
+    stopSpeech();
     stopUntilRef.current = Date.now() + 3500;  // тап = стоп: не заговаривать сразу снова
     speakingRef.current = false;
     finalRef.current = "";
@@ -203,22 +448,7 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
     "Глубокий вдох — и ты справишься со всем, что задумал на сегодня.",
   ];
   const speakLine = (text: string) => {
-    setCaption(text);
-    setStatus("speaking");
-    try { audioRef.current?.pause(); } catch { /* noop */ }
-    speakingRef.current = true; pauseMic();
-    finalRef.current = "";
-    (async () => {
-      try {
-        const url = await ttsBlobUrl(text, resolveVoice());
-        if (url) {
-          const a = new Audio(url); audioRef.current = a; a.playbackRate = _flowSpeed();
-          const done = () => { finalRef.current = ""; setStatus("listening"); setTimeout(() => { speakingRef.current = false; finalRef.current = ""; resumeMic(); }, 600); };
-          a.onended = done; a.onerror = done;
-          await a.play();
-        } else { setStatus("listening"); speakingRef.current = false; resumeMic(); }
-      } catch { setStatus("listening"); speakingRef.current = false; resumeMic(); }
-    })();
+    enqueue({ key: `line-${Date.now()}`, text, voice: homeVoice || resolveVoice(), agentId: null, speaker: "assistant", name: homeAssistantName });
   };
   const rubLamp = () => {
     lpFiredRef.current = true;
@@ -298,12 +528,52 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
       {/* Контент поверх фона (z-1). Пустое место ловит тап-прерывание */}
       <div onClick={() => { if (lpFiredRef.current) { lpFiredRef.current = false; return; } interrupt(); }} className="relative w-full h-full flex flex-col items-center justify-center" style={{ zIndex: 1, justifyContent: "flex-start", alignItems: "center", paddingTop: "4vh" }}>
         <button onClick={(e) => { e.stopPropagation(); onExit(); }} className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }}>✕</button>
-        <button onClick={(e) => { e.stopPropagation(); const nx = _FLOW_SPEEDS[(_FLOW_SPEEDS.indexOf(speed) + 1) % _FLOW_SPEEDS.length]; setSpeed(nx); _setFlowSpeed(nx); if (audioRef.current) audioRef.current.playbackRate = nx; }} className="absolute top-5 left-5 h-9 px-3 rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }} title="Скорость озвучки">{speed}×</button>
+        <button onClick={(e) => { e.stopPropagation(); const nx = _FLOW_SPEEDS[(_FLOW_SPEEDS.indexOf(speed) + 1) % _FLOW_SPEEDS.length]; setSpeed(nx); _setFlowSpeed(nx); if (audioRef.current) audioRef.current.playbackRate = nx; }} className="absolute top-5 h-9 px-3 rounded-full flex items-center justify-center text-[12px] font-semibold shrink-0" style={{ right: 68, minWidth: 44, background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-secondary)" }} title="Скорость озвучки">{speed}×</button>
+        {onAddressAssistant && showMiniAssistant && (
+          <button
+            onClick={(e) => { e.stopPropagation(); pendingQuestionRef.current = false; onAddressAssistant(""); }}
+            className="absolute top-4 left-4 flex flex-col items-center gap-1 animate-fade-in"
+            title={`Позвать ${homeAssistantName || "помощника"} — коснитесь или назовите по имени`}
+            aria-label={`Вернуться к помощнику ${homeAssistantName || ""}`}
+          >
+            <span className="flow-mini-assistant overflow-hidden flex items-center justify-center" style={{ width: 52, height: 52, borderRadius: 14, background: "var(--bg-glass)", border: activeSpeaker === "assistant" ? "2px solid #d9a534" : "1px solid var(--bg-glass-border)", boxShadow: activeSpeaker === "assistant" ? "0 0 0 6px rgba(217,165,52,0.25), 0 6px 22px rgba(0,0,0,0.45)" : "0 6px 22px rgba(0,0,0,0.45)", transition: "box-shadow .25s, border-color .25s" }}>
+              {homeAssistantPhoto
+                ? <img src={homeAssistantPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <span style={{ fontSize: 22, color: "var(--text-primary)" }}>✦</span>}
+            </span>
+            <span className="text-[10.5px] max-w-[80px] truncate" style={{ color: "var(--text-muted)" }}>{homeAssistantName}</span>
+          </button>
+        )}
         <div className="font-light mb-1" style={{ color: "var(--text-primary)", letterSpacing: 3, fontSize: "clamp(34px, 7.5vw, 50px)" }}>{hh}:{mm}</div>
         <div className="text-[12px] mb-8 uppercase tracking-[0.3em]" style={{ color: "var(--text-muted)" }}>{assistantName} · поток</div>
 
+
+        {/* Круглый стол: участники — закруглённые квадраты (под будущее живое видео), говорящий подсвечен */}
+        {isRoundtable && (
+          <div className="flex items-end justify-center gap-3 px-4" style={{ minHeight: 200 }}>
+            {(participants || []).slice(0, 3).map((pt) => {
+              const on = activeSpeaker === pt.id;
+              const size = (participants || []).length >= 3 ? 104 : 132;
+              return (
+                <div key={pt.id} className="relative overflow-hidden flex items-end justify-center"
+                  style={{ width: size, height: Math.round(size * 1.18), borderRadius: 22, flex: "0 0 auto",
+                    background: pt.photo_url ? "#222" : `radial-gradient(120% 110% at 50% 22%, ${(pt.color || "#6c7bff")}aa, ${(pt.color || "#6c7bff")})`,
+                    border: on ? "2px solid #d9a534" : "1px solid var(--bg-glass-border)",
+                    boxShadow: on ? "0 0 0 6px rgba(217,165,52,0.22), 0 14px 40px rgba(0,0,0,0.45)" : "0 10px 30px rgba(0,0,0,0.35)",
+                    transform: on ? "scale(1.06)" : "scale(1)", transition: "transform .3s, box-shadow .3s, border-color .3s" }}>
+                  {pt.photo_url
+                    ? <img src={pt.photo_url} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ position: "absolute", top: "34%", left: 0, right: 0, textAlign: "center", fontSize: 30, fontWeight: 700, color: "rgba(255,255,255,0.9)" }}>{(pt.name || "?").replace(/[«»"]/g, "").trim()[0]}</span>}
+                  <span style={{ position: "absolute", top: 7, left: 7, fontSize: 9, color: "#fff", background: on ? "rgba(217,165,52,0.85)" : "rgba(0,0,0,0.35)", padding: "2px 7px", borderRadius: 999 }}>{on ? "● говорит" : "LIVE"}</span>
+                  <span style={{ position: "relative", zIndex: 1, width: "100%", padding: "18px 6px 7px", textAlign: "center", fontSize: 10.5, lineHeight: 1.2, color: "#fff", fontWeight: 600, background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{pt.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Центр: аватар помощника (фото в покое) → вибрирующая волна во время речи. Долгое нажатие = «потри лампу» */}
-        <div
+        {!isRoundtable && <div
           className="flex items-center justify-center cursor-pointer relative"
           style={{ width: 200, height: 200 }}
           title="Нажми, чтобы прервать"
@@ -334,11 +604,35 @@ export default function FlowScreen({ onExit, onSend, lastReply, mediaList, assis
           ) : (
             <div className="flow-orb" />
           )}
-        </div>
+        </div>}
 
         <div className="text-sm mt-12 min-h-[44px] text-center px-8 leading-relaxed" style={{ color: "var(--text-secondary)", maxWidth: 520 }}>
-          {status === "speaking" ? (caption || `перебей: скажи «${assistantName}», «стоп» или просто говори · или тапни`) : (caption || "Слушаю…")}
+          {status === "speaking"
+            ? (caption || (serverStt ? "тапни, чтобы перебить" : `перебей: скажи «${assistantName}», «стоп» или просто говори · или тапни`))
+            : (caption || (serverStt && status === "idle" ? "Нажмите на микрофон и говорите" : "Слушаю…"))}
         </div>
+
+        {/* Кнопка микрофона — для серверного распознавания (iPhone и др.): первое касание включает голос */}
+        {serverStt && status !== "speaking" && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMicTap(); }}
+            className="mt-6 flex items-center justify-center rounded-full transition-transform active:scale-95"
+            style={{
+              width: 76, height: 76, fontSize: 30,
+              background: status === "listening" ? "rgba(224,85,85,0.9)" : "var(--bg-glass)",
+              border: "1px solid var(--bg-glass-border)",
+              boxShadow: status === "listening" ? "0 0 0 10px rgba(224,85,85,0.18)" : "0 8px 30px rgba(0,0,0,0.35)",
+              color: "var(--text-primary)",
+            }}
+            aria-label={status === "listening" ? "Закончить фразу" : "Говорить"}
+            title={status === "listening" ? "Нажмите, когда закончите" : "Нажмите и говорите"}
+          >
+            🎙
+          </button>
+        )}
+        {serverStt && needTap && (
+          <div className="text-[11px] mt-3" style={{ color: "var(--text-muted)" }}>одно касание — и дальше можно говорить без рук</div>
+        )}
       </div>
 
       {/* Медиа «из дымки» снизу — меньше нижней половины, по краям виден фон. Одно медиа = крупно; несколько = ряд миниатюр (тап → полноэкран) */}

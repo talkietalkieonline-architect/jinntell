@@ -227,6 +227,8 @@ action — одно из:
 class IntentRequest(BaseModel):
     text: str
     room: Optional[str] = None
+    view: Optional[str] = None  # где пользователь: flow (голосовой Поток) | chat — помощник различает «подключить в Поток» и «открыть чат»
+    flow_room: Optional[str] = None  # кто сейчас в Потоке: room-{id} (несколько джиннов) | agent-{id}-u{uid} (один)
 
 
 @router.post("/intent")
@@ -295,7 +297,12 @@ async def assistant_act(body: IntentRequest, db: AsyncSession = Depends(get_db),
     """Помощник на tool-calling: модель сама выбирает инструменты. Возвращает {reply, directives, steps}.
     Директивы (open_chat/close_chat/call/send_message) выполняет фронт. Экспериментальный путь рядом с классификатором."""
     from app.services.assistant_agent import run
-    result = await run(user_id=user.id, text=(body.text or ""), assistant_name=(user.assistant_name or "Джим"), room=(body.room or None))
+    _fr = body.flow_room or ""
+    _ma = re.match(r"^agent-\d+-u(\d+)$", _fr)
+    if not (re.match(r"^room-\d+$", _fr) or (_ma and int(_ma.group(1)) == user.id)):
+        _fr = None  # чужое/непонятное — не передаём (владение комнатой проверяется в инструментах)
+    result = await run(user_id=user.id, text=(body.text or ""), assistant_name=(user.assistant_name or "Джим"), room=(body.room or None),
+                       view=(body.view if body.view in ("flow", "chat") else None), flow_room=_fr)
     # след в истории помощника (jim-{uid}) — чинит «помощник пропал»
     try:
         room = f"jim-{user.id}"

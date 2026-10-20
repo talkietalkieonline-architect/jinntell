@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import ModulesEditor from "@/components/station/ModulesEditor";
 import GeoMapPicker from "@/components/communicator/GeoMapPicker";
 import {
   contractorLogin,
@@ -50,6 +51,7 @@ import {
   contractorApplyFace,
   type MediaAssetOut,
 } from "@/services/api";
+import { contractorModulesApi } from "@/services/api";
 
 /* ══════════════════════════════════════════════════════════════
    ЛК Бизнеса — настройка привязанных агентов
@@ -82,7 +84,7 @@ const TEMPERAMENTS = [
   { id: "reserved", label: "Сдержанный" },
 ];
 
-type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "functions" | "leads" | "subscribers" | "knowledge" | "voice" | "appearance" | "outfit" | "faces" | "access" | "geo";
+type EditSection = "main" | "rules" | "skills" | "exclusions" | "modes" | "manners" | "functions" | "modules" | "leads" | "subscribers" | "knowledge" | "voice" | "appearance" | "outfit" | "faces" | "access" | "geo";
 
 // Реестр функций джина (синхронно с backend app/services/agent_tools.py)
 const TOOL_CATALOG: { id: string; label: string; desc: string; kind: "read" | "write"; soon?: boolean }[] = [
@@ -122,6 +124,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [calcPrepay, setCalcPrepay] = useState(100000);  // калькулятор «предоплата → ответы»
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState<AgentFullOut | null>(null);
+  const modulesApi = useMemo(() => (selectedAgent ? contractorModulesApi(selectedAgent.id) : null), [selectedAgent?.id]);
   const [editVisibility, setEditVisibility] = useState("public");
   const [accessUsers, setAccessUsers] = useState<AccessUser[]>([]);
   const [accessInput, setAccessInput] = useState("");
@@ -635,6 +638,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "exclusions" as const, label: "Запреты" },
                   { id: "manners" as const, label: "Манеры" },
                   { id: "functions" as const, label: "Функции" },
+                  { id: "modules" as const, label: "Модули" },
                   { id: "leads" as const, label: "Заявки" },
                   { id: "subscribers" as const, label: "Подписчики" },
                   { id: "knowledge" as const, label: "Знания" },
@@ -965,6 +969,11 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   <button onClick={saveGeo} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Сохранить геотриггер</button>
                   {geoSaved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
                 </div>
+              )}
+
+              {/* ═══ Секция: Модули отраслевой заготовки (бизнес включает сам) ═══ */}
+              {activeSection === "modules" && selectedAgent && (
+                <div className="animate-fade-in"><ModulesEditor api={modulesApi!} /></div>
               )}
 
               {/* ═══ Секция: Функции ═══ */}

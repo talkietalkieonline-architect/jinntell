@@ -1,0 +1,100 @@
+/* Публичные страницы «О JinnTell» (/about, /about/kp/*). Свои классы (ab-*), без утилит Tailwind. */
+.ab {
+  --ab-bg: #f6f1e6;
+  --ab-card: #fffdf8;
+  --ab-ink: #1d1912;
+  --ab-muted: #6b6253;
+  --ab-line: #e6dccb;
+  --ab-gold: #d9a534;
+  --ab-gold-ink: #8a6410;
+  --ab-night: #161311;
+  --ab-night-ink: #f2ede3;
+  --ab-night-muted: #b9b0a0;
+  background: var(--ab-bg);
+  color: var(--ab-ink);
+  /* приложение запрещает прокрутку html/body (полноэкранный режим) → прокручивается сам раздел */
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  font-family: "Inter Tight", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.55;
+}
+.ab * { box-sizing: border-box; }
+.ab a { color: inherit; }
+.ab-wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+/* верхняя навигация */
+.ab-nav { position: sticky; top: 0; z-index: 10; background: rgba(22, 19, 17, 0.92); backdrop-filter: blur(8px); }
+.ab-nav .ab-wrap { display: flex; align-items: center; gap: 18px; height: 56px; overflow-x: auto; }
+.ab-logo { font-weight: 800; font-size: 19px; color: var(--ab-gold); text-decoration: none; letter-spacing: -0.02em; white-space: nowrap; }
+.ab-nav a.ab-link { color: var(--ab-night-muted); text-decoration: none; font-size: 14px; white-space: nowrap; }
+.ab-nav a.ab-link:hover, .ab-nav a.ab-link:focus-visible { color: var(--ab-night-ink); }
+.ab-nav .ab-cta { margin-left: auto; }
+
+/* кнопки */
+.ab-btn { display: inline-block; padding: 12px 20px; border-radius: 12px; font-weight: 700; font-size: 15px; text-decoration: none; white-space: nowrap; }
+.ab-btn-gold { background: var(--ab-gold); color: #1d1608 !important; }
+.ab-btn-gold:hover { background: #e6bd57; }
+.ab-btn-ghost { border: 1px solid rgba(255, 255, 255, 0.22); color: var(--ab-night-ink) !important; }
+.ab-btn-line { border: 1px solid var(--ab-line); color: var(--ab-ink) !important; background: var(--ab-card); }
+.ab-btn:focus-visible, .ab a:focus-visible { outline: 2px solid var(--ab-gold); outline-offset: 2px; }
+
+/* первый экран */
+.ab-hero { background: var(--ab-night); color: var(--ab-night-ink); padding: 72px 0 64px; }
+.ab-eyebrow { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ab-gold); font-weight: 700; }
+.ab-hero h1 { font-size: clamp(32px, 5.4vw, 56px); line-height: 1.08; letter-spacing: -0.03em; margin: 14px 0 18px; max-width: 16ch; text-wrap: balance; }
+.ab-hero p.ab-lead { font-size: clamp(16px, 2vw, 19px); color: var(--ab-night-muted); max-width: 60ch; margin: 0 0 28px; }
+.ab-hero .ab-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* секции */
+.ab-sec { padding: 64px 0; border-bottom: 1px solid var(--ab-line); scroll-margin-top: 56px; }
+.ab-sec h2 { font-size: clamp(26px, 3.6vw, 38px); letter-spacing: -0.02em; line-height: 1.15; margin: 8px 0 12px; text-wrap: balance; }
+.ab-sec p.ab-intro { color: var(--ab-muted); font-size: 17px; max-width: 64ch; margin: 0 0 32px; }
+.ab-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.ab-card { background: var(--ab-card); border: 1px solid var(--ab-line); border-radius: 16px; padding: 20px; }
+.ab-card h3 { font-size: 17px; margin: 0 0 6px; }
+.ab-card p { margin: 0; color: var(--ab-muted); font-size: 15px; }
+.ab-num { font-size: 13px; font-weight: 700; color: var(--ab-gold-ink); margin-bottom: 8px; }
+
+/* сценарий шагами */
+.ab-steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 10px; max-width: 760px; }
+.ab-steps li { counter-increment: s; position: relative; padding: 14px 16px 14px 56px; background: var(--ab-card); border: 1px solid var(--ab-line); border-radius: 14px; }
+.ab-steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--ab-night); color: var(--ab-gold); font-weight: 800; display: grid; place-items: center; font-size: 14px; }
+
+/* КП-карточка */
+.ab-kp { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; background: var(--ab-night); color: var(--ab-night-ink); border-radius: 18px; padding: 24px; }
+.ab-kp h3 { margin: 4px 0 6px; font-size: 20px; }
+.ab-kp p { margin: 0; color: var(--ab-night-muted); max-width: 60ch; }
+
+/* таблица */
+.ab-table-wrap { overflow-x: auto; }
+.ab-table { width: 100%; border-collapse: collapse; background: var(--ab-card); border: 1px solid var(--ab-line); border-radius: 14px; overflow: hidden; font-variant-numeric: tabular-nums; }
+.ab-table th, .ab-table td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--ab-line); font-size: 15px; vertical-align: top; }
+.ab-table th { background: #f1e9da; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ab-muted); }
+.ab-table tr:last-child td { border-bottom: 0; }
+
+/* этапы */
+.ab-phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.ab-phase { border: 1px solid var(--ab-line); border-radius: 16px; padding: 18px; background: var(--ab-card); }
+.ab-phase.is-now { border: 2px solid var(--ab-gold); background: #fbf3df; }
+.ab-phase ul { margin: 10px 0 0; padding-left: 18px; color: var(--ab-muted); font-size: 15px; }
+
+.ab-foot { padding: 40px 0 56px; color: var(--ab-muted); font-size: 14px; }
+.ab-foot a { color: var(--ab-gold-ink); }
+.ab-note { font-size: 13px; color: var(--ab-muted); margin-top: 12px; }
+
+@media (max-width: 640px) {
+  .ab-hero { padding: 48px 0 44px; }
+  .ab-sec { padding: 44px 0; }
+  .ab-nav .ab-cta { display: none; }
+}
+@media print {
+  html, body { height: auto !important; overflow: visible !important; }
+  .ab { height: auto !important; overflow: visible !important; }
+  .ab-nav, .ab-noprint { display: none !important; }
+  .ab, .ab-hero { background: #fff !important; color: #000 !important; }
+  .ab-hero p.ab-lead, .ab-kp p { color: #333 !important; }
+  .ab-kp { background: #fff !important; color: #000 !important; border: 1px solid #ccc; }
+  .ab-sec { padding: 20px 0; break-inside: avoid; }
+}

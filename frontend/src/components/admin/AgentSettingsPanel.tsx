@@ -1,5 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import ChannelTab from "./ChannelTab";
+import ModulesEditor from "@/components/station/ModulesEditor";
+import { adminModulesApi } from "@/services/api";
 import {
   adminGetAgent,
   adminUpdateAgent,
@@ -27,7 +30,7 @@ import {
    Табы: Основное | Правила | Скилы | Обучение | Отмена | Режимы | Персонаж | Управление
    ══════════════════════════════════════════════════════════════ */
 
-type SettingsTab = "basic" | "rules" | "skills" | "training" | "exclusions" | "modes" | "persona" | "parser" | "control";
+type SettingsTab = "basic" | "rules" | "skills" | "training" | "exclusions" | "modes" | "persona" | "parser" | "channel" | "modules" | "control";
 
 interface Props {
   agentId: number;
@@ -68,6 +71,7 @@ const YANDEX_VOICES = [
 ];
 
 export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: Props) {
+  const modulesApi = useMemo(() => adminModulesApi(agentId), [agentId]);
   const [agent, setAgent] = useState<AgentDetailOut | null>(null);
   const [tab, setTab] = useState<SettingsTab>("basic");
   const [saving, setSaving] = useState(false);
@@ -174,6 +178,8 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
     { id: "exclusions", label: "Запреты", icon: "🚫" },
     { id: "persona", label: "Персонаж", icon: "🎭" },
     ...(isSpecialist ? [{ id: "parser" as const, label: "Парсер", icon: "🔍" }] : []),
+    { id: "channel", label: "Канал", icon: "📡" },
+    { id: "modules", label: "Заготовка", icon: "🧩" },
     { id: "control", label: "Управление", icon: "⚙️" },
   ];
 
@@ -652,6 +658,9 @@ export default function AgentSettingsPanel({ agentId, onBack, onAgentUpdated }: 
       {tab === "parser" && isSpecialist && (
         <RAGPanel agentId={agentId} />
       )}
+
+      {tab === "channel" && <ChannelTab agentId={agentId} />}
+      {tab === "modules" && <ModulesEditor api={modulesApi} admin />}
 
       {/* ═══ TAB: Управление ═══ */}
       {tab === "control" && (

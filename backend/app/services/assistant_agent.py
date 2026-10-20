@@ -2,6 +2,7 @@
 Модель сама решает, какие инструменты вызвать. Backend-инструменты исполняются здесь;
 клиентские (навигация) возвращаются директивами фронту."""
 import json
+import re
 
 from sqlalchemy import select
 
@@ -18,8 +19,12 @@ TOOLS = [
         "name": "find_person", "description": "Найти человека (контакт) или джинна по имени — узнать, есть ли он и в сети ли.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {
-        "name": "open_chat", "description": "Открыть чат с человеком или джинном по имени.",
-        "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
+        "name": "open_chat", "description": "Позвать человека или джинна по имени: подключить его голосом в ПОТОК (mode=flow) или открыть текстовый ЧАТ с ним (mode=chat).",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"},
+            "mode": {"type": "string", "enum": ["flow", "chat"],
+                     "description": "flow — подключить в Поток (голосовое окно), ПО УМОЛЧАНИЮ, если пользователь сейчас в Потоке или просит «поговорить», «позвать», «в поток»; chat — текстовая переписка, если просит «чат», «написать», «переписку»."}},
+            "required": ["name"]}}},
     {"type": "function", "function": {
         "name": "close_chat", "description": "Закрыть чат по имени собеседника.",
         "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
@@ -120,6 +125,24 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "reply", "description": "Ответить пользователю обычным текстом (когда действие не нужно или чтобы подтвердить/уточнить).",
         "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}},
+]
+
+TOOLS += [
+    {"type": "function", "function": {
+        "name": "invite_to_flow",
+        "description": "Пригласить в голосовой ПОТОК одного или НЕСКОЛЬКИХ джиннов Города (до 3 сразу), чтобы говорить с ними "
+                       "вместе: «позови заправки 1 и 3», «собери заправки рядом», «добавь представителя сети». Если в Потоке уже есть "
+                       "джинны — новые добавятся к ним. names — имена/названия/номера джиннов.",
+        "parameters": {"type": "object", "properties": {
+            "names": {"type": "array", "items": {"type": "string"}, "description": "Кого пригласить"}},
+            "required": ["names"]}}},
+    {"type": "function", "function": {
+        "name": "release_from_flow",
+        "description": "Отпустить джинна(ов) из Потока: «отпусти третью заправку», «отпусти всех», «да» на вопрос «отпустить?». "
+                       "names — кого отпустить; ПУСТОЙ список = отпустить всех и вернуться к разговору вдвоём.",
+        "parameters": {"type": "object", "properties": {
+            "names": {"type": "array", "items": {"type": "string"}, "description": "Кого отпустить (пусто = всех)"}},
+            "required": []}}},
 ]
 
 CLIENT_TOOLS = {"open_chat", "close_chat", "call", "send_message"}
@@ -525,7 +548,14 @@ async def _find_person(user_id: int, name: str) -> str:
         for a in city:
             if a.name not in seen:
                 parts.append(f"Джинн (в Городе): {a.name} — {a.profession}")
-    return "; ".join(parts) if parts else f"Никого с именем «{n}» не нашёл."
+    if parts:
+        return "; ".join(parts)
+    # точного имени нет — возможно, это джинн Города, названный «по-простому» («АЗС 1» → «АЗС «Газпромнефть» №1»)
+    a = await _resolve_jinn(n)
+    if a:
+        return (f"Джинн (в Городе): {a.name} — {a.profession}. Это тот, кого просят: "
+                f"открой его через open_chat «{a.name}».")
+    return f"Никого с именем «{n}» не нашёл."
 
 
 async def _discover_city(query: str, limit: int = 8):
@@ -577,6 +607,45 @@ async def _ask_one(a, user_id: int, question: str, max_tokens: int = 600) -> str
         return await agent_tools.reply_with_tools(None, a, akw, enabled)
     from app.services.llm import get_agent_reply
     return await get_agent_reply(**akw)
+
+
+def _norm_name(s: str) -> str:
+    import re as _re
+    s = (s or "").lower().replace("ё", "е")
+    s = _re.sub(r"[«»\"'“”„№#.,!?:;()\-—–]", " ", s)
+    return " ".join(s.split())
+
+
+async def _resolve_jinn(name: str):
+    """Точный джинн Города по имени из команды open_chat («АЗС 1» → «АЗС «Газпромнефть» №1»).
+    Кавычки/«№»/регистр не важны; номер в запросе ОБЯЗАН совпасть с номером в имени (иначе откроем не ту станцию).
+    None — если уверенного совпадения нет (тогда это, возможно, человек из контактов — решит клиент)."""
+    import re as _re
+    from sqlalchemy import or_
+    q = _norm_name(name)
+    if not q:
+        return None
+    nums = set(_re.findall(r"\d+", q))
+    words = [w for w in q.split() if len(w) >= 3 and not w.isdigit()]
+    cands = {a.id: a for a in await _discover_city(name, limit=10)}
+    if words:
+        async with async_session() as db:
+            rows = (await db.execute(select(Agent).where(
+                Agent.is_active == True, Agent.visibility == "public",  # noqa: E712
+                or_(*[Agent.name.ilike(f"%{w}%") for w in words[:3]])).limit(30))).scalars().all()
+        for a in rows:
+            cands.setdefault(a.id, a)
+    best, best_score = None, 0
+    for a in cands.values():
+        hay = _norm_name(f"{a.name} {a.profession or ''}")
+        if nums and not nums <= set(_re.findall(r"\d+", _norm_name(a.name))):
+            continue
+        score = sum(2 if w in _norm_name(a.name) else 1 for w in words if w in hay) + (3 if nums else 0)
+        if _norm_name(a.name) == q:
+            score += 10
+        if score > best_score:
+            best, best_score = a, score
+    return best if best_score > 0 else None
 
 
 async def _search_city(query: str) -> str:
@@ -1041,8 +1110,164 @@ async def _chat_media(user_id: int, name: str, media_type: str = "any") -> tuple
             {"url": m.media_url, "type": m.media_type or "image"})
 
 
-async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4, room: str | None = None) -> dict:
+_FLOW_VS_CHAT = (
+    "\n\nПОТОК И ЧАТ — РАЗНЫЕ ВЕЩИ, НЕ ПУТАЙ:\n"
+    "• ПОТОК — голосовое окно: говорим вслух, без клавиатуры. Когда зовёшь джинна в Поток, он ПОДКЛЮЧАЕТСЯ к разговору "
+    "и говорит своим голосом, а ты сворачиваешься в угол и ждёшь, пока тебя позовут по имени. "
+    "Так и говори: «Подключаю «<имя>» к нам в Поток» — НЕ «открыла чат».\n"
+    "• ЧАТ — текстовая переписка с джинном или человеком в отдельном окне. Так и говори: «Открыла чат с «<имя>»».\n"
+    "Режим задаёшь в open_chat (mode=flow / mode=chat). Если человек в Потоке и не просил текст — mode=flow.\n"
+    "• НЕСКОЛЬКО джиннов в Потоке («позови заправки 1 и 3», «добавь …») — invite_to_flow (до 3). "
+    "Отпустить («отпусти …», «отпусти всех») — release_from_flow. Пока в Потоке джинны, ты ведущий: сидишь в углу и слушаешь."
+)
+
+
+async def _flow_members(flow_room: str | None) -> list:
+    """Кто сейчас в Потоке пользователя: room-{id} → участники комнаты; agent-{id}-u{uid} → один джинн."""
+    from app.models.room import RoomMember
+    m = re.match(r"^room-(\d+)$", flow_room or "")
+    ma = re.match(r"^agent-(\d+)-u\d+$", flow_room or "")
+    async with async_session() as db:
+        if m:
+            return list((await db.execute(select(Agent).join(RoomMember, RoomMember.agent_id == Agent.id)
+                                          .where(RoomMember.room_id == int(m.group(1))))).scalars().all())
+        if ma:
+            a = await db.get(Agent, int(ma.group(1)))
+            return [a] if a else []
+    return []
+
+
+def _member_payload(a) -> dict:
+    return {"id": a.id, "name": a.name, "profession": a.profession, "brand": a.brand, "color": a.color,
+            "photo_url": a.photo_url, "tts_voice_id": getattr(a, "tts_voice_id", None),
+            "tts_emotion": getattr(a, "tts_emotion", None)}
+
+
+async def _broadcast_members(room_id: int) -> None:
+    """Состав комнаты изменился — сообщить открытому Потоку (плитки участников обновятся)."""
+    try:
+        from app.websocket.manager import manager
+        ms = await _flow_members(f"room-{room_id}")
+        await manager.broadcast(f"room-{room_id}", {"type": "room_members", "room_members": [_member_payload(a) for a in ms]})
+    except Exception as e:  # noqa: BLE001
+        print(f"[flow] broadcast members err: {e}")
+
+
+async def _invite_to_flow(user_id: int, names: list, flow_room: str | None):
+    """Пригласить джиннов в Поток. 1 джинн (и Поток пуст) → обычный разговор с ним; ≥2 → комната (до 3 участников)."""
+    from app.models.room import Room, RoomMember
+    from app.services.access import can_access_agent
+    found, missing = [], []
+    for n in (names or [])[:3]:
+        a = await _resolve_jinn(str(n))
+        if a and all(a.id != x.id for x in found):
+            found.append(a)
+        elif not a:
+            missing.append(str(n))
+    if not found:
+        return (f"Не нашла в Городе: {', '.join(missing) or 'никого'}.", None)
+    room_id = None
+    base_ids: list = []
+    m = re.match(r"^room-(\d+)$", flow_room or "")
+    ma = re.match(r"^agent-(\d+)-u\d+$", flow_room or "")
+    async with async_session() as db:
+        if m:
+            r = (await db.execute(select(Room).where(Room.id == int(m.group(1)), Room.owner_user_id == user_id))).scalar_one_or_none()
+            if r:
+                room_id = r.id
+                base_ids = list((await db.execute(select(RoomMember.agent_id).where(RoomMember.room_id == r.id))).scalars().all())
+        elif ma:
+            base_ids = [int(ma.group(1))]
+        ids = list(dict.fromkeys(base_ids + [a.id for a in found]))
+        ok = []
+        for i in ids:
+            ag = await db.get(Agent, i)
+            if ag and ag.is_active and await can_access_agent(db, ag, user_id):
+                ok.append(ag)
+        full = len(ok) > 3
+        ok = ok[:3]
+        if not ok:
+            return ("Нет доступа к этим джиннам.", None)
+        if len(ok) == 1 and not room_id:
+            a0 = ok[0]
+            return (f"Подключаю «{a0.name}» в Поток — скажи об этом коротко.",
+                    {"action": "open_chat", "name": a0.name, "agent_id": a0.id, "mode": "flow"})
+        if not room_id:
+            r = Room(owner_user_id=user_id, title="Поток: " + ", ".join(a.name for a in ok)[:180])
+            db.add(r)
+            await db.commit()
+            await db.refresh(r)
+            room_id = r.id
+        for a in ok:
+            if a.id not in base_ids or not m:
+                exists = (await db.execute(select(RoomMember).where(RoomMember.room_id == room_id, RoomMember.agent_id == a.id))).scalar_one_or_none()
+                if not exists:
+                    db.add(RoomMember(room_id=room_id, agent_id=a.id))
+        await db.commit()
+        names_now = [a.name for a in ok]
+    await _broadcast_members(room_id)
+    txt = "В Потоке: " + ", ".join(f"«{n}»" for n in names_now) + "."
+    if missing:
+        txt += f" Не нашла: {', '.join(missing)}."
+    if full:
+        txt += " В Потоке максимум трое — лишних не добавила."
+    txt += " Скажи коротко, что они на связи: можно спросить всех сразу или по имени."
+    return (txt, {"action": "open_room", "room": f"room-{room_id}", "names": names_now})
+
+
+async def _release_from_flow(user_id: int, names: list, flow_room: str | None):
+    """Отпустить джиннов из Потока: всех (пусто) или названных. Никого не осталось → назад к помощнику."""
+    from app.models.room import Room, RoomMember
+    if re.match(r"^agent-(\d+)-u\d+$", flow_room or ""):
+        return ("Отпускаю джинна — дальше говорим вдвоём. Скажи об этом коротко.", {"action": "release", "all": True})
+    m = re.match(r"^room-(\d+)$", flow_room or "")
+    if not m:
+        return ("Сейчас в Потоке нет приглашённых джиннов.", None)
+    room_id = int(m.group(1))
+    members = await _flow_members(flow_room)
+    if not names:
+        return ("Отпускаю всех: " + ", ".join(f"«{a.name}»" for a in members) + ". Дальше говорим вдвоём — скажи коротко.",
+                {"action": "release", "all": True})
+    from app.websocket.chat_ws import _agent_called
+    drop = []
+    for n in names:
+        low = str(n).lower().replace("ё", "е")
+        for a in members:
+            if a not in drop and (_agent_called(a, low) or _norm_name(str(n)) in _norm_name(a.name)):
+                drop.append(a)
+                break
+    if not drop:
+        return ("Не поняла, кого отпустить, — уточни имя или номер.", None)
+    rest = [a for a in members if a not in drop]
+    if not rest:
+        return ("Отпускаю всех — дальше говорим вдвоём. Скажи коротко.", {"action": "release", "all": True})
+    async with async_session() as db:
+        r = (await db.execute(select(Room).where(Room.id == room_id, Room.owner_user_id == user_id))).scalar_one_or_none()
+        if not r:
+            return ("Это не твой Поток.", None)
+        for a in drop:
+            row = (await db.execute(select(RoomMember).where(RoomMember.room_id == room_id, RoomMember.agent_id == a.id))).scalar_one_or_none()
+            if row:
+                await db.delete(row)
+        await db.commit()
+    await _broadcast_members(room_id)
+    return ("Отпустила: " + ", ".join(f"«{a.name}»" for a in drop) + ". В Потоке остались: " + ", ".join(f"«{a.name}»" for a in rest) + ".",
+            {"action": "release", "all": False})
+
+
+async def run(user_id: int, text: str, assistant_name: str = "Джим", max_iters: int = 4, room: str | None = None,
+              view: str | None = None, flow_room: str | None = None) -> dict:
     system = await _build_context(user_id, text or "")
+    system += _FLOW_VS_CHAT
+    _fm = await _flow_members(flow_room) if flow_room else []
+    if _fm:
+        system += ("\n\nСЕЙЧАС В ПОТОКЕ джинны: " + ", ".join(f"«{a.name}»" for a in _fm)
+                   + ". Ты ведущий: можешь пригласить ещё (invite_to_flow) или отпустить (release_from_flow).")
+    if view == "flow":
+        system += ("\n\nСЕЙЧАС: пользователь в ПОТОКЕ (голосовое окно). Джинов зови в Поток (open_chat mode=flow) "
+                   "и говори «подключаю … в Поток». Отвечай коротко — ответ прозвучит вслух.")
+    elif view == "chat":
+        system += "\n\nСЕЙЧАС: пользователь пишет текстом (окно чата). По умолчанию открывай чат (open_chat mode=chat), если не просят Поток."
     if room:
         system += ("\n\nКОНТЕКСТ: пользователь сейчас в ОТКРЫТОМ чате. Если он просит ДОБАВИТЬ/положить/скинуть что-то В ЭТОТ чат "
                    "(текст, справку, ссылку, картинку) — используй add_to_chat. Картинку добавляй ТОЛЬКО по прямой ссылке; "
@@ -1082,6 +1307,20 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
             if name == "reply":
                 final = (args.get("text") or "").strip()
                 result = "ok"
+            elif name == "invite_to_flow":
+                result, _dv = await _invite_to_flow(user_id, args.get("names") or [], flow_room)
+                if _dv:
+                    directives.append(_dv)
+            elif name == "release_from_flow":
+                result, _dv = await _release_from_flow(user_id, args.get("names") or [], flow_room)
+                if _dv:
+                    directives.append(_dv)
+            elif name == "open_chat" and (_a := await _resolve_jinn(args.get("name", ""))):
+                # джинн Города: отдаём клиенту ТОЧНЫЙ id и настоящее имя (клиенту не надо угадывать по словам)
+                _mode = args.get("mode") if args.get("mode") in ("flow", "chat") else ("flow" if view == "flow" else None)
+                directives.append({"action": "open_chat", "name": _a.name, "agent_id": _a.id, **({"mode": _mode} if _mode else {})})
+                result = (f"Подключаю джинна «{_a.name}» ({_a.profession}) в Поток — скажи об этом так." if _mode == "flow"
+                          else f"Открываю чат с джинном «{_a.name}» ({_a.profession}). Называй его этим именем.")
             elif name in CLIENT_TOOLS:
                 directives.append({"action": name, **args})
                 result = f"Директива «{name}» передана клиенту (выполнит навигацию)."

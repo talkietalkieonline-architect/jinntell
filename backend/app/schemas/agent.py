@@ -15,6 +15,7 @@ class AgentOut(BaseModel):
     color: str
     agent_type: str
     visibility: str = "public"
+    department: Optional[str] = None
     scope: str = "federal"
     city: Optional[str] = None
     is_paid: bool = False
@@ -165,6 +166,7 @@ class AgentUpdate(BaseModel):
     color: Optional[str] = Field(None, max_length=20)
     agent_type: Optional[str] = Field(None, max_length=30)
     visibility: Optional[str] = Field(None, max_length=20)
+    department: Optional[str] = Field(None, max_length=30)
     scope: Optional[str] = Field(None, max_length=20)
     city: Optional[str] = Field(None, max_length=120)
     is_paid: Optional[bool] = None

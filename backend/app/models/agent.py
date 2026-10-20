@@ -28,6 +28,10 @@ class Agent(Base):
     is_template: Mapped[bool] = mapped_column(Boolean, default=False)
     template_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("agents.id"), nullable=True)
     visibility: Mapped[str] = mapped_column(String(20), default="public")
+    # Департамент внутреннего джина (для вкладки Core-джины): assistant | core | sales | marketing | service. None — не штат.
+    department: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    # Автоканал джинна (источники/частота/режим) — JSON, см. services/channel_engine.py. None — канала нет.
+    channel_config: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     scope: Mapped[str] = mapped_column(String(20), default="federal")
     city: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -136,6 +140,16 @@ class Agent(Base):
     photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     queue_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     queue_limit_liters: Mapped[int] = mapped_column(Integer, default=30)
+    # Живые остатки топлива станции (сообщает оператор): {"АИ-95": {"liters": 9500, "updated_at": iso, "by": user_id}}
+    fuel_stock_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Доля остатка, которую НЕ бронируем — запас под живую (параллельную) очередь у колонок, %
+    queue_buffer_pct: Mapped[int] = mapped_column(Integer, default=30)
+    # Шаг окон записи, мин (одно окно = одна машина по записи)
+    queue_slot_min: Mapped[int] = mapped_column(Integer, default=10)
+    # Отраслевая заготовка (аренда) + подключённые админом модули — services/industry_presets.py
+    industry: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)      # "azs" | None
+    modules_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)        # ["queue","cafe",...]
+    station_catalog_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # {"cafe":[{name,price}],"services":[...]}
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

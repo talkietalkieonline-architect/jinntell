@@ -70,6 +70,15 @@ function getSavedSession(): { loggedIn: boolean; user: Partial<UserProfile> } | 
   }
 }
 
+/** Имя/голос помощника, закешированные в браузере, — от ПРОШЛОГО аккаунта (гость, другой вход) не должны
+ *  перетекать в новый: при входе/выходе чистим, их заново запишет полный профиль с сервера. */
+function clearAssistantCache() {
+  try {
+    localStorage.removeItem("jinntell_assistant_name");
+    localStorage.removeItem("jinntell_assistant_voice");
+  } catch { /* noop */ }
+}
+
 /** Сохраняем сессию в localStorage (30 дней) */
 function saveSession(user: Partial<UserProfile>) {
   localStorage.setItem(
@@ -177,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback((userData: Partial<UserProfile>) => {
+    clearAssistantCache();
     const profile: UserProfile = {
       id: userData.id ?? 0,
       phone: userData.phone ?? "",
@@ -190,9 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveSession(profile);
     setIsLoggedIn(true);
     setIsAdmin(profile.is_admin);
+    // Минимальный профиль выше без данных помощника (имя/голос/фото) → сразу тянем полный с сервера,
+    // иначе Поток показывал помощника прошлого аккаунта (гостевой «Джим») и молчал на его голосе.
+    getMe()
+      .then((full) => { if (full) { setUser(full); saveSession(full); setIsAdmin(full.is_admin || false); } })
+      .catch(() => { /* оффлайн — останется минимальный профиль */ });
   }, []);
 
   const logout = useCallback(() => {
+    clearAssistantCache();
     setToken(null);
     setUser(null);
     setIsLoggedIn(false);

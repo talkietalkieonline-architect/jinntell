@@ -35,6 +35,7 @@ _AGENT_ROOM_RE = re.compile(r"^agent-(\d+)(?:-u\d+)?$")
 _ROOM_RE = re.compile(r"^room-(\d+)$")
 # Запоминаем, к какому джинну последний раз обращались в комнате (для маршрутизации без явного имени)
 _room_last_agent: dict = {}
+_room_last_at: dict = {}  # room -> время последнего адресного ответа (для «продолжения» коротких реплик)
 
 # Имя помощника по умолчанию (пользователь может менять)
 DEFAULT_ASSISTANT_NAME = "Джим"
@@ -143,7 +144,9 @@ async def _check_limits(agent, room: str, uid: int) -> Optional[str]:
             if gc == 1:
                 await r.expire(gk, 86400)
             if gl > 0 and gc > gl:
-                return "Чтобы продолжить общение — заведи аккаунт в JinnTell. Это быстро, и я стану твоим личным помощником 🙂"
+                # нейтрально: заглушку произносит ТОТ джинн, с кем идёт разговор (не личный помощник)
+                return ("Бесплатные сообщения для гостя на сегодня закончились. "
+                        "Зарегистрируйтесь в JinnTell — это быстро, и разговор можно будет продолжить 🙂")
         dl = int(getattr(agent, "daily_msg_limit", 50) or 0)
         if dl > 0:
             dk = f"lim:d:{agent.id}:{uid}:{day}"
@@ -242,15 +245,50 @@ def _pick_addressed_agent(room: str, text: str, members: list) -> Agent:
 _DISCUSS_RE = re.compile(r"(обсуд|что думает|ваше мнени|ваши мнени|мнения|совещан|по очереди|все выскаж|каждый из вас|дискусс|подебат|round.?table)", re.I)
 
 
+# только порядковые («третья заправка») — голые «один/два» слишком часто значат другое («один вопрос»)
+_NUM_WORDS = {1: ("первая", "первой", "первую", "первый"), 2: ("вторая", "второй", "вторую"),
+              3: ("третья", "третьей", "третью", "третий"), 4: ("четвертая", "четвертой", "четвертую"),
+              5: ("пятая", "пятой", "пятую")}
+
+
+def _agent_called(agent, low: str) -> bool:
+    """Обратились ли к джинну так, как говорят люди: имя персонажа («Алёна»), название, профессия,
+    номер («№3», «номер 3», «заправка 3», «третья»). low — текст в нижнем регистре, «ё»→«е»."""
+    name = (agent.name or "").lower().replace("ё", "е")
+    prof = (agent.profession or "").lower().replace("ё", "е")
+    if (name and name in low) or (prof and len(prof) > 3 and prof in low):
+        return True
+    m = re.search(r"(?:зовут|я\s*[—-]|это)\s+([А-ЯЁ][а-яё]{2,})", agent.system_prompt or "")
+    if m and re.search(r"(?<!\w)" + re.escape(m.group(1).lower().replace("ё", "е")[:-1]), low):
+        return True  # «Алёна» / «Алёну» / «Алёне»
+    nm = re.search(r"№\s*(\d+)", agent.name or "")
+    if nm:
+        n = nm.group(1)
+        if re.search(rf"(№|номер|азс|заправк\w*|станци\w*)\s*{n}(?!\d)", low):
+            return True
+        if any(re.search(rf"(?<!\w){w}\b", low) for w in _NUM_WORDS.get(int(n), ())):
+            return True
+    return False
+
+
 def _addressed_agent(text: str, members: list):
-    """Явно адресованный джинн (по имени/профессии) или None."""
-    low = (text or "").lower()
+    """Явно адресованный джинн (по имени/персонажу/номеру/профессии) или None."""
+    low = (text or "").lower().replace("ё", "е")
     for a in members:
-        name = (a.name or "").lower()
-        prof = (a.profession or "").lower()
-        if (name and name in low) or (prof and prof in low):
+        if _agent_called(a, low):
             return a
     return None
+
+
+def _room_brevity(agent, members: list, roundtable: bool) -> str:
+    """Подсказка джинну в комнате: разговор голосовой и не наедине — отвечать коротко."""
+    others = ", ".join(a.name for a in members if a.id != agent.id)
+    if roundtable:
+        return (f"\n\nТЫ НА КРУГЛОМ СТОЛЕ в голосовом Потоке вместе с другими джиннами ({others}). "
+                "Ответь КОРОТКО: 1–2 предложения, только по своей части, без приветствия и без пересказа других. "
+                "БЕЗ предложений записаться, купить или оставить контакт — это предложишь, только если к тебе обратятся лично.")
+    return ("\n\nРазговор голосовой, рядом другие участники" + (f" ({others})" if others else "")
+            + ". Отвечай коротко — до 3 предложений.")
 
 
 async def _room_reply(room: str, text: str, members: list, user_id: int = 0, assistant_name: str = DEFAULT_ASSISTANT_NAME) -> None:
@@ -272,18 +310,58 @@ async def _room_reply(room: str, text: str, members: list, user_id: int = 0, ass
             _room_last_agent[room] = picked.id
             await _agent_reply(room, picked, text)
         return
+    import time as _time
     addressed = _addressed_agent(text, members)
     if addressed:
         _room_last_agent[room] = addressed.id
-        await _agent_reply(room, addressed, text)
+        _room_last_at[room] = _time.time()
+        await _agent_reply(room, addressed, text, extra_system=_room_brevity(addressed, members, False))
         return
-    if _DISCUSS_RE.search(text or "") and len(members) > 1:
-        for a in members[:3]:  # круглый стол: последовательно, каждый видит реплики предыдущих через историю
-            await _agent_reply(room, a, text)
-        _room_last_agent[room] = members[0].id
+    if len(members) == 1:
+        await _agent_reply(room, members[0], text, extra_system=_room_brevity(members[0], members, False))
         return
-    target = _pick_addressed_agent(room, text, members)
-    await _agent_reply(room, target, text)
+    # короткое продолжение («да, запишите», «а сколько стоит?») — тому, кто говорил последним (в пределах 2 мин)
+    last_id = _room_last_agent.get(room)
+    short = len((text or "").split()) <= 6
+    if last_id and short and not _DISCUSS_RE.search(text or "") and _time.time() - _room_last_at.get(room, 0) < 120:
+        for a in members:
+            if a.id == last_id:
+                _room_last_at[room] = _time.time()
+                await _agent_reply(room, a, text, extra_system=_room_brevity(a, members, False))
+                return
+    # вопрос ВСЕМ: каждый коротко (до 3, по очереди — видят предыдущих), затем итог помощника
+    _room_last_agent.pop(room, None)
+    for a in members[:3]:
+        await _agent_reply(room, a, text, extra_system=_room_brevity(a, members[:3], True))
+    await _room_summary(room, text, members[:3], user_id, assistant_name)
+
+
+async def _room_summary(room: str, question: str, members: list, user_id: int, assistant_name: str) -> None:
+    """Итог круглого стола от лица помощника: 1–2 предложения по свежим ответам джиннов."""
+    try:
+        async with async_session() as db:
+            rows = (await db.execute(select(Message).where(Message.room == room).order_by(Message.id.desc()).limit(len(members) + 1))).scalars().all()
+        answers = [f"{m.sender_name}: {m.text}" for m in reversed(rows) if m.sender_type == "agent" and m.text]
+        if len(answers) < 2:
+            return
+        prompt = (f"Вопрос пользователя: {question}\n\nОтветы участников:\n" + "\n".join(answers)
+                  + "\n\nПодведи ИТОГ для пользователя в 1–2 предложениях: главное сравнение/вывод и что делать дальше. "
+                    "Без приветствий, не пересказывай всех подряд.")
+        summary = (await get_llm_reply(user_message=prompt,
+                                       system_prompt=f"Ты — {assistant_name}, личный помощник пользователя, ведущий круглого стола в голосовом Потоке. Говоришь коротко и по делу.",
+                                       max_tokens=200, user_id=user_id, payer_type="free")).strip()
+        if not summary:
+            return
+        async with async_session() as db:
+            msg = Message(room=room, sender_type="assistant", sender_name=assistant_name, text=summary)
+            db.add(msg)
+            await db.commit()
+            await db.refresh(msg)
+        await manager.broadcast(room, {"type": "message", "id": msg.id, "room": room, "sender_type": "assistant",
+                                       "sender_name": assistant_name, "text": summary, "media_url": None,
+                                       "media_type": None, "created_at": msg.created_at.isoformat()})
+    except Exception as e:  # noqa: BLE001
+        print(f"[room] summary err: {e}")
 
 
 async def _notify_participants(room: str) -> None:
@@ -626,7 +704,7 @@ _mel_reply = _assistant_reply
 _butler_reply = _assistant_reply
 
 
-async def _agent_reply(room: str, agent: Agent, user_message: str):
+async def _agent_reply(room: str, agent: Agent, user_message: str, extra_system: str = ""):
     """Агент отвечает через LLM с учётом персонажа (манеры, знания, промпт)"""
     await manager.broadcast(room, {
         "type": "typing",
@@ -691,7 +769,7 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
         agent_name=agent.name,
         agent_profession=agent.profession,
         agent_description=agent.description or "",
-        system_prompt=agent.system_prompt,
+        system_prompt=(agent.system_prompt or "") + (extra_system or ""),
         llm_model=agent.llm_model or "gpt-4o-mini",
         user_message=user_message,
         conversation_history=history,
@@ -779,7 +857,8 @@ async def _agent_reply(room: str, agent: Agent, user_message: str):
                 print(f"[wordstat-jinn] {_e}")
         # Q&A-кэш (2-я память): для консультантов (specialist/business) на СВЕЖИЙ вопрос без длинной истории —
         # похожий вопрос уже был → берём готовый ответ, не генерим (экономия). См. [[design_data_and_memory_layers]].
-        _qa_ok = (getattr(agent, "agent_type", "") in ("specialist", "business")) and len(history) <= 2
+        _qa_ok = (getattr(agent, "agent_type", "") in ("specialist", "business")) and len(history) <= 2 \
+            and not getattr(agent, "queue_enabled", False)  # АЗС: живые остатки — готовый ответ мог устареть
         if reply_text is None and _qa_ok:
             try:
                 from app.services import qa_cache
@@ -951,7 +1030,8 @@ async def chat_websocket(websocket: WebSocket, room: str):
     if room_members:
         join_data["room_members"] = [
             {"id": a.id, "name": a.name, "profession": a.profession, "brand": a.brand,
-             "color": a.color, "photo_url": a.photo_url} for a in room_members
+             "color": a.color, "photo_url": a.photo_url,
+             "tts_voice_id": getattr(a, "tts_voice_id", None), "tts_emotion": getattr(a, "tts_emotion", None)} for a in room_members
         ]
     await manager.broadcast(room, join_data)
 

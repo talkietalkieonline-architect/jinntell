@@ -27,3 +27,6 @@ frontend/src/app/*.bak_*
 coturn/certs/
 coturn/turnserver.conf
 *.bak*
+
+# macOS AppleDouble
+._*

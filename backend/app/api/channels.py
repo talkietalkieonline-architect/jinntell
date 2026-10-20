@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -138,3 +138,22 @@ async def channel_posts(agent_id: int, limit: int = 30, db: AsyncSession = Depen
         .order_by(ChannelPost.created_at.desc()).limit(min(limit, 500))
     )
     return [ChannelPostOut.model_validate(p) for p in res.scalars().all()]
+
+
+@router.get("/public/{slug}")
+async def channel_public(slug: str, limit: int = 30, db: AsyncSession = Depends(get_db)):
+    """ПУБЛИЧНАЯ лента канала (без входа) — для страницы jinntell.ru/c/{slug}.
+    Только публичные активные джинны; внутренние (core) и скрытые каналы наружу не отдаются."""
+    ag = (await db.execute(select(Agent).where(Agent.jinntell_link == slug))).scalar_one_or_none()
+    if not ag or not ag.is_active or (ag.visibility or "public") != "public":
+        raise HTTPException(404, "Канал не найден")
+    rows = (await db.execute(
+        select(ChannelPost).where(ChannelPost.agent_id == ag.id)
+        .order_by(ChannelPost.id.desc()).limit(max(1, min(limit, 50)))
+    )).scalars().all()
+    return {
+        "agent": {"id": ag.id, "name": ag.name, "profession": ag.profession, "description": ag.description or "",
+                  "color": ag.color, "photo_url": getattr(ag, "photo_url", None), "slug": ag.jinntell_link},
+        "posts": [{"id": p.id, "title": p.title, "body": p.body, "url": p.url,
+                   "created_at": p.created_at.isoformat() if p.created_at else None} for p in rows],
+    }

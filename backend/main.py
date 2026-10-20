@@ -77,6 +77,21 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS topic_strict BOOLEAN DEFAULT false",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS queue_enabled BOOLEAN DEFAULT false",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS queue_limit_liters INTEGER DEFAULT 30",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS fuel_stock_json TEXT",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS queue_buffer_pct INTEGER DEFAULT 30",
+            "ALTER TABLE fuel_queue ADD COLUMN IF NOT EXISTS client_name VARCHAR(80) DEFAULT ''",
+            "ALTER TABLE fuel_queue ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMPTZ",
+            "ALTER TABLE fuel_queue ADD COLUMN IF NOT EXISTS slot_at TIMESTAMPTZ",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS queue_slot_min INTEGER DEFAULT 10",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS industry VARCHAR(30)",
+            "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS fuel_type VARCHAR(40) DEFAULT ''",
+            "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS liters INTEGER DEFAULT 0",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS modules_json TEXT",
+            "ALTER TABLE fuel_queue ADD COLUMN IF NOT EXISTS reminded VARCHAR(40) DEFAULT ''",
+            "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS reminded VARCHAR(40) DEFAULT ''",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS station_catalog_json TEXT",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS department VARCHAR(30)",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS channel_config TEXT",
         ]:
             try:
                 await conn.execute(_sqltext(_stmt))
@@ -90,15 +105,19 @@ async def lifespan(app: FastAPI):
         await seed_core_agents(db)
 
     import asyncio
-    from app.services.news import news_scheduler
+    from app.services.channel_engine import channel_scheduler
     from app.services.memory import memory_scheduler
-    _news_task = asyncio.create_task(news_scheduler())
+    _chan_task = asyncio.create_task(channel_scheduler())  # все автоканалы джиннов (Новости СПб, Гит, …)
+    from app.services.architect_kb import architect_kb_scheduler
+    _akb_task = asyncio.create_task(architect_kb_scheduler())  # база знаний Архитектора: пересборка раз в сутки
+    from app.services.station_reminders import reminders_scheduler
+    _srm_task = asyncio.create_task(reminders_scheduler())  # напоминания АЗС через личного помощника (без ботов/телефонии)
     _mem_task = asyncio.create_task(memory_scheduler())
 
     print(f"[jinntell] Сервер запущен — {settings.APP_NAME} v{settings.APP_VERSION}")
     yield
-    _news_task.cancel()
-    _mem_task.cancel()
+    for _t in (_chan_task, _akb_task, _srm_task, _mem_task):
+        _t.cancel()
     print("[jinntell] Сервер остановлен")
 
 

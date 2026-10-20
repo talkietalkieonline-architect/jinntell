@@ -71,11 +71,21 @@ export default function JinnTellLinkPage() {
         const r = await fetch(`${API_BASE}/api/auth/guest`, { method: "POST" });
         if (r.ok) {
           const d = await r.json();
-          if (d.access_token) localStorage.setItem("jinntell_token", d.access_token);
+          if (d.access_token) {
+            localStorage.setItem("jinntell_token", d.access_token);
+            // без сохранённой сессии приложение считает человека незалогиненным и показывает экран входа,
+            // а нужно сразу к джину (QR у колонки) → заводим гостевую сессию; полный профиль подтянется сам
+            localStorage.setItem("jinntell_session", JSON.stringify({
+              loggedIn: true, userId: d.user?.id ?? d.user_id ?? 0, displayName: "Гость",
+              isAdmin: false, expires: Date.now() + 30 * 24 * 60 * 60 * 1000,
+            }));
+          }
         }
       }
     } catch { /* оффлайн — уйдём на обычный вход */ }
-    router.push("/");
+    // ПОЛНАЯ загрузка главной (не router.push): авторизация читает сессию только при старте приложения,
+    // а гостевая сессия только что создана — иначе новый человек по QR попадает на экран входа, а не к джину.
+    window.location.assign("/");
   };
 
   // Авто-вход: сразу открываем Прихожую (дом) без промежуточного экрана

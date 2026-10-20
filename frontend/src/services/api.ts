@@ -106,13 +106,13 @@ export async function register(data: {
 
 /** Вход (телефон + пароль) */
 /** Синтез речи через бэкенд (Yandex SpeechKit) -> blob URL для проигрывания */
-export async function ttsBlobUrl(text: string, voice = "ermil", emotion = "neutral"): Promise<string | null> {
+export async function ttsBlobUrl(text: string, voice = "ermil", emotion = "neutral", agentId?: number | null): Promise<string | null> {
   const token = getToken();
   try {
     const res = await fetch(`${API_BASE}/api/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ text: text.slice(0, 5000), voice, emotion }),
+      body: JSON.stringify({ text: text.slice(0, 5000), voice, emotion, ...(agentId ? { agent_id: agentId } : {}) }),
     });
     if (!res.ok) return null;
     const blob = await res.blob();
@@ -228,6 +228,7 @@ export interface AgentOut {
   brand: string;
   agent_type: string;
   visibility?: string;
+  department?: string | null;
   description: string;
   color: string;
   jinntell_link?: string;
@@ -260,7 +261,7 @@ export interface UsagePayer { payer_id: number | null; calls: number; tokens: nu
 export interface UsageSummary { currency: string; total_calls: number; total_tokens: number; billable_tokens: number; free_tokens: number; revenue: number; cost: number; margin: number; by_payer_type: { contractor: { tokens: number; revenue: number; cost: number }; user: { tokens: number; revenue: number; cost: number }; free: { tokens: number; revenue: number; cost: number } }; contractors: UsagePayer[]; paying_users: UsagePayer[]; by_model: { model: string; calls: number; tokens: number; revenue: number; cost: number; margin: number }[] }
 export interface ModelInfo { model: string; provider: string; cost: number; sell: number; cost_in: number; cost_out: number; sell_in: number; sell_out: number; valid_until: string; note: string; tokens: number; calls: number; revenue: number; cost_total: number; margin: number; agents: number; has_rate: boolean }
 export interface PriceOverride { free?: boolean; mult?: number }
-export function adminGetModels(): Promise<{ currency: string; default: { cost: number; sell: number }; models: ModelInfo[]; biz_markup?: string; overrides?: Record<string, PriceOverride>; provider_keys?: Record<string, boolean> }> { return apiFetch("/api/admin/models"); }
+export function adminGetModels(): Promise<{ currency: string; default: { cost: number; sell: number }; models: ModelInfo[]; biz_markup?: string; overrides?: Record<string, PriceOverride>; provider_keys?: Record<string, boolean>; voice_rates?: { stt_call: number; tts_1k: number } }> { return apiFetch("/api/admin/models"); }
 export function adminDelPricing(model: string): Promise<{ ok: boolean }> { return apiFetch(`/api/admin/pricing/${encodeURIComponent(model)}`, { method: "DELETE" }); }
 
 // ── Тарифы ──
@@ -556,9 +557,9 @@ export function webSearch(query: string): Promise<{ ok: boolean; text: string; s
   return apiFetch("/api/chat/web-search", { method: "POST", body: JSON.stringify({ text: query }) });
 }
 
-export interface AssistantDirective { action: string; name?: string; to?: string; text?: string }
-export function assistantAct(text: string, room?: string): Promise<{ reply: string; directives: AssistantDirective[]; steps: { tool: string }[]; media_url?: string | null; media_type?: string | null }> {
-  return apiFetch("/api/chat/assistant-act", { method: "POST", body: JSON.stringify({ text, room }) });
+export interface AssistantDirective { action: string; name?: string; to?: string; text?: string; agent_id?: number; mode?: string; room?: string; all?: boolean; names?: string[] }
+export function assistantAct(text: string, room?: string, view?: "flow" | "chat", flowRoom?: string): Promise<{ reply: string; directives: AssistantDirective[]; steps: { tool: string }[]; media_url?: string | null; media_type?: string | null }> {
+  return apiFetch("/api/chat/assistant-act", { method: "POST", body: JSON.stringify({ text, room, view, flow_room: flowRoom }) });
 }
 
 export interface ContactOut {
@@ -1502,10 +1503,12 @@ export async function uploadAssistantPhoto(file: File): Promise<{ photo_url: str
   return res.json();
 }
 // Распознавание речи: аудио-запись → текст (серверный STT, провайдер в админке)
-export async function sttRecognize(audio: Blob): Promise<string> {
+export async function sttRecognize(audio: Blob, agentId?: number | null): Promise<string> {
   const token = getToken();
   const f = new FormData();
-  f.append("file", audio, "voice.webm");
+  const t = audio.type || "";
+  f.append("file", audio, t.includes("mp4") ? "voice.m4a" : t.includes("ogg") ? "voice.ogg" : "voice.webm");
+  if (agentId) f.append("agent_id", String(agentId));
   const res = await fetch(`${API_BASE}/api/stt`, { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: f });
   if (!res.ok) {
     const b = await res.json().catch(() => ({ detail: res.statusText }));
@@ -1836,4 +1839,100 @@ export function sttLang(): string {
   let l = "ru";
   try { l = localStorage.getItem("jinntell_lang") || "ru"; } catch { /* noop */ }
   return (LANG_OPTIONS.find((x) => x.id === l)?.bcp) || "ru-RU";
+}
+
+// ═══ Автоканал джинна (движок channel_engine) ═══
+export type ChannelSourceType = "rss" | "github" | "gh_trending" | "gh_releases" | "gh_org_new" | "gh_popular" | "arxiv" | "hn" | "hf";
+export interface ChannelSource { type: ChannelSourceType; url?: string; query?: string; label?: string; limit?: number }
+export interface ChannelConfig {
+  enabled: boolean;
+  sources: ChannelSource[];
+  interval_min: number;
+  mode: "raw" | "voice";
+  posts_per_run: number;
+  max_raw: number;
+  topic_filter: string;
+}
+export interface ChannelState { config: ChannelConfig; configured: boolean; last_run: string | null; posts: number; public_url: string | null }
+export function adminGetChannel(agentId: number): Promise<ChannelState> {
+  return apiFetch(`/api/admin/agents/${agentId}/channel`);
+}
+export function adminSaveChannel(agentId: number, config: ChannelConfig): Promise<{ ok: boolean; config: ChannelConfig }> {
+  return apiFetch(`/api/admin/agents/${agentId}/channel`, { method: "PUT", body: JSON.stringify(config) });
+}
+export function adminTestChannelSource(agentId: number, source: ChannelSource): Promise<{ ok: boolean; count?: number; sample?: string[]; error?: string }> {
+  return apiFetch(`/api/admin/agents/${agentId}/channel/test-source`, { method: "POST", body: JSON.stringify(source) });
+}
+
+// ── Шкафчик Архитектора: готовые джины-профессии с GitHub ──
+export type CabinetItem = {
+  id: number; source: string; license: string; division: string; name: string; name_ru: string;
+  summary_ru: string; tags_ru: string; description: string; emoji: string; safety: "ok" | "flagged";
+  safety_notes: string; adopted_count: number; url: string; vibe?: string; body?: string;
+};
+export type CabinetStats = {
+  sources: string[]; by_source: Record<string, { total: number; divisions: Record<string, number> }>;
+  flagged: number; untranslated: number; last_sync: string; translating: boolean; banned: number;
+};
+export type CabinetAdoptResult = {
+  ok: boolean; error?: string; agent_id?: number; slug?: string; name?: string; profession?: string;
+  birth?: { steps?: { verify?: { discoverable?: boolean; responds?: boolean } } };
+};
+export function adminCabinetStats(): Promise<CabinetStats> {
+  return apiFetch(`/api/admin/cabinet/stats`);
+}
+export function adminCabinetList(p: { q?: string; division?: string; source?: string; limit?: number; offset?: number }): Promise<{ total: number; items: CabinetItem[] }> {
+  const qs = new URLSearchParams();
+  Object.entries(p).forEach(([k, v]) => { if (v !== undefined && v !== "") qs.set(k, String(v)); });
+  return apiFetch(`/api/admin/cabinet?${qs.toString()}`);
+}
+export function adminCabinetGet(id: number): Promise<CabinetItem> {
+  return apiFetch(`/api/admin/cabinet/${id}`);
+}
+export function adminCabinetSync(): Promise<{ reports: { ok: boolean; source: string; total?: number; added?: number; updated?: number; removed?: number; banned?: number; error?: string }[] }> {
+  return apiFetch(`/api/admin/cabinet/sync`, { method: "POST" });
+}
+export function adminCabinetSources(sources: string[]): Promise<{ sources: string[] }> {
+  return apiFetch(`/api/admin/cabinet/sources`, { method: "PUT", body: JSON.stringify({ sources }) });
+}
+export function adminCabinetBan(id: number, reason?: string): Promise<{ banned: number; removed: number; total_banned: number }> {
+  return apiFetch(`/api/admin/cabinet/${id}/ban`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+export function adminCabinetAdopt(id: number, body: { brief?: string; visibility?: "public" | "hidden"; agent_type?: string; is_paid?: boolean }): Promise<CabinetAdoptResult> {
+  return apiFetch(`/api/admin/cabinet/${id}/adopt`, { method: "POST", body: JSON.stringify(body) });
+}
+
+// ── Отраслевая заготовка джина + модули (бизнес включает сам; заготовку назначаем мы) ──
+export type ModuleItem = { name: string; price: number };
+export interface ModulesState {
+  industry: string | null; industry_label: string | null;
+  industries: { id: string; label: string; desc: string }[];
+  modules: { id: string; label: string; desc: string; on: boolean; catalog?: string | null; operator: boolean }[];
+  catalog: { cafe?: ModuleItem[]; services?: ModuleItem[] };
+  settings: { queue_limit_liters?: number; queue_buffer_pct?: number; queue_slot_min?: number };
+  operators: { user_id: number; phone: string; name: string }[];
+  operator_url: string;
+}
+export type ModulesPayload = { industry?: string | null; modules?: string[]; catalog?: ModulesState["catalog"]; settings?: ModulesState["settings"] };
+export type ModulesApi = {
+  load: () => Promise<ModulesState>;
+  save: (p: ModulesPayload) => Promise<ModulesState>;
+  addOperator: (phone: string, password: string, name: string) => Promise<{ operators: ModulesState["operators"] }>;
+  removeOperator: (userId: number) => Promise<{ operators: ModulesState["operators"] }>;
+};
+export function contractorModulesApi(agentId: number): ModulesApi {
+  return {
+    load: () => contractorFetch(`/api/contractor/agents/${agentId}/modules`),
+    save: (p) => contractorFetch(`/api/contractor/agents/${agentId}/modules`, { method: "PUT", body: JSON.stringify(p) }),
+    addOperator: (phone, password, name) => contractorFetch(`/api/contractor/agents/${agentId}/operators`, { method: "POST", body: JSON.stringify({ phone, password, name }) }),
+    removeOperator: (userId) => contractorFetch(`/api/contractor/agents/${agentId}/operators/${userId}`, { method: "DELETE" }),
+  };
+}
+export function adminModulesApi(agentId: number): ModulesApi {
+  return {
+    load: () => apiFetch(`/api/admin/agents/${agentId}/modules`),
+    save: (p) => apiFetch(`/api/admin/agents/${agentId}/modules`, { method: "PUT", body: JSON.stringify(p) }),
+    addOperator: (phone, password, name) => apiFetch(`/api/admin/agents/${agentId}/operators`, { method: "POST", body: JSON.stringify({ phone, password, name }) }),
+    removeOperator: (userId) => apiFetch(`/api/admin/agents/${agentId}/operators/${userId}`, { method: "DELETE" }),
+  };
 }

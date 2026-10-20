@@ -347,6 +347,15 @@ async def contractor_update_agent(
         # Длина ответа — зажимаем в наш потолок
         if field == "llm_max_tokens":
             value = max(MIN_RESPONSE_TOKENS, min(MAX_RESPONSE_TOKENS, int(value)))
+        if field == "tools_json":
+            # только self-service инструменты; модули/спец-инструменты меняются не здесь (industry_presets)
+            import json as _json
+            from app.services import industry_presets as _ip
+            try:
+                _req = _json.loads(value) if value else []
+            except Exception:
+                _req = []
+            value = _json.dumps(_ip.merge_contractor_tools(agent, _req if isinstance(_req, list) else []))
         setattr(agent, field, value)
 
     await db.flush()
@@ -826,3 +835,45 @@ async def contractor_agent_gift(
             n += 1
     await db.flush()
     return {"ok": True, "gifted_to": n, "amount": amount}
+
+
+
+# ═══════════ МОДУЛИ ОТРАСЛЕВОЙ ЗАГОТОВКИ (бизнес включает сам): кофе, услуги, очередь, страховка ═══════════
+@router.get("/agents/{agent_id}/modules")
+async def contractor_modules(agent_id: int, contractor: Contractor = Depends(_require_contractor),
+                             db: AsyncSession = Depends(get_db)):
+    from app.services import industry_presets as ip
+    return await ip.state(db, await _get_owned_agent(agent_id, contractor, db))
+
+
+@router.put("/agents/{agent_id}/modules")
+async def contractor_modules_update(agent_id: int, payload: dict = Body(...),
+                                    contractor: Contractor = Depends(_require_contractor),
+                                    db: AsyncSession = Depends(get_db)):
+    from app.services import industry_presets as ip
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    payload.pop("industry", None)  # заготовку назначаем мы
+    try:
+        return await ip.update(db, agent, payload, admin=False)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/agents/{agent_id}/operators")
+async def contractor_operator_add(agent_id: int, payload: dict = Body(...),
+                                  contractor: Contractor = Depends(_require_contractor),
+                                  db: AsyncSession = Depends(get_db)):
+    from app.services import industry_presets as ip
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    try:
+        return await ip.add_operator(db, agent, payload.get("phone") or "", payload.get("password") or "", payload.get("name") or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/agents/{agent_id}/operators/{user_id}")
+async def contractor_operator_remove(agent_id: int, user_id: int,
+                                     contractor: Contractor = Depends(_require_contractor),
+                                     db: AsyncSession = Depends(get_db)):
+    from app.services import industry_presets as ip
+    return await ip.remove_operator(db, await _get_owned_agent(agent_id, contractor, db), user_id)

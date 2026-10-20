@@ -180,9 +180,95 @@ TOOL_REGISTRY = {
     "queue_register": {
         "schema": {"type": "function", "function": {
             "name": "queue_register",
-            "description": "Записать авто в очередь на заправку на этой АЗС (нужны гос-номер, тип топлива, литры). Вызывай, когда пользователь согласился записаться.",
+            "description": "Записать авто в очередь на заправку на этой АЗС и выдать уникальный талон с QR в чат. "
+                           "Нужны имя водителя, гос-номер, вид топлива и литры. Вызывай, когда пользователь согласился записаться.",
             "parameters": {"type": "object", "properties": {
-                "car_plate": {"type": "string"}, "fuel_type": {"type": "string"}, "liters": {"type": "number"}}, "required": ["car_plate", "fuel_type", "liters"]}}},
+                "client_name": {"type": "string", "description": "имя водителя"},
+                "preferred_time": {"type": "string", "description": "желаемое время ЧЧ:ММ, если клиент назвал (необязательно)"},
+                "car_plate": {"type": "string"}, "fuel_type": {"type": "string"}, "liters": {"type": "number"}},
+                "required": ["client_name", "car_plate", "fuel_type", "liters"]}}},
+    },
+    # Станция АЗС: живые остатки и расчёт брони (services/fuel_station.py)
+    "fuel_status": {
+        "category": "read", "risk": "low", "label": "АЗС: остатки и свободный объём под запись",
+        "schema": {"type": "function", "function": {
+            "name": "fuel_status",
+            "description": "Свежие данные станции по каждому виду топлива: можно ли записаться и на сколько литров "
+                           "(с учётом уже записанных и запаса под живую очередь). Оператору — полные цифры остатков.",
+            "parameters": {"type": "object", "properties": {}}}},
+    },
+    "station_order": {
+        "category": "write", "risk": "low", "label": "АЗС: предзаказ к приезду (топливо + еда + услуги)",
+        "schema": {"type": "function", "function": {
+            "name": "station_order",
+            "description": "ПРЕДЗАКАЗ К ПРИЕЗДУ одним заказом: топливо (вид и литры), еда/напитки из меню и услуги из прайса "
+                           "станции — команда АЗС подготовится заранее. Нужны имя, гос-номер и время приезда. Оплата на кассе.",
+            "parameters": {"type": "object", "properties": {
+                "client_name": {"type": "string"},
+                "car_plate": {"type": "string"},
+                "arrive_time": {"type": "string", "description": "время приезда ЧЧ:ММ"},
+                "fuel_type": {"type": "string", "description": "топливо, если нужно заправиться (АИ-92/95/98, ДТ, Газ)"},
+                "liters": {"type": "number"},
+                "items": {"type": "array", "description": "позиции из меню и прайса услуг", "items": {"type": "object", "properties": {
+                    "name": {"type": "string"}, "qty": {"type": "integer"}}, "required": ["name"]}}},
+                "required": ["client_name", "car_plate"]}}},
+    },
+    "update_fuel_stock": {
+        "category": "write", "risk": "med", "label": "АЗС: обновить остаток (только оператор)",
+        "schema": {"type": "function", "function": {
+            "name": "update_fuel_stock",
+            "description": "Сохранить остаток топлива, который назвал ОПЕРАТОР станции (по одному вызову на каждый вид). "
+                           "Работает только для оператора этой АЗС.",
+            "parameters": {"type": "object", "properties": {
+                "fuel_type": {"type": "string", "description": "АИ-92 / АИ-95 / АИ-98 / ДТ / Газ"},
+                "liters": {"type": "number", "description": "остаток в литрах"}},
+                "required": ["fuel_type", "liters"]}}},
+    },
+    # Инструмент Архитектора-фабрики: создать нового джина по ТЗ (генерация персоны + рождение).
+    # Гейт прав: включается ТОЛЬКО тем, кому можно рождать джинов (Архитектор #47). Риск — med.
+    "draft_jinn": {
+        "category": "write", "risk": "med", "label": "Создать нового джина (фабрика)",
+        "schema": {"type": "function", "function": {
+            "name": "draft_jinn",
+            "description": "СОЗДАТЬ нового джина-специалиста по краткому ТЗ: ты придумываешь его персону, "
+                           "система создаёт его и проводит через рождение (прописка в Городе + самотест, что он "
+                           "находится и реально отвечает). Вызывай, когда тебя просят создать / сделать / нанять джина. "
+                           "В brief опиши кто нужен: роль, тематика, город, стиль, особенности. "
+                           "visibility: public — виден жителям Города; hidden — внутренний (команда), не виден в Городе.",
+            "parameters": {"type": "object", "properties": {
+                "brief": {"type": "string", "description": "ТЗ: роль, темы, город, стиль, особенности нужного джина"},
+                "visibility": {"type": "string", "enum": ["public", "hidden"], "description": "public (в Городе) | hidden (внутренний)"},
+                "is_paid": {"type": "boolean", "description": "Платный ли джин (по умолчанию нет)"},
+                "agent_type": {"type": "string", "description": "specialist (по умолчанию) | business | core"}},
+                "required": ["brief"]}}},
+    },
+    # Шкафчик Архитектора: склад готовых джинов-профессий с GitHub (template_cabinet.py)
+    "list_templates": {
+        "category": "read", "risk": "low", "label": "Шкафчик: найти готовую заготовку",
+        "schema": {"type": "function", "function": {
+            "name": "list_templates",
+            "description": "Найти в ШКАФЧИКЕ готовые заготовки джинов-профессий (проверенные агенты с GitHub: продажи, маркетинг, "
+                           "HR, юристы, финансы, поддержка, разработка и т.д.). Вызывай ПЕРЕД созданием джина под профессию — "
+                           "лучше взять готовую заготовку, чем придумывать с нуля. query — профессия/задача по-русски или по-английски.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "профессия или задача, напр. «юрист договоры», «HR адаптация», «sales»"},
+                "limit": {"type": "integer", "description": "сколько показать (до 10)"}},
+                "required": ["query"]}}},
+    },
+    "adopt_template": {
+        "category": "write", "risk": "med", "label": "Шкафчик: создать джина из заготовки",
+        "schema": {"type": "function", "function": {
+            "name": "adopt_template",
+            "description": "СОЗДАТЬ джина из заготовки шкафчика (id из list_templates): готовая экспертиза переводится в нашу "
+                           "русскую персону, джин проходит рождение (прописка в Городе + самотест). В brief — уточнения под задачу: "
+                           "для кого, город, стиль, имя, отрасль клиента.",
+            "parameters": {"type": "object", "properties": {
+                "template_id": {"type": "integer"},
+                "brief": {"type": "string", "description": "уточнения: для кого, отрасль, имя, стиль"},
+                "visibility": {"type": "string", "enum": ["public", "hidden"], "description": "public (в Городе) | hidden (внутренний)"},
+                "is_paid": {"type": "boolean"},
+                "agent_type": {"type": "string", "description": "specialist (по умолчанию) | business | core"}},
+                "required": ["template_id"]}}},
     },
 }
 
@@ -195,7 +281,7 @@ PROFESSION_PRESETS = {
 }
 
 # Реально исполняемые. book_slot пока заглушка.
-_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register"}
+_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register", "fuel_status", "update_fuel_stock", "station_order", "draft_jinn", "list_templates", "adopt_template"}
 
 
 def build_tools(enabled: list) -> list:
@@ -288,7 +374,20 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
                 print(f"[agent_tools] lead log err: {e}")
             return "Заявка записана — компания свяжется с клиентом."
         if name == "queue_register":
-            return await _queue_register_exec(agent, user_id, args.get("car_plate"), args.get("fuel_type"), args.get("liters"))
+            return await _queue_register_exec(agent, user_id, args.get("car_plate"), args.get("fuel_type"), args.get("liters"),
+                                              args.get("client_name"), args.get("preferred_time"))
+        if name == "station_order":
+            return await _station_order_exec(agent, user_id, args)
+        if name == "fuel_status":
+            return await _fuel_status_exec(agent, user_id)
+        if name == "update_fuel_stock":
+            return await _update_fuel_stock_exec(agent, user_id, args.get("fuel_type"), args.get("liters"))
+        if name == "draft_jinn":
+            return await _draft_jinn_exec(agent, args)
+        if name == "list_templates":
+            return await _list_templates_exec(args)
+        if name == "adopt_template":
+            return await _draft_jinn_exec(agent, args, template_id=args.get("template_id"))
         if name == "save_to_portfolio":
             if not user_id:
                 return "Не могу сохранить — нет пользователя в контексте."
@@ -396,6 +495,19 @@ async def reply_with_tools(db, agent, agent_kwargs: dict, enabled: list, max_ite
 
     pk = {k: agent_kwargs.get(k) for k in _PROMPT_KEYS if k in agent_kwargs}
     system = _build_agent_prompt(**pk) + _TOOL_GUIDE
+    try:  # отраслевая заготовка: подключённые доп. операции (кофе, услуги, страховка)
+        from app.services import industry_presets as _ip
+        system += _ip.context_note(agent)
+    except Exception as _e:  # noqa: BLE001
+        print(f"[industry] context err: {_e}")
+    if getattr(agent, "queue_enabled", False):
+        try:  # джин АЗС: кто собеседник (оператор/клиент) + живые остатки
+            from app.core.database import async_session as _as
+            from app.services import fuel_station as _fs
+            async with _as() as _s:
+                system += await _fs.context_note(_s, agent, agent_kwargs.get("user_id") or 0)
+        except Exception as _e:  # noqa: BLE001
+            print(f"[fuel_station] context err: {_e}")
     _notes = await _load_client_notes(getattr(agent, "id", None), agent_kwargs.get("user_id") or 0)
     if _notes:
         system += ("\n\nЧТО ТЫ УЖЕ ЗНАЕШЬ ОБ ЭТОМ КЛИЕНТЕ (используй, не переспрашивай зря):\n- "
@@ -452,7 +564,134 @@ async def reply_with_tools(db, agent, agent_kwargs: dict, enabled: list, max_ite
 
 
 # --- Очередь на заправку (инструмент queue_register) ---
-async def _queue_register_exec(agent, user_id, plate, fuel, liters) -> str:
+async def _fuel_status_exec(agent, user_id) -> str:
+    from app.core.database import async_session as _as
+    from app.services import fuel_station as _fs
+    async with _as() as s:
+        op = await _fs.is_operator(s, agent.id, user_id)
+        av = await _fs.availability(s, agent)
+    return _fs.format_for_jinn(av, op)
+
+
+async def _guest_tip(user_id) -> str:
+    """Гостю: мотивация зарегистрироваться — запись и напоминания помощника останутся за ним."""
+    if not user_id:
+        return ""
+    try:
+        from app.core.database import async_session as _as
+        from app.models.user import User as _U
+        async with _as() as s:
+            u = await s.get(_U, user_id)
+        if u and getattr(u, "is_guest", False):
+            return (" Совет: зарегистрируйтесь в JinnTell — запись сохранится за вами, появится в «Моём дне», "
+                    "а ваш личный помощник сам скажет, когда пора выезжать (держите JinnTell открытым).")
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+async def _station_order_exec(agent, user_id, args: dict) -> str:
+    """Заказ к приезду из меню/прайса станции; если есть активный талон очереди — к его времени."""
+    import re as _re
+    import secrets as _secrets
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from sqlalchemy import select as _select
+    from app.core.database import async_session as _as
+    from app.models.fuel_queue import StationOrder as _SO, FuelQueueEntry as _FQ
+    from app.services import industry_presets as _ip, fuel_station as _fs
+    mods = _ip.get_modules(agent)
+    cat = _ip.get_catalog(agent)
+    menu = (cat.get("cafe") or [] if "cafe" in mods else []) + (cat.get("services") or [] if "services" in mods else [])
+    name = (args.get("client_name") or "").strip()[:80]
+    if not name:
+        return "Как вас зовут? Имя будет в заказе."
+    plate = _re.sub(r"[^A-ZА-Я0-9]", "", (args.get("car_plate") or "").upper())
+    if len(plate) < 4:
+        return "Назовите гос-номер машины — команда станции узнает вас по нему."
+    fuel, lit = "", 0
+    if args.get("fuel_type") and "queue" not in mods:
+        fuel = _fs.norm_fuel(args.get("fuel_type"))
+        try:
+            lit = max(0, min(int(float(args.get("liters") or 0)), 1000))
+        except (TypeError, ValueError):
+            lit = 0
+    picked, missing = [], []
+    for it in (args.get("items") or [])[:10]:
+        q = (it.get("name") or "").strip().lower()
+        qty = max(1, min(int(it.get("qty") or 1), 10))
+        hit = next((m for m in menu if q and (q in m["name"].lower() or m["name"].lower() in q)), None)
+        if not hit:
+            words = [w for w in _re.split(r"\W+", q) if len(w) >= 4]
+            hit = next((m for m in menu if any(w[:5] in m["name"].lower() for w in words)), None)
+        (picked.append({"name": hit["name"], "qty": qty, "price": int(hit.get("price") or 0)}) if hit else missing.append(it.get("name")))
+    if not picked and not fuel:
+        return ("Что подготовить к приезду? " + ("Есть: " + ", ".join(m["name"] for m in menu) + "." if menu else "Назовите топливо и литры."))
+    total = sum(p["qty"] * p["price"] for p in picked)
+    async with _as() as s:
+        ready, qcode = None, None
+        if user_id:  # есть талон очереди → к его времени
+            t = (await s.execute(_select(_FQ).where(_FQ.agent_id == agent.id, _FQ.user_id == user_id,
+                                                      _FQ.status.in_(("waiting", "arrived"))).order_by(_FQ.id.desc()))).scalars().first()
+            if t:
+                ready, qcode = t.slot_at, t.code
+                plate = plate or t.car_plate
+        if not ready:
+            ready = _fs.parse_time(args.get("arrive_time") or args.get("ready_time") or "") or (_dt.now(_tz.utc) + _td(minutes=15))
+        code = "Z-" + _secrets.token_hex(5).upper()
+        o = _SO(agent_id=agent.id, user_id=user_id or None, kind="visit", fuel_type=fuel, liters=lit, items_json=__import__("json").dumps(picked, ensure_ascii=False),
+                total=total, client_name=name, car_plate=plate, code=code, ready_at=ready, queue_code=qcode)
+        s.add(o); await s.commit()
+    what = ", ".join(([f"{fuel} {lit} л" if lit else fuel] if fuel else [])
+                     + [f"{p['name']}" + (f" ×{p['qty']}" if p["qty"] > 1 else "") for p in picked])
+    t = _fs.hhmm(ready)
+    cap = (f"Предзаказ принят · {name} · {plate} · к {t}: {what}. "
+           f"{('Еда и услуги — ' + str(total) + ' ₽, ') if total else ''}оплата на кассе. Станция ждёт вас — просто назовите имя или номер машины.")
+    try:
+        if user_id:
+            from app.models.message import Message as _Msg
+            from app.websocket.manager import manager as _mgr
+            room = f"agent-{agent.id}-u{user_id}"
+            qr = None  # обычный режим — без QR: станция узнаёт клиента по имени и гос-номеру
+            async with _as() as s2:
+                m = _Msg(room=room, sender_type="agent", sender_agent_id=agent.id, sender_name=getattr(agent, "name", "Джинн"),
+                         text=cap)
+                s2.add(m); await s2.commit(); await s2.refresh(m)
+            await _mgr.broadcast(room, {"type": "message", "id": m.id, "room": room, "sender_type": "agent",
+                                        "sender_agent_id": agent.id, "sender_name": getattr(agent, "name", "Джинн"), "text": cap,
+                                        "created_at": m.created_at.isoformat(),
+                                        "agent_color": getattr(agent, "color", None)})
+    except Exception as _ex:  # noqa: BLE001
+        print(f"[station_order] media err: {_ex}")
+    miss = (" Не нашёл в меню/прайсе: " + ", ".join(map(str, missing)) + ".") if missing else ""
+    await _fs.day_add(user_id, ready, f"☕ Предзаказ: {getattr(agent, 'name', 'АЗС')} — {what}"[:300],
+                      f"Код {code}, {plate}. К {t}, оплата на кассе.")
+    if not qcode:
+        miss += " Ваш помощник напомнит за 15 минут, что пора выезжать." + (await _guest_tip(user_id))
+    return f"Готово: {cap}{' Будет готово к вашему времени в очереди.' if qcode else ''}{miss}"
+
+
+async def _update_fuel_stock_exec(agent, user_id, fuel, liters) -> str:
+    from app.core.database import async_session as _as
+    from app.models.agent import Agent as _Agent
+    from app.services import fuel_station as _fs
+    try:
+        lit = float(liters)
+    except Exception:  # noqa: BLE001
+        return "Назовите остаток в литрах."
+    async with _as() as s:
+        if not await _fs.is_operator(s, agent.id, user_id):
+            return "Нет прав: остатки может сообщать только оператор этой АЗС."
+        a = await s.get(_Agent, agent.id)
+        _fs.set_stock(a, fuel or "", lit, user_id)
+        await s.commit()
+        av = await _fs.availability(s, a)
+    k = _fs.norm_fuel(fuel or "")
+    f = av["fuels"].get(k) or {}
+    return (f"Сохранено: {k} — {int(lit)} л. Сейчас забронировано {f.get('reserved', 0)} л, "
+            f"запас под живую очередь {f.get('buffer')} л, можно ещё забронировать {f.get('bookable')} л.")
+
+
+async def _queue_register_exec(agent, user_id, plate, fuel, liters, client_name=None, preferred_time=None) -> str:
     import re as _re
     import secrets as _secrets
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
@@ -464,9 +703,14 @@ async def _queue_register_exec(agent, user_id, plate, fuel, liters) -> str:
     plate_norm = _re.sub(r"[^A-ZА-Я0-9]", "", plate_raw)
     if len(plate_norm) < 4:
         return "Назовите, пожалуйста, гос-номер автомобиля (например, А123ВС177)."
+    name = (client_name or "").strip()[:80]
+    if not name:
+        return "Как вас зовут? Имя будет в талоне."
     fuel = (fuel or "").strip()
     if not fuel:
         return "Какое топливо вам нужно? (например, АИ-95)"
+    from app.services import fuel_station as _fs
+    fuel = _fs.norm_fuel(fuel)
     try:
         lit = float(liters)
     except Exception:
@@ -478,18 +722,27 @@ async def _queue_register_exec(agent, user_id, plate, fuel, liters) -> str:
         return f"На этой АЗС лимит {limit} л за раз. Укажите объём до {limit} л."
     try:
         async with _async_session() as s:
+            # бронь против живого остатка (оператор) с запасом под живую очередь
+            av = await _fs.availability(s, agent)
+            f = av["fuels"].get(fuel)
+            if f and f.get("bookable") is not None and lit > f["bookable"]:
+                if f["bookable"] <= 0:
+                    return (f"Сейчас записаться на {fuel} нельзя: свободный объём под запись закончился, "
+                            "топливо уходит живой очереди у колонок. Можно встать в обычную очередь или выбрать другое топливо.")
+                return f"Под запись по {fuel} сейчас доступно до {int(f['bookable'])} л. Записать вас на {int(f['bookable'])} л?"
             since = _dt.now(_tz.utc) - _td(hours=2)
             dup = (await s.execute(_select(_FQ).where(
                 _FQ.car_plate == plate_norm,
                 _FQ.created_at >= since,
-                _FQ.status == "waiting"))).scalars().first()
+                _FQ.status.in_(("waiting", "arrived"))))).scalars().first()
             if dup:
                 return f"Номер {plate_raw} уже в очереди (код {dup.code}). Повторная запись — не раньше чем через 2 часа."
             waiting = (await s.execute(_select(_safunc.count(_FQ.id)).where(
-                _FQ.agent_id == agent.id, _FQ.status == "waiting"))).scalar() or 0
+                _FQ.agent_id == agent.id, _FQ.status.in_(("waiting", "arrived"))))).scalar() or 0
             number = int(waiting) + 1
-            code = "Q-" + _secrets.token_hex(3).upper()
-            e = _FQ(agent_id=agent.id, user_id=user_id or None, car_plate=plate_norm,
+            slot = await _fs.next_slot(s, agent, _fs.parse_time(preferred_time or ""))
+            code = "Q-" + _secrets.token_hex(5).upper()  # 10 знаков — не подобрать; подтверждение всё равно = список станции
+            e = _FQ(agent_id=agent.id, user_id=user_id or None, car_plate=plate_norm, client_name=name, slot_at=slot,
                     fuel_type=fuel, liters=lit, number=number, code=code, status="waiting")
             s.add(e)
             await s.commit()
@@ -497,7 +750,9 @@ async def _queue_register_exec(agent, user_id, plate, fuel, liters) -> str:
         print(f"[queue_register] err: {ex}")
         return "Не удалось записать в очередь, попробуйте ещё раз."
     qr_url = f"https://jinntell.ru/api/queue/{code}/qr.svg"
-    cap = f"Ваш талон в очередь — №{number}, код {code}. Покажите на АЗС, заправитесь без очереди."
+    t = _fs.hhmm(slot)
+    cap = (f"Талон в очередь №{number} · {name} · {plate_norm} · {fuel} {lit:g} л · заправка в {t} · код {code}. "
+           f"Подъезжайте к {t} и покажите QR оператору — при опоздании талон сгорает.")
     try:
         if user_id:
             from app.models.message import Message as _Msg
@@ -516,5 +771,77 @@ async def _queue_register_exec(agent, user_id, plate, fuel, liters) -> str:
                 "created_at": _created, "agent_color": getattr(agent, "color", None)})
     except Exception as _ex:
         print(f"[queue_register] media send err: {_ex}")
-    return (f"Записал в очередь! Номер: {number}, код: {code}. Талон с QR — выше в чате; "
-            f"покажите оператору на АЗС. Чтобы талон сохранился в сообщениях — зарегистрируйтесь в JinnTell.")
+    await _fs.day_add(user_id, slot, f"⛽ Заправка: {getattr(agent, 'name', 'АЗС')} — {fuel} {lit:g} л",
+                      f"Талон {code}, №{number}, {plate_norm}. Подъехать к {t} — при опоздании талон сгорает.")
+    guest_tip = await _guest_tip(user_id)
+    return (f"Записал в очередь! {name}, номер {number}, {plate_norm}, {fuel} {lit:g} л. Время заправки — {t}. "
+            f"Талон с QR (код {code}) — в чате; к {t} нужно подъехать и показать его оператору, иначе талон сгорает. "
+            f"Талон также открывается по ссылке jinntell.ru/q/{code}. Ваш помощник напомнит за 30, 10 и 5 минут.{guest_tip}")
+
+
+# --- Архитектор-фабрика (инструмент draft_jinn): создать нового джина по ТЗ ---
+async def _list_templates_exec(args: dict) -> str:
+    q = (args.get("query") or "").strip()
+    try:
+        lim = max(1, min(int(args.get("limit") or 6), 10))
+    except Exception:  # noqa: BLE001
+        lim = 6
+    try:
+        from app.core.database import async_session as _async_session
+        from app.services import template_cabinet as _cab
+        async with _async_session() as s:
+            res = await _cab.search(s, q, limit=lim)
+            if not res["items"] and " " in q:  # широкий запрос — пробуем по первому слову
+                res = await _cab.search(s, q.split()[0], limit=lim)
+    except Exception as e:  # noqa: BLE001
+        print(f"[agent_tools] list_templates err: {e}")
+        return "Шкафчик сейчас недоступен."
+    if not res["items"]:
+        return f"В шкафчике нет заготовок по запросу «{q}». Можно создать джина с нуля (draft_jinn)."
+    lines = [f"Шкафчик: найдено {res['total']}, показываю {len(res['items'])}:"]
+    for it in res["items"]:
+        warn = " ⚠ требует ручной проверки" if it["safety"] == "flagged" else ""
+        lines.append(f"- id {it['id']}: {it['name_ru'] or it['name']} ({it['name']}, раздел {it['division']}) — "
+                     f"{(it['summary_ru'] or it['description'])[:220]}{warn}")
+    return "\n".join(lines)
+
+
+async def _draft_jinn_exec(agent, args: dict, template_id=None) -> str:
+    brief = (args.get("brief") or "").strip()
+    if not brief and not template_id:
+        return "Опиши в brief, какого джина создать: роль, темы, город, стиль."
+    vis = (args.get("visibility") or "public").strip().lower()
+    if vis not in ("public", "hidden"):
+        vis = "public"
+    atype = (args.get("agent_type") or "specialist").strip().lower()
+    if atype not in ("specialist", "business", "core", "citizen", "personal"):
+        atype = "specialist"
+    try:
+        from app.core.database import async_session as _async_session
+        from app.services import jinn_factory as _factory
+        async with _async_session() as s:
+            if template_id:
+                from app.services import template_cabinet as _cab
+                rep = await _cab.adopt(s, int(template_id), brief, is_paid=bool(args.get("is_paid")),
+                                       visibility=vis, agent_type=atype)
+            else:
+                rep = await _factory.draft(s, brief, is_paid=bool(args.get("is_paid")),
+                                           visibility=vis, agent_type=atype)
+            await s.commit()
+    except Exception as e:  # noqa: BLE001
+        print(f"[agent_tools] draft_jinn err: {e}")
+        return "Не удалось создать джина — попробуй переформулировать ТЗ."
+    if not rep.get("ok"):
+        return f"Не получилось создать джина: {rep.get('error') or 'ошибка генерации персоны'}."
+    b = rep.get("birth") or {}
+    v = (b.get("steps") or {}).get("verify") or {}
+    checks = []
+    if v.get("discoverable") is True:
+        checks.append("найден в Городе")
+    if v.get("responds") is True:
+        checks.append("отвечает")
+    tail = (" Самотест: " + ", ".join(checks) + ".") if checks else ""
+    vis_ru = "в Городе" if vis == "public" else "внутренний (скрыт)"
+    return (f"Готово — создан джин #{rep.get('agent_id')}: {rep.get('name')} "
+            f"({rep.get('profession')}). Ссылка: /a/{rep.get('slug')}. Видимость: {vis_ru}.{tail}"
+            + (f" Основа — заготовка шкафчика «{(rep['template'].get('name_ru') or rep['template'].get('name'))}»." if rep.get("template") else ""))

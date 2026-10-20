@@ -2,6 +2,8 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from typing import Optional
+
 from pydantic import BaseModel
 
 from app.core.config import settings
@@ -16,6 +18,22 @@ class TTSRequest(BaseModel):
     voice: str = "ermil"
     emotion: str = "neutral"
     speed: float = 1.0
+    agent_id: Optional[int] = None  # чей голос: озвучка ответа джинна идёт в счёт его плательщику
+
+
+# Голоса Яндекс SpeechKit. Устаревшие/выдуманные значения (напр. дефолт профиля "male_low") Яндекс отклоняет
+# ошибкой 400 → тишина у пользователя. Поэтому неизвестный голос подменяем рабочим.
+_YANDEX_VOICES = {"alena", "filipp", "ermil", "jane", "madirus", "omazh", "zahar", "dasha", "julia",
+                  "lera", "masha", "marina", "alexander", "kirill", "anton"}
+_VOICE_ALIASES = {"male_low": "filipp", "male": "filipp", "male_high": "ermil", "female": "alena",
+                  "female_high": "jane"}
+
+
+def _safe_voice(v: str) -> str:
+    v = (v or "").strip().lower()
+    if v in _YANDEX_VOICES:
+        return v
+    return _VOICE_ALIASES.get(v, "alena")
 
 
 @router.post("")
@@ -33,7 +51,7 @@ async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
     base = {
         "text": text[:5000],
         "lang": "ru-RU",
-        "voice": body.voice or "ermil",
+        "voice": _safe_voice(body.voice or "ermil"),
         "speed": str(max(0.1, min(3.0, body.speed or 1.0))),
         "format": "oggopus",
     }
@@ -67,5 +85,9 @@ async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
 
     if r.status_code != 200:
         raise HTTPException(502, f"SpeechKit error {r.status_code}: {r.text[:200]}")
+
+    if body.agent_id:
+        from app.services.voice_billing import charge_voice
+        await charge_voice(body.agent_id, user.id, "tts", len(text[:5000]))
 
     return Response(content=r.content, media_type="audio/ogg")
