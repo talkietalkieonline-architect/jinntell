@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getFeed, dismissFeed, getChannelsUnread, getNewsFeed, type FeedEvent, type ChannelUnread, type NewsFeedItem } from "@/services/api";
+import { getFeed, dismissFeed, getChannelsUnread, getNewsFeed, isOfferEvent, type FeedEvent, type ChannelUnread, type NewsFeedItem } from "@/services/api";
 
 const KIND_ICON: Record<string, string> = { info: "ℹ️", reminder: "⏰", offer: "🏷️", event: "📅" };
 
@@ -14,7 +14,9 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)} дн назад`;
 }
 
-export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void; onOpenChat?: (room: string) => void }) {
+/** mode="news": новости подписанных каналов + события; mode="offers": предложения джиннов по интересам (гости). */
+export default function FeedModal({ onClose, onOpenChat, mode = "news" }: { onClose: () => void; onOpenChat?: (room: string) => void; mode?: "news" | "offers" }) {
+  const offers = mode === "offers";
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [channels, setChannels] = useState<ChannelUnread[]>([]);
   const [news, setNews] = useState<NewsFeedItem[]>([]);
@@ -23,11 +25,11 @@ export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void
 
   useEffect(() => {
     let alive = true;
-    getFeed().then((l) => { if (alive) setEvents(l); }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
-    getChannelsUnread().then((c) => { if (alive) setChannels(c); }).catch(() => {});
+    getFeed().then((l) => { if (alive) setEvents(l.filter((e) => (offers ? isOfferEvent(e) : !isOfferEvent(e)))); }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
+    if (!offers) getChannelsUnread().then((c) => { if (alive) setChannels(c); }).catch(() => {});
     return () => { alive = false; };
   }, []);
-  useEffect(() => { let alive = true; getNewsFeed(newsLimit).then((r) => { if (alive) setNews(r.items); }).catch(() => {}); return () => { alive = false; }; }, [newsLimit]);
+  useEffect(() => { if (offers) return; let alive = true; getNewsFeed(newsLimit).then((r) => { if (alive) setNews(r.items); }).catch(() => {}); return () => { alive = false; }; }, [newsLimit, offers]);
 
   const handleDismiss = async (id: number) => {
     setEvents((prev) => prev.filter((e) => e.id !== id));
@@ -38,7 +40,7 @@ export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center animate-fade-in" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[600px] max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-4" style={{ background: "var(--panel-bg, #12121a)", border: "1px solid var(--bg-glass-border)" }}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>🔔 Лента</h3>
+          <h3 className="text-base font-bold" style={{ color: "var(--text-primary)" }}>{offers ? "💡 Предложения" : "📰 Новости"}</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--bg-glass)", color: "var(--text-secondary)" }}>✕</button>
         </div>
 
@@ -78,7 +80,7 @@ export default function FeedModal({ onClose, onOpenChat }: { onClose: () => void
             <p className="text-[13px] text-center py-6" style={{ color: "var(--text-muted)", opacity: 0.55 }}>Загрузка…</p>
           ) : events.length === 0 && channels.length === 0 && news.length === 0 ? (
             <div className="rounded-2xl p-6 text-center" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
-              <p className="text-[13px]" style={{ color: "var(--text-muted)", opacity: 0.7 }}>Пока тихо. Важные события появятся здесь.</p>
+              <p className="text-[13px]" style={{ color: "var(--text-muted)", opacity: 0.7 }}>{offers ? "Пока нет предложений. Джинны Города оставят их здесь по вашим интересам." : "Пока тихо. Новости каналов, на которые вы подписаны, появятся здесь."}</p>
             </div>
           ) : (
             events.map((e) => {

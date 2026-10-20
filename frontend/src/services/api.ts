@@ -1574,9 +1574,13 @@ export interface FeedEvent {
   body?: string | null;
   link_room?: string | null;
   agent_id?: number | null;
+  agent_name?: string | null;
+  agent_color?: string | null;
   is_read: boolean;
   created_at: string;
 }
+/** «Предложения» = посты джиннов по интересам (не из подписок): interest / offer. Остальное — новости и события. */
+export const isOfferEvent = (e: FeedEvent) => e.kind === "interest" || e.kind === "offer";
 export function getFeed(): Promise<FeedEvent[]> {
   return apiFetch("/api/feed");
 }

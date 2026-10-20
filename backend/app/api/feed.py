@@ -23,6 +23,8 @@ class FeedEventOut(BaseModel):
     body: Optional[str] = None
     link_room: Optional[str] = None
     agent_id: Optional[int] = None
+    agent_name: Optional[str] = None   # кто оставил (для «Гостей» на главной)
+    agent_color: Optional[str] = None
     is_read: bool
     created_at: datetime
 
@@ -91,7 +93,20 @@ async def list_feed(user: User = Depends(get_current_user), db: AsyncSession = D
             body="Здесь будет важное: напоминания, события и сообщения от джиннов. Зовите джиннов через звезду Избранного.",
         )
         items = [welcome]
-    return items
+    # имя/цвет джинна-автора — для раздела «Гости» (джинны, оставившие предложение)
+    from app.models.agent import Agent as _Agent
+    ids = {e.agent_id for e in items if e.agent_id}
+    names = {}
+    if ids:
+        for a in (await db.execute(select(_Agent).where(_Agent.id.in_(ids)))).scalars().all():
+            names[a.id] = (a.name, a.color)
+    out = []
+    for e in items:
+        d = FeedEventOut.model_validate(e).model_dump()
+        if e.agent_id in names:
+            d["agent_name"], d["agent_color"] = names[e.agent_id]
+        out.append(d)
+    return out
 
 
 @router.post("/{event_id}/read")

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useRef, type ReactNode } from "react";
-import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite, type DigestItem } from "@/services/api";
+import { getChannels, getFavoriteAgents, getRecommendedAgents, getContacts, getAgents, addFavoriteAgent, searchUsers, addContact, listDigests, getFeed, getMyInvites, mediaUrl, isOfferEvent, type ChannelUnread, type AgentOut, type ContactOut, type FeedEvent, type GeoInvite, type DigestItem } from "@/services/api";
 import { type OpenChat } from "@/components/communicator/NavBar";
 import MyDayModal from "@/components/communicator/MyDayModal";
 import { FrameDeco, frameRing } from "@/components/communicator/avatarFrame";
@@ -23,7 +23,7 @@ interface Props {
   onOpenDigest?: (id: number) => void;
   onOpenInvites?: () => void;
   onCreateJinn?: () => void;
-  onOpenFeed?: () => void;
+  onOpenFeed?: (mode: "news" | "offers") => void;
   onOpenCity?: () => void;
 }
 
@@ -105,7 +105,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const [peopleSearch, setPeopleSearch] = useState("");
   const [userResults, setUserResults] = useState<ContactOut[]>([]);
   const [addBusy, setAddBusy] = useState(false);
-  const [gostTab, setGostTab] = useState<"rec" | "pop" | "recent">("rec");
+  const [gostTab, setGostTab] = useState<"recent" | "guests" | "pop" | "rec">("recent");
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [dayOpen, setDayOpen] = useState(false);
@@ -144,10 +144,12 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   // Клиентский read-state (слой 1): документы просмотрены + отметка «когда смотрел ленту»
   const [seenDocs, setSeenDocs] = useState<Set<number>>(new Set());
   const [feedSeenTs, setFeedSeenTs] = useState<number>(0);
+  const [offersSeenTs, setOffersSeenTs] = useState<number>(0);
   const [invitesSeenTs, setInvitesSeenTs] = useState<number>(0);
   useEffect(() => {
     try { const s = localStorage.getItem("jinntell_seen_docs"); if (s) setSeenDocs(new Set(JSON.parse(s))); } catch { /* noop */ }
     try { const t = localStorage.getItem("jinntell_feed_seen_ts"); if (t) setFeedSeenTs(parseInt(t, 10) || 0); } catch { /* noop */ }
+    try { const t = localStorage.getItem("jinntell_offers_seen_ts"); if (t) setOffersSeenTs(parseInt(t, 10) || 0); } catch { /* noop */ }
     try { const t = localStorage.getItem("jinntell_invites_seen_ts"); if (t) setInvitesSeenTs(parseInt(t, 10) || 0); } catch { /* noop */ }
   }, []);
   const markDocSeen = (id: number) => setSeenDocs((prev) => { const n = new Set(prev); n.add(id); try { localStorage.setItem("jinntell_seen_docs", JSON.stringify([...n])); } catch { /* noop */ } return n; });
@@ -172,7 +174,9 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
     });
   };
   const resetLayout = () => { setLayout(DEFAULT_HOME_LAYOUT); persistLayout(DEFAULT_HOME_LAYOUT); };
-  const openFeed = () => { const now = Date.now(); setFeedSeenTs(now); try { localStorage.setItem("jinntell_feed_seen_ts", String(now)); } catch { /* noop */ } onOpenFeed?.(); };
+  // Новости (подписки) и Предложения (джинны по интересам) — разные окна и свои отметки «просмотрено»
+  const openFeed = () => { const now = Date.now(); setFeedSeenTs(now); try { localStorage.setItem("jinntell_feed_seen_ts", String(now)); } catch { /* noop */ } onOpenFeed?.("news"); };
+  const openOffers = () => { const now = Date.now(); setOffersSeenTs(now); try { localStorage.setItem("jinntell_offers_seen_ts", String(now)); } catch { /* noop */ } onOpenFeed?.("offers"); };
   const openInvitesW = () => { const now = Date.now(); setInvitesSeenTs(now); try { localStorage.setItem("jinntell_invites_seen_ts", String(now)); } catch { /* noop */ } onOpenInvites?.(); };
 
   useEffect(() => {
@@ -208,8 +212,18 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
   const recs = recommended.filter((a) => !recIds.has(a.id)).slice(0, 12);
   const recSet = new Set(recs.map((a) => a.id));
   const pops = popular.filter((a) => !recIds.has(a.id) && !recSet.has(a.id)).slice(0, 12);
-  // «Были недавно»: чаты с джиннами не из избранного, тронутые за последние 12 ч (авто-истечение)
-  const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)) && !!c.ts && (Date.now() - c.ts) < 12 * 3600 * 1000);
+  // «Недавние»: чаты с джиннами не из избранного за последние 24 ч (авто-истечение)
+  const guests = openChats.filter((c) => (c.room.startsWith("agent-") || c.room.startsWith("room-")) && !(favIds && favIds.has(c.agentId)) && !!c.ts && (Date.now() - c.ts) < 24 * 3600 * 1000);
+  // «Гости»: джинны, оставившие предложение (посты по интересам), свежие первыми, без повторов
+  const offerGuests = (() => {
+    const seen = new Set<number>(); const out: { id: number; name: string; color: string; room: string; fresh: boolean }[] = [];
+    for (const e of feedEvents) {
+      if (!isOfferEvent(e) || !e.agent_id || seen.has(e.agent_id)) continue;
+      seen.add(e.agent_id);
+      out.push({ id: e.agent_id, name: e.agent_name || "Джинн", color: e.agent_color || "#e0a13a", room: e.link_room || `agent-${e.agent_id}`, fresh: new Date(e.created_at).getTime() > offersSeenTs });
+    }
+    return out.slice(0, 12);
+  })();
 
   useEffect(() => {
     const q = peopleSearch.trim();
@@ -235,8 +249,8 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
 
   // ── ВЕРХНИЕ «НОВОСТНЫЕ» ПОЛОСЫ ──
   const newMsgs = openChats.filter((c) => (c.count || 0) > 0);                              // непрочитанные чаты
-  const newEvents = feedEvents.filter((e) => e.kind !== "offer" && new Date(e.created_at).getTime() > feedSeenTs).length;   // события
-  const newOffers = feedEvents.filter((e) => e.kind === "offer" && new Date(e.created_at).getTime() > feedSeenTs).length;   // предложения
+  const newEvents = feedEvents.filter((e) => !isOfferEvent(e) && new Date(e.created_at).getTime() > feedSeenTs).length;   // новости и события
+  const newOffers = feedEvents.filter((e) => isOfferEvent(e) && new Date(e.created_at).getTime() > offersSeenTs).length;  // предложения
   const newInvites = invites.filter((i) => new Date(i.at).getTime() > invitesSeenTs).length;                               // приглашения
   const newDocs = digests.filter((d) => !seenDocs.has(d.id));                               // непросмотренные документы
 
@@ -373,7 +387,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
               <div className="text-[11px] font-semibold px-1 mb-0.5" style={{ color: "var(--text-muted)" }}>Ленты</div>
               <Strip title="">
                 {newEvents > 0 && <Circle label="Новости" emoji="🔔" color="#5ea0e8" badge={newEvents} onClick={openFeed} />}
-                {newOffers > 0 && <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" badge={newOffers} onClick={openFeed} />}
+                {newOffers > 0 && <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" badge={newOffers} onClick={openOffers} />}
                 {newInvites > 0 && <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" badge={newInvites} onClick={openInvitesW} />}
               </Strip>
             </div>)}
@@ -401,7 +415,7 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
             {!collapsed.has("info") && (
               <Strip title="">
                 <Circle label="Новости" emoji="🔔" color="#5ea0e8" small onClick={openFeed} />
-                <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openFeed} />
+                <Circle label="Предложения" sub="от джиннов" emoji="💡" color="#e0a13a" small onClick={openOffers} />
                 <Circle label="Приглашения" sub="рядом" emoji="📍" color="#c0563a" small onClick={openInvitesW} />
                 <Circle label="Действия" sub="помощника" emoji="📋" color="#4a9e7f" small onClick={onOpenActions} />
               </Strip>
@@ -435,24 +449,27 @@ export default function HomeRoom({ topPad, bottomPad, assistantName, assistantPh
           <div className="rounded-2xl p-3.5" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
             {bigHead("Гостиная", "gost", "удержи → в «Джинны»")}
             {!collapsed.has("gost") && (() => {
-              const agentTabs: { k: "rec" | "pop"; label: string; items: AgentOut[] }[] = [
-                { k: "rec" as const, label: "Рекомендованные", items: recs },
-                { k: "pop" as const, label: "Популярные", items: pops },
-              ].filter((t) => t.items.length > 0);
-              const hasRecent = guests.length > 0;
-              const keys: ("rec" | "pop" | "recent")[] = [...agentTabs.map((t) => t.k), ...(hasRecent ? ["recent" as const] : [])];
-              if (keys.length === 0) return <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся рекомендованные, популярные и недавние гости.</p>;
+              // Порядок владельца: Недавние (24 ч) · Гости (оставили предложение) · Популярные (по оценкам) · Рекомендованные (система, в т.ч. оплаченные)
+              const tabs: { k: "recent" | "guests" | "pop" | "rec"; label: string; n: number }[] = [
+                { k: "recent" as const, label: "Недавние · 24 ч", n: guests.length },
+                { k: "guests" as const, label: "Гости", n: offerGuests.length },
+                { k: "pop" as const, label: "Популярные", n: pops.length },
+                { k: "rec" as const, label: "Рекомендованные", n: recs.length },
+              ].filter((t) => t.n > 0);
+              const keys = tabs.map((t) => t.k);
+              if (keys.length === 0) return <p className="text-[11px] px-1" style={{ color: "var(--text-muted)", opacity: 0.6 }}>Здесь появятся недавние собеседники, гости с предложениями, популярные и рекомендованные джинны.</p>;
               const active = keys.includes(gostTab) ? gostTab : keys[0];
-              const tabBtn = (k: "rec" | "pop" | "recent", label: string) => (
+              const tabBtn = (k: "recent" | "guests" | "pop" | "rec", label: string) => (
                 <button key={k} onClick={() => setGostTab(k)} className="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all whitespace-nowrap" style={{ background: active === k ? "var(--accent)" : "var(--bg-glass)", color: active === k ? "var(--bg-deep)" : "var(--text-secondary)", border: `1px solid ${active === k ? "var(--accent)" : "var(--bg-glass-border)"}` }}>{label}</button>
               );
               return (<>
                 <div className="flex gap-1.5 mt-1.5 mb-0.5 flex-wrap">
-                  {agentTabs.map((t) => tabBtn(t.k, t.label))}
-                  {hasRecent && tabBtn("recent", "Недавние")}
+                  {tabs.map((t) => tabBtn(t.k, t.label))}
                 </div>
                 {active === "recent"
                   ? <Strip title="">{guests.map((c) => <Circle key={c.room} label={c.name} photo={c.photo} color={c.color} emoji="🧞" small badge={c.count} onClick={() => onOpenChat?.(c.room)} />)}</Strip>
+                  : active === "guests"
+                  ? <Strip title="">{offerGuests.map((g) => <Circle key={g.id} label={g.name} sub="оставил предложение" color={g.color} emoji="💡" small badge={g.fresh ? 1 : undefined} onClick={openOffers} />)}</Strip>
                   : <Strip title="">{(active === "rec" ? recs : pops).map((a) => guestAgentCircle(a))}</Strip>}
               </>);
             })()}

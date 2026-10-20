@@ -81,7 +81,7 @@ export default function Home() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [digestId, setDigestId] = useState<number | null>(null);
   const [invitesOpen, setInvitesOpen] = useState(false);
-  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState<null | "news" | "offers">(null);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [cityOpen, setCityOpen] = useState(false);
   const [cityscapeOpen, setCityscapeOpen] = useState(false);
@@ -1097,7 +1097,7 @@ export default function Home() {
           onOpenActions={() => setActionsOpen(true)}
           onOpenDigest={(id) => setDigestId(id)}
           onOpenInvites={() => setInvitesOpen(true)}
-          onOpenFeed={() => setFeedOpen(true)}
+          onOpenFeed={(m) => setFeedOpen(m)}
           onOpenCity={() => setCityOpen(true)}
           onCreateJinn={async () => { try { const a = await createMyJinn(); if (a) openAgentChat(a.id, { name: a.name, color: a.color }); } catch { setCommandHint("Не удалось создать джинна"); } }}
           onOpenSettings={(sec) => { setSettingsSection(sec ?? null); setSettingsOpen(true); }}
@@ -1227,7 +1227,7 @@ export default function Home() {
       {actionsOpen && <ActionsModal onClose={() => setActionsOpen(false)} assistantName={assistantName} />}
       {digestId != null && <DigestModal digestId={digestId} onClose={() => setDigestId(null)} onOpenAgent={openAgentChat} />}
       {invitesOpen && <InvitesModal onClose={() => setInvitesOpen(false)} onOpenAgent={openAgentChat} />}
-      {feedOpen && <FeedModal onClose={() => setFeedOpen(false)} onOpenChat={(r) => { setFeedOpen(false); setRoom(r); setView("chat"); }} />}
+      {feedOpen && <FeedModal mode={feedOpen} onClose={() => setFeedOpen(null)} onOpenChat={(r) => { setFeedOpen(null); setRoom(r); setView("chat"); }} />}
 
       {storeOpen && <StoreModal onClose={() => setStoreOpen(false)} />}
       {settingsOpen && (
