@@ -215,6 +215,13 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     if not user.jinntell_link:
         user.jinntell_link = f"user-{user.id}"
 
+    # Подарок за регистрацию — токенами (не деньгами): мотив гостю зарегистрироваться
+    try:
+        from app.services import tokens as _tk
+        await _tk.welcome(db, user)
+    except Exception as _e:  # noqa: BLE001
+        print(f"[auth] welcome tokens skip: {_e}")
+
     # Админ по номеру
     if settings.ADMIN_PHONES and phone in settings.ADMIN_PHONES:
         user.is_admin = True

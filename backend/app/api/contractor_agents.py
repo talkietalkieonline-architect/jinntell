@@ -814,8 +814,10 @@ async def contractor_agent_gift(
     contractor: Contractor = Depends(_require_contractor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Подарить токены подписчикам (всем или выбранным). Начисляет на token_balance."""
-    await _get_owned_agent(agent_id, contractor, db)
+    """Подарить токены подписчикам (всем или выбранным): целевые токены на ЭТОГО джинна,
+    оплачиваются с баланса бизнеса по курсу токена (как у спонсоров). Не деньги, сгорают."""
+    from app.services import tokens as _tk
+    agent = await _get_owned_agent(agent_id, contractor, db)
     amount = int(body.get("amount") or 0)
     if amount <= 0:
         raise HTTPException(400, "нужна сумма токенов")
@@ -827,14 +829,22 @@ async def contractor_agent_gift(
         )).scalars().all()
     else:
         subs = [int(x) for x in ids]
-    n = 0
-    for uid in subs:
-        u = await db.get(User, uid)
-        if u:
-            u.token_balance = int(getattr(u, "token_balance", 0) or 0) + amount
-            n += 1
+    users = [u for u in [await db.get(User, uid) for uid in subs] if u]
+    if not users:
+        raise HTTPException(400, "Нет подписчиков, кому дарить")
+    cost = amount * len(users) * await _tk.price_kop()
+    if (contractor.balance_kopecks or 0) < cost:
+        raise HTTPException(400, f"Недостаточно средств: подарок стоит {cost / 100:.2f} ₽ "
+                                 f"({amount} токенов × {len(users)} чел.), на балансе {(contractor.balance_kopecks or 0) / 100:.2f} ₽")
+    from app.models.wallet_ledger import WalletLedger
+    contractor.balance_kopecks = (contractor.balance_kopecks or 0) - cost
+    db.add(WalletLedger(contractor_id=contractor.id, kind="spend", amount_kopecks=-cost,
+                        balance_after=int(contractor.balance_kopecks), agent_id=agent_id,
+                        description=f"Подарок токенов подписчикам: {amount} × {len(users)}"))
+    for u in users:
+        await _tk.grant(db, u.id, amount, f"Подарок от «{agent.name}»", source="owner", agent_id=agent_id)
     await db.flush()
-    return {"ok": True, "gifted_to": n, "amount": amount}
+    return {"ok": True, "gifted_to": len(users), "amount": amount, "cost_rub": round(cost / 100, 2)}
 
 
 

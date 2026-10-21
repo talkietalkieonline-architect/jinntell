@@ -373,7 +373,8 @@ def _wcfg(raw):
 
 
 @router.get("/me/wallet")
-async def my_wallet(user: User = Depends(get_current_user)):
+async def my_wallet(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from app.services import tokens as _tk
     cfg = _wcfg(await _w_get("TOKEN_CONFIG"))
     gifts = cfg.get("gifts", {}) or {}
     packs = [p for p in (cfg.get("packs", []) or []) if p.get("active")]
@@ -381,7 +382,7 @@ async def my_wallet(user: User = Depends(get_current_user)):
     welcome_av = 0 if getattr(user, "welcome_gift_claimed", False) else int(gifts.get("welcome", 0) or 0)
     daily_av = 0 if (getattr(user, "last_daily_gift", None) == today) else int(gifts.get("daily", 0) or 0)
     return {
-        "token_balance": int(getattr(user, "token_balance", 0) or 0),
+        "token_balance": (await _tk.balance(db, user.id))["tokens"],   # токены = живые бонусные гранты
         "packs": packs,
         "welcome_available": welcome_av,
         "daily_available": daily_av,
@@ -396,16 +397,17 @@ async def claim_gift(kind: str, user: User = Depends(get_current_user), db: Asyn
     if kind == "welcome":
         if getattr(user, "welcome_gift_claimed", False):
             raise HTTPException(400, "Приветственный подарок уже получен")
-        credited = int(gifts.get("welcome", 0) or 0)
-        user.token_balance = int(getattr(user, "token_balance", 0) or 0) + credited
-        user.welcome_gift_claimed = True
+        from app.services import tokens as _tk
+        credited = await _tk.welcome(db, user)
     elif kind == "daily":
         if getattr(user, "last_daily_gift", None) == today:
             raise HTTPException(400, "Ежедневный подарок уже получен сегодня")
+        from app.services import tokens as _tk
         credited = int(gifts.get("daily", 0) or 0)
-        user.token_balance = int(getattr(user, "token_balance", 0) or 0) + credited
+        await _tk.grant(db, user.id, credited, "Ежедневный подарок", source="platform", days=7)
         user.last_daily_gift = today
     else:
         raise HTTPException(400, "Неизвестный подарок")
     await db.flush()
-    return {"ok": True, "credited": credited, "token_balance": user.token_balance}
+    from app.services import tokens as _tk2
+    return {"ok": True, "credited": credited, "token_balance": (await _tk2.balance(db, user.id))["tokens"]}

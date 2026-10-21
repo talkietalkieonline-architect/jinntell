@@ -297,6 +297,10 @@ async def assistant_act(body: IntentRequest, db: AsyncSession = Depends(get_db),
     """Помощник на tool-calling: модель сама выбирает инструменты. Возвращает {reply, directives, steps}.
     Директивы (open_chat/close_chat/call/send_message) выполняет фронт. Экспериментальный путь рядом с классификатором."""
     from app.services.assistant_agent import run
+    if not getattr(user, "is_guest", False):
+        from app.services import tokens as _tk
+        if await _tk.fair_use_exceeded(user.id):
+            return {"reply": _tk.FAIR_USE_TEXT, "directives": [], "steps": []}
     _fr = body.flow_room or ""
     _ma = re.match(r"^agent-\d+-u(\d+)$", _fr)
     if not (re.match(r"^room-\d+$", _fr) or (_ma and int(_ma.group(1)) == user.id)):

@@ -82,7 +82,6 @@ import {
   adminCreateTariff,
   adminUpdateTariff,
   adminDeleteTariff,
-  adminSetUserTariff,
   type TariffOut,
   type TariffIn,
   adminListDocs,
@@ -116,9 +115,7 @@ const AGENT_TYPES = [
   { id: "business", label: "Бизнес" },
   { id: "citizen", label: "Жители" },
   { id: "specialist", label: "Специалисты" },
-  { id: "service", label: "Сервисные" },  // от проекта для всех (Поисковый, Вордстат, Гит, Новости, Погода) — по отделу, не по типу
 ];
-const TYPE_RU: Record<string, string> = { core: "core", system: "системный", business: "бизнес", citizen: "житель", specialist: "специалист", personal: "персонаж", service: "сервисный" };
 
 const PRESET_COLORS = [
   "#FFD700", "#4CAF50", "#E91E63", "#2196F3", "#FF9800",
@@ -366,7 +363,7 @@ export default function AdminPage() {
     try {
       const data = await adminGetAgents({
         search: agentSearch,
-        agent_type: agentTypeFilter === "service" ? "" : agentTypeFilter,
+        agent_type: agentTypeFilter,
         include_inactive: showInactive,
       });
       setAgents(data);
@@ -516,7 +513,7 @@ export default function AdminPage() {
       if (tab === "agents") await loadAgents();
       if (tab === "core_agents") await loadCoreAgents();
       if (tab === "contractors") await loadContractors();
-      if (tab === "users") { await loadUsers(); await loadTariffs(); }
+      if (tab === "users") { await loadUsers(); }
       if (tab === "system") await loadSystemInfo();
       if (tab === "stats") await loadStats();
       if (tab === "integrations") { await loadIntegrations(); await loadModels(); }
@@ -700,7 +697,6 @@ export default function AdminPage() {
             { id: "cabinet" as Tab, label: "Шкафчик", icon: "🗄" },
             { id: "tokens" as Tab, label: "Токены", icon: "🪙" },
             { id: "catalog" as Tab, label: "Каталог", icon: "🛍" },
-            { id: "tariffs" as Tab, label: "Бизнес-планы", icon: "💳" },
             { id: "docs" as Tab, label: "Доки", icon: "📄" },
           ]).map((item) => (
             <button
@@ -787,7 +783,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {agents.filter((a) => a.agent_type !== "core" && a.visibility !== "core" && (agentTypeFilter !== "service" || a.department === "service")).map((agent) => (
+                    {agents.filter((a) => a.agent_type !== "core" && a.visibility !== "core").map((agent) => (
                       <tr
                         key={agent.id}
                         onClick={() => setSelectedAgent(agent)}
@@ -806,14 +802,13 @@ export default function AdminPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            agent.department === "service" ? "bg-amber-900/50 text-amber-300" :
                             agent.agent_type === "core" ? "bg-red-900/50 text-red-300" :
                             agent.agent_type === "system" ? "bg-purple-900/50 text-purple-300" :
                             agent.agent_type === "business" ? "bg-blue-900/50 text-blue-300" :
                             agent.agent_type === "specialist" ? "bg-cyan-900/50 text-cyan-300" :
                             "bg-green-900/50 text-green-300"
                           }`}>
-                            {agent.department === "service" ? "сервисный" : (TYPE_RU[agent.agent_type] || agent.agent_type)}
+                            {({ core: "core", system: "системный", business: "бизнес", citizen: "житель", specialist: "специалист", personal: "персонаж" } as Record<string, string>)[agent.agent_type] || agent.agent_type}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-400">{agent.profession}</td>
@@ -1016,11 +1011,10 @@ export default function AdminPage() {
               {/* Штат, сгруппированный по департаментам. «Помощник» выделен — это мульти-джин у каждого пользователя. */}
               <div className="flex flex-col gap-7">
                 {[
-                  { key: "assistant", label: "🧞 Помощник", note: "мульти-джин — свой у каждого пользователя", accent: true },
-                  { key: "core", label: "⚙️ Ядро системы", note: "администрирование, контент, инфраструктура, архитектор", accent: false },
+                  { key: "assistant", label: "🧞 Помощники", note: "Помощник — мульти-джин у каждого пользователя; Наставник — помогает помощникам", accent: true },
+                  { key: "core", label: "⚙️ Ядро системы", note: "Архитектор, Модератор (вход), Слушатель (выход), Дежурный, Шериф, Казначей", accent: false },
                   { key: "sales", label: "💼 Коммерческий отдел", note: "продажи B2B — работают на систему, вне Города", accent: false },
                   { key: "marketing", label: "📣 Отдел маркетинга", note: "контент и продвижение — вне Города", accent: false },
-                  { key: "service", label: "🛰 Сервисные", note: "", accent: false },
                   { key: "__none__", label: "📦 Без департамента", note: "", accent: false },
                 ].map((grp) => {
                   const list = coreAgents.filter((a) => ((a.department || "__none__") === grp.key));
@@ -1372,7 +1366,6 @@ export default function AdminPage() {
                       <th className="text-left px-4 py-3">Соцсети</th>
                       <th className="text-left px-4 py-3">Статус</th>
                       <th className="text-left px-4 py-3">Баланс</th>
-                      <th className="text-left px-4 py-3">Тариф</th>
                       <th className="text-left px-4 py-3">Дата</th>
                     </tr>
                   </thead>
@@ -1411,16 +1404,6 @@ export default function AdminPage() {
                         <td className="px-4 py-3">
                           <span className={(u.balance_kopecks ?? 0) > 0 ? "text-green-400 text-xs" : "text-gray-500 text-xs"}>{(((u.balance_kopecks ?? 0)) / 100).toLocaleString("ru")} ₽</span>
                           <button onClick={async () => { const v = prompt(`Пополнить #${u.id} на (₽):`); const r = parseFloat(v || ""); if (r > 0) { try { await adminAddUserBalance(u.id, Math.round(r * 100)); loadUsers(); } catch { /* noop */ } } }} className="ml-2 px-1.5 rounded bg-amber-600 text-black text-xs" title="Пополнить">＋</button>
-                        </td>
-                        <td className="px-4 py-3">
-                          <select
-                            value={u.tariff_code || ""}
-                            onChange={async (e) => { try { await adminSetUserTariff(u.id, e.target.value); loadUsers(); } catch { /* noop */ } }}
-                            className="bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-xs text-white outline-none"
-                          >
-                            <option value="">Полный (—)</option>
-                            {tariffs.map((t) => <option key={t.id} value={t.code}>{t.name || t.code}</option>)}
-                          </select>
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">
                           {u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—"}

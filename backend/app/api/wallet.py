@@ -96,6 +96,12 @@ async def yookassa_webhook(body: dict = Body(...), db: AsyncSession = Depends(ge
         if uid and val > 0:
             await billing.credit(db, uid, round(val * 100), kind="topup",
                                  description="Пополнение (ЮKassa)", ref=payment_id)
+            await db.flush()
+            try:  # +N% токенами к первому пополнению
+                from app.services import tokens as _tk
+                await _tk.first_topup_bonus(db, uid, round(val * 100))
+            except Exception as _e:  # noqa: BLE001
+                print(f"[wallet] first topup bonus skip: {_e}")
             await db.commit()
         return {"ok": True}
     except Exception as e:

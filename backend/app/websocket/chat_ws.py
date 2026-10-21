@@ -147,6 +147,10 @@ async def _check_limits(agent, room: str, uid: int) -> Optional[str]:
                 # нейтрально: заглушку произносит ТОТ джинн, с кем идёт разговор (не личный помощник)
                 return ("Бесплатные сообщения для гостя на сегодня закончились. "
                         "Зарегистрируйтесь в JinnTell — это быстро, и разговор можно будет продолжить 🙂")
+        else:
+            from app.services import tokens as _tk
+            if await _tk.fair_use_exceeded(uid):
+                return _tk.FAIR_USE_TEXT
         dl = int(getattr(agent, "daily_msg_limit", 50) or 0)
         if dl > 0:
             dk = f"lim:d:{agent.id}:{uid}:{day}"
