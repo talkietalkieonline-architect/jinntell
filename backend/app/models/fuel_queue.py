@@ -52,6 +52,7 @@ class StationOrder(Base):
     queue_code = Column(String(24), nullable=True)         # связанный талон очереди (если был)
     reminded = Column(String(40), default="")              # отправленные напоминания помощника
     status = Column(String(16), default="new", index=True)  # new | ready | done | cancelled
+    paid_at = Column(DateTime(timezone=True), nullable=True)  # оплачен по QR (отмечает персонал)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     done_at = Column(DateTime(timezone=True), nullable=True)
 

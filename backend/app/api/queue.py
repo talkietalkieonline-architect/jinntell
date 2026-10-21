@@ -82,8 +82,14 @@ async def queue_station(agent_id: int, db: AsyncSession = Depends(get_db), user:
     rows = (await db.execute(select(FuelQueueEntry).where(
         FuelQueueEntry.agent_id == agent_id, FuelQueueEntry.status.in_(fuel_station.ACTIVE)
     ).order_by(FuelQueueEntry.slot_at.nulls_last(), FuelQueueEntry.number))).scalars().all()
+    from app.services import industry_presets as _ip
+    _mods = _ip.get_modules(a)
     return {"station": {"agent_id": a.id, "name": a.name, "limit_per_car": a.queue_limit_liters,
-                        "buffer_pct": a.queue_buffer_pct},
+                        "buffer_pct": a.queue_buffer_pct, "industry": a.industry,
+                        "queue": "queue" in _mods,
+                        "announce": "staff_voice" in _mods,   # реестр объявляет заказы голосом джинна
+                        "voice": a.tts_voice_id or a.voice_id or "alena",
+                        "pay_qr": "pay_qr" in _mods},
             "availability": await fuel_station.availability(db, a),
             "queue": [_row(e) for e in rows]}
 
@@ -142,6 +148,7 @@ def _order_row(o: StationOrder) -> dict:
             "total": o.total, "client_name": o.client_name or "", "car_plate": o.car_plate or "",
             "ready_at": _iso(o.ready_at), "ready_hhmm": fuel_station.hhmm(o.ready_at) if o.ready_at else "",
             "queue_code": o.queue_code, "status": o.status, "status_ru": _ORDER_RU.get(o.status, o.status),
+            "paid": bool(o.paid_at), "paid_at": _iso(o.paid_at),
             "agent_id": o.agent_id, "created_at": _iso(o.created_at)}
 
 
@@ -176,6 +183,27 @@ async def order_lookup(code: str, db: AsyncSession = Depends(get_db),
     return out
 
 
+@router.get("/order/{code}/pay.svg")
+async def order_pay_qr(code: str, db: AsyncSession = Depends(get_db)):
+    """Платёжный QR по ГОСТ Р 56042-2014 (ST00012, UTF-8): банк подставит получателя, сумму и назначение «Заказ Z-…».
+    Деньги идут НАПРЯМУЮ бизнесу по его реквизитам — платформа не участвует (не платёжный агент)."""
+    import segno
+    from app.services import industry_presets as _ip
+    o = await _order(db, code)
+    a = await db.get(Agent, o.agent_id)
+    pay = (_ip.get_catalog(a).get("pay") or {}) if a else {}
+    if not pay.get("acc") or not o.total:
+        raise HTTPException(404, "Оплата по QR не настроена")
+    clean = lambda v: str(v or "").replace("|", " ").strip()
+    fields = [("Name", pay.get("name")), ("PersonalAcc", pay.get("acc")), ("BankName", pay.get("bank")),
+              ("BIC", pay.get("bic")), ("CorrespAcc", pay.get("corr") or "0"), ("PayeeINN", pay.get("inn")),
+              ("Sum", str(int(o.total) * 100)), ("Purpose", f"Заказ {o.code}")]
+    data = "ST00012|" + "|".join(f"{k}={clean(v)}" for k, v in fields if clean(v))
+    buf = io.BytesIO()
+    segno.make(data, error="m", encoding="utf-8").save(buf, kind="svg", scale=5, border=3, dark="#1c2230", light="#ffffff")
+    return Response(content=buf.getvalue(), media_type="image/svg+xml")
+
+
 @router.post("/order/{code}/{action}")
 async def order_action(code: str, action: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """ready — приготовлен; done — выдан/услуга оказана; cancel — отменён (оператор или сам клиент)."""
@@ -188,6 +216,10 @@ async def order_action(code: str, action: str, db: AsyncSession = Depends(get_db
         raise HTTPException(403, "Нет доступа: вы не оператор этой АЗС")
     if o.status in ("done", "cancelled"):
         raise HTTPException(409, f"Заказ уже «{_ORDER_RU.get(o.status, o.status)}»")
+    if action == "paid":
+        o.paid_at = datetime.now(timezone.utc)
+        await db.commit()
+        return _order_row(o)
     if action == "ready":
         o.status = "ready"
     elif action == "done":

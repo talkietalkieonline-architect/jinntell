@@ -123,6 +123,30 @@ export default function ModulesEditor({ api, admin = false }: { api: ModulesApi;
           {mods.includes("cafe") && editList("cafe", "Меню кафе")}
           {mods.includes("services") && editList("services", "Прайс услуг АЗС")}
 
+          {mods.includes("pay_qr") && (() => {
+            const pay = catalog.pay || {};
+            const setPay = (k: string, v: string) => setCatalog({ ...catalog, pay: { ...pay, [k]: v } });
+            const field = (k: "name" | "inn" | "acc" | "bank" | "bic" | "corr", label: string, ph: string) => (
+              <label key={k} className="flex flex-col gap-1 text-[11px]" style={{ color: T.muted }}>{label}
+                <input className={inp} style={inpS} placeholder={ph} value={pay[k] || ""} onChange={(e) => setPay(k, e.target.value)} />
+              </label>
+            );
+            return (
+              <div className="rounded-xl p-3 flex flex-col gap-2" style={box}>
+                <div className="text-[12px] font-semibold" style={{ color: T.text }}>Реквизиты для оплаты по QR</div>
+                <div className="text-[11px]" style={{ color: T.muted }}>Гость сканирует QR — банк сам подставит получателя, сумму и номер заказа. Деньги идут напрямую вам, JinnTell в платеже не участвует.</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {field("name", "Получатель", "ООО «Кофейня»")}
+                  {field("inn", "ИНН", "7800000000")}
+                  {field("acc", "Расчётный счёт", "40702810…")}
+                  {field("bank", "Банк", "ПАО Сбербанк")}
+                  {field("bic", "БИК", "044525225")}
+                  {field("corr", "Корр. счёт", "30101810…")}
+                </div>
+              </div>
+            );
+          })()}
+
           {mods.includes("queue") && (
             <div className="rounded-xl p-3 grid grid-cols-1 sm:grid-cols-3 gap-2" style={box}>
               <label className="flex flex-col gap-1 text-[11px]" style={{ color: T.muted }}>Лимит на машину, л
@@ -134,7 +158,7 @@ export default function ModulesEditor({ api, admin = false }: { api: ModulesApi;
             </div>
           )}
 
-          {(mods.includes("cafe") || mods.includes("services") || mods.includes("queue")) && (
+          {(mods.includes("cafe") || mods.includes("services") || mods.includes("queue") || mods.includes("pay_qr")) && (
             <button onClick={() => save()} disabled={busy} className="py-2.5 rounded-xl text-sm font-semibold" style={btn}>{busy ? "Сохраняю…" : "Сохранить меню и настройки"}</button>
           )}
 

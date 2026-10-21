@@ -1908,11 +1908,13 @@ export function adminCabinetAdopt(id: number, body: { brief?: string; visibility
 
 // ── Отраслевая заготовка джина + модули (бизнес включает сам; заготовку назначаем мы) ──
 export type ModuleItem = { name: string; price: number };
+/** Реквизиты бизнеса для платёжного QR (ГОСТ Р 56042): деньги идут напрямую бизнесу. */
+export type PayRequisites = { name?: string; inn?: string; acc?: string; bank?: string; bic?: string; corr?: string };
 export interface ModulesState {
   industry: string | null; industry_label: string | null;
   industries: { id: string; label: string; desc: string }[];
   modules: { id: string; label: string; desc: string; on: boolean; catalog?: string | null; operator: boolean }[];
-  catalog: { cafe?: ModuleItem[]; services?: ModuleItem[] };
+  catalog: { cafe?: ModuleItem[]; services?: ModuleItem[]; pay?: PayRequisites };
   settings: { queue_limit_liters?: number; queue_buffer_pct?: number; queue_slot_min?: number };
   operators: { user_id: number; phone: string; name: string }[];
   operator_url: string;

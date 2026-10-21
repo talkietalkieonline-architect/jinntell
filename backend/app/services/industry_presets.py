@@ -69,6 +69,44 @@ INDUSTRIES: dict = {
                          {"name": "Комната отдыха (номер)", "price": 1500}],
         },
     },
+    # Кофейня (2026-10-21): заказ к времени — «пришёл и забрал»; два способа: оплата по QR через джинна
+    # и/или голос заказов для персонала (реестр у бариста объявляет заказ вслух).
+    "coffee": {
+        "label": "Джин кофейни",
+        "desc": "Бариста-консультант: меню, цены, акции и ЗАКАЗ К ВРЕМЕНИ — гость пришёл, назвал имя и забрал.",
+        "base_tools": ["search_knowledge", "station_order"],
+        "modules": {
+            "cafe": {
+                "label": "Меню и заказ к времени",
+                "desc": "Гость заказывает голосом или текстом из меню кофейни и называет время — заказ попадает в реестр бариста.",
+                "tools": [],
+                "catalog": "cafe",
+                "operator": True,
+                "default": True,
+            },
+            "pay_qr": {
+                "label": "Оплата по QR",
+                "desc": "Джинн присылает платёжный QR по банковскому стандарту: сумма и номер заказа уже внутри, "
+                        "деньги идут напрямую кофейне. Нужны реквизиты.",
+                "tools": [],
+                "catalog": "pay",
+                "default": False,
+            },
+            "staff_voice": {
+                "label": "Голос заказов для персонала",
+                "desc": "Реестр у бариста объявляет каждый новый заказ вслух голосом джинна: что приготовить, к какому времени, для кого.",
+                "tools": [],
+                "operator": True,
+                "default": True,
+            },
+        },
+        "default_catalog": {
+            "cafe": [{"name": "Эспрессо", "price": 140}, {"name": "Американо 0,3", "price": 170},
+                     {"name": "Капучино 0,3", "price": 220}, {"name": "Латте 0,4", "price": 250},
+                     {"name": "Раф 0,3", "price": 270}, {"name": "Круассан", "price": 150},
+                     {"name": "Сырник", "price": 180}],
+        },
+    },
 }
 
 
@@ -131,6 +169,9 @@ def apply(agent, industry: Optional[str], modules: list, catalog: Optional[dict]
         cat = catalog
     for m in modules:  # каталог по умолчанию для нового модуля
         key = ind["modules"][m].get("catalog")
+        if key == "pay":
+            cat.setdefault("pay", {})
+            continue
         if key and not cat.get(key):
             cat[key] = list(ind.get("default_catalog", {}).get(key, []))
     agent.station_catalog_json = json.dumps(cat, ensure_ascii=False)
@@ -159,6 +200,20 @@ def context_note(agent) -> str:
     if not ind or not mods:
         return ""
     cat = get_catalog(agent)
+    if getattr(agent, "industry", None) == "coffee":
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        pay_on = "pay_qr" in mods and (cat.get("pay") or {}).get("acc")
+        p = ["ЗАКАЗ К ВРЕМЕНИ — твоя главная операция: узнай, что приготовить из меню, ИМЯ гостя и к какому времени он придёт "
+             "(можно «через 20 минут») → station_order. Гос-номер не нужен. Гость приходит, называет имя и забирает. "
+             + ("После заказа джинн сам пришлёт платёжный QR с суммой — скажи, что оплатить можно сразу, а бариста увидит оплату."
+                if pay_on else "Оплата на месте.")
+             + " Предлагай дополнить к месту («к капучино круассан?»), без навязывания."]
+        if "cafe" in mods and cat.get("cafe"):
+            p.append("МЕНЮ: " + _fmt_items(cat["cafe"]))
+        now = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%H:%M")
+        return (f"\n\nСЕЙЧАС В КОФЕЙНЕ {now}. Время можно передать как «ЧЧ:ММ» или «через 20 минут» — не переспрашивай, "
+                "если гость уже сказал.\nОПЕРАЦИИ КОФЕЙНИ:\n- " + "\n- ".join(p))
     queue_on = "queue" in mods
     parts = ["ПРЕДЗАКАЗ К ПРИЕЗДУ — твоя главная операция: собери ОДИН заказ на всё, что клиенту нужно к приезду — "
              + ("" if queue_on else "топливо (вид и литры), ")
@@ -233,6 +288,9 @@ def _clean_catalog(cat) -> dict:
                 price = 0
             items.append({"name": nm, "price": price})
         out[key] = items
+    pay = cat.get("pay")
+    if isinstance(pay, dict):  # реквизиты для платёжного QR (ГОСТ Р 56042)
+        out["pay"] = {k: str(pay.get(k) or "").strip()[:160] for k in ("name", "inn", "acc", "bank", "bic", "corr")}
     return out
 
 

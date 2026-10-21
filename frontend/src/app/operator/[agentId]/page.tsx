@@ -17,7 +17,7 @@ interface QRow {
 }
 interface Fuel { stock: number | null; reserved: number; reserved_cars: number; buffer: number | null; bookable: number | null; updated_hours_ago: number | null; stale: boolean; }
 interface StationData {
-  station: { agent_id: number; name: string; limit_per_car: number; buffer_pct: number };
+  station: { agent_id: number; name: string; limit_per_car: number; buffer_pct: number; industry?: string | null; queue?: boolean; announce?: boolean; voice?: string; pay_qr?: boolean };
   availability: { buffer_pct: number; limit_per_car: number; fuels: Record<string, Fuel> };
   queue: QRow[];
 }
@@ -30,7 +30,7 @@ const authH = (): Record<string, string> => { const t = tok(); return t ? { Auth
 const fmtTime = (iso: string | null) => { try { return iso ? new Date(iso).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }) : ""; } catch { return ""; } };
 const codeFrom = (raw: string) => { const m = raw.toUpperCase().match(/[QZ]-[0-9A-F]{6,12}/); return m ? m[0] : ""; };
 interface ORow { code: string; kind: string; kind_ru: string; items: { name: string; qty: number; price: number }[]; total: number;
-  client_name: string; car_plate: string; ready_hhmm: string; queue_code: string | null; status: string; status_ru: string; verdict?: { ok: boolean; text: string }; can_operate?: boolean }
+  client_name: string; car_plate: string; ready_hhmm: string; queue_code: string | null; status: string; status_ru: string; paid?: boolean; verdict?: { ok: boolean; text: string }; can_operate?: boolean }
 
 type Detector = { detect: (src: CanvasImageSource) => Promise<{ rawValue: string }[]> };
 
@@ -39,6 +39,12 @@ export default function OperatorPage() {
   const agentId = (params.agentId as string) || "";
   const [data, setData] = useState<StationData | null>(null);
   const [orders, setOrders] = useState<ORow[]>([]);
+  // Голос заказов для персонала: джинн объявляет новый заказ вслух (звук — только после нажатия, правило браузера)
+  const [voiceOn, setVoiceOn] = useState(false);
+  const voiceOnRef = useRef(false);
+  const seenOrders = useRef<Set<string> | null>(null);
+  const sayQueue = useRef<Promise<void>>(Promise.resolve());
+  const dataRef = useRef<StationData | null>(null);
   const [checkedOrder, setCheckedOrder] = useState<ORow | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
   const [err, setErr] = useState("");
@@ -67,10 +73,17 @@ export default function OperatorPage() {
         if (!r.ok) throw new Error("Не удалось загрузить реестр");
         return r.json();
       })
-      .then((d: StationData | null) => { if (d) { setData(d); setErr(""); setNeedLogin(false); } })
+      .then((d: StationData | null) => { if (d) { setData(d); dataRef.current = d; setErr(""); setNeedLogin(false); } })
       .catch((e) => setErr(e.message));
     fetch(`${API_BASE}/api/queue/station/${agentId}/orders`, { headers: authH() })
-      .then((r) => (r.ok ? r.json() : [])).then((d: ORow[]) => setOrders(d)).catch(() => {});
+      .then((r) => (r.ok ? r.json() : [])).then((d: ORow[]) => {
+        setOrders(d);
+        const first = seenOrders.current === null;
+        if (first) seenOrders.current = new Set();
+        const fresh = d.filter((o) => !seenOrders.current!.has(o.code));
+        fresh.forEach((o) => seenOrders.current!.add(o.code));
+        if (!first && voiceOnRef.current) fresh.forEach((o) => announce(o));
+      }).catch(() => {});
   }, [agentId]);
 
   useEffect(() => {
@@ -120,12 +133,32 @@ export default function OperatorPage() {
     finally { setBusy(""); }
   };
 
-  const orderAct = async (code: string, action: "ready" | "done") => {
+  const say = (text: string) => {
+    sayQueue.current = sayQueue.current.then(async () => {
+      try {
+        const st = dataRef.current?.station;
+        const r = await fetch(`${API_BASE}/api/tts`, { method: "POST", headers: authH(), body: JSON.stringify({ text, voice: st?.voice || "alena", agent_id: st?.agent_id }) });
+        if (!r.ok) return;
+        const url = URL.createObjectURL(await r.blob());
+        await new Promise<void>((res) => { const a = new Audio(url); a.onended = () => res(); a.onerror = () => res(); a.play().catch(() => res()); });
+      } catch { /* noop */ }
+    });
+  };
+  const announce = (o: ORow) => {
+    const what = o.items.map((i) => `${i.name}${i.qty > 1 ? ` — ${i.qty} шт.` : ""}`).join(", ");
+    say(`Новый заказ${o.ready_hhmm ? ` к ${o.ready_hhmm}` : ""}: ${what}. Для ${o.client_name || "гостя"}.${o.paid ? " Уже оплачен." : ""}`);
+  };
+  const toggleVoice = () => {
+    const v = !voiceOn; setVoiceOn(v); voiceOnRef.current = v;
+    if (v) say("Голос заказов включён. Буду объявлять новые заказы.");
+  };
+
+  const orderAct = async (code: string, action: "ready" | "done" | "paid") => {
     setBusy(code + action);
     try {
       const r = await fetch(`${API_BASE}/api/queue/order/${code}/${action}`, { method: "POST", headers: authH() });
       if (!r.ok) { const d = await r.json().catch(() => ({})); setErr(d.detail || "Не удалось отметить."); }
-      else { const d = await r.json(); if (checkedOrder?.code === code) setCheckedOrder({ ...checkedOrder, ...d, verdict: { ok: true, text: action === "ready" ? "Отмечен «готов»" : "Выдан — заказ закрыт" } }); }
+      else { const d = await r.json(); if (checkedOrder?.code === code) setCheckedOrder({ ...checkedOrder, ...d, verdict: { ok: true, text: action === "ready" ? "Отмечен «готов»" : action === "paid" ? "Оплата отмечена" : "Выдан — заказ закрыт" } }); }
       load();
     } catch { setErr("Ошибка сети."); }
     finally { setBusy(""); }
@@ -140,9 +173,13 @@ export default function OperatorPage() {
         {o.ready_hhmm && <span className="text-[13px] font-semibold" style={{ color: C.gold }}>к {o.ready_hhmm}</span>}
       </div>
       <div className="text-[13px]" style={{ color: C.text }}>{o.items.map((i) => `${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}`).join(", ")}</div>
-      <div className="text-[11px]" style={{ color: C.muted }}>{o.code} · {o.status_ru}{o.total ? ` · еда/услуги ${o.total} ₽ на кассе` : ""}{o.queue_code ? ` · талон ${o.queue_code}` : ""}</div>
+      <div className="text-[11px]" style={{ color: C.muted }}>{o.code} · {o.status_ru}{o.total ? (isCafe ? ` · ${o.total} ₽` : ` · еда/услуги ${o.total} ₽ на кассе`) : ""}{o.queue_code ? ` · талон ${o.queue_code}` : ""}</div>
+      {o.total > 0 && isCafe && (
+        <div className="text-[12px] font-semibold" style={{ color: o.paid ? C.green : C.gold }}>{o.paid ? "✓ Оплачен" : (data?.station.pay_qr ? "Ждёт оплаты по QR" : "Оплата на месте")}</div>
+      )}
       {(o.status === "new" || o.status === "ready") && (
         <div className="flex gap-2">
+          {isCafe && !o.paid && o.total > 0 && <button onClick={() => orderAct(o.code, "paid")} disabled={!!busy} className="flex-1 py-2 rounded-lg text-[13px] font-semibold" style={{ background: "rgba(255,255,255,0.1)", color: C.text, border: `1px solid ${C.line}` }}>Оплачено</button>}
           {o.status === "new" && <button onClick={() => orderAct(o.code, "ready")} disabled={!!busy} className="flex-1 py-2 rounded-lg text-[13px] font-semibold" style={{ background: "#d9a534", color: "#161311" }}>Готов</button>}
           <button onClick={() => orderAct(o.code, "done")} disabled={!!busy} className="flex-1 py-2 rounded-lg text-[13px] font-semibold" style={{ background: C.green, color: "#06130d" }}>Выдан</button>
         </div>
@@ -197,6 +234,8 @@ export default function OperatorPage() {
   };
 
   const box = { background: C.card, border: `1px solid ${C.line}` };
+  const isCafe = data?.station.industry === "coffee";
+  const showQueue = !!data && data.station.queue !== false && !isCafe;
   const input = "w-full rounded-lg px-3 py-2 text-sm outline-none";
   const inputStyle = { background: "rgba(255,255,255,0.06)", color: C.text, border: `1px solid ${C.line}` };
 
@@ -255,8 +294,15 @@ export default function OperatorPage() {
         </div>
         {err && <div className="p-3 rounded-xl text-sm" style={{ background: "rgba(224,85,85,0.12)", color: C.red }}>{err}</div>}
 
+        {data?.station.announce && (
+          <button onClick={toggleVoice} className="rounded-2xl p-4 flex items-center justify-between text-left" style={{ ...box, borderColor: voiceOn ? C.green : C.line }}>
+            <span className="text-sm font-semibold" style={{ color: C.text }}>{voiceOn ? "🔊 Объявляю заказы голосом" : "🔈 Включить голос заказов"}</span>
+            <span className="text-[11px]" style={{ color: C.muted }}>{voiceOn ? "нажмите, чтобы выключить" : "джинн будет называть каждый новый заказ"}</span>
+          </button>
+        )}
+
         {/* Проверка талона */}
-        <div className="rounded-2xl p-4 flex flex-col gap-3" style={box}>
+        <div className="rounded-2xl p-4 flex flex-col gap-3" style={{ ...box, display: showQueue ? undefined : "none" }}>
           <div className="text-sm font-semibold" style={{ color: C.text }}>Проверить талон</div>
           {scanning ? (
             <div className="flex flex-col gap-2">
@@ -283,7 +329,7 @@ export default function OperatorPage() {
         </div>
 
         {/* Остатки */}
-        <div className="rounded-2xl p-4 flex flex-col gap-2" style={box}>
+        <div className="rounded-2xl p-4 flex flex-col gap-2" style={{ ...box, display: showQueue ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold" style={{ color: C.text }}>Остатки и запись</div>
             {!stockEdit && <button className="text-[12px]" style={{ color: C.gold }} onClick={() => {
@@ -335,13 +381,13 @@ export default function OperatorPage() {
         {/* Заказы к приезду */}
         {orders.length > 0 && (
           <div className="flex flex-col gap-2">
-            <div className="text-sm font-semibold" style={{ color: C.text }}>Предзаказы к приезду · {orders.length}</div>
+            <div className="text-sm font-semibold" style={{ color: C.text }}>{isCafe ? "Заказы к времени" : "Предзаказы к приезду"} · {orders.length}</div>
             {orders.map((o) => <div key={o.code}>{orderCard(o)}</div>)}
           </div>
         )}
 
         {/* Список */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" style={{ display: showQueue ? undefined : "none" }}>
           <div className="text-sm font-semibold" style={{ color: C.text }}>Список очереди</div>
           {q.length === 0 ? (
             <div className="text-center py-10" style={{ color: C.muted }}><div className="text-3xl mb-2">🅿️</div>Очередь пуста</div>

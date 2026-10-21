@@ -201,8 +201,8 @@ TOOL_REGISTRY = {
         "category": "write", "risk": "low", "label": "АЗС: предзаказ к приезду (топливо + еда + услуги)",
         "schema": {"type": "function", "function": {
             "name": "station_order",
-            "description": "ПРЕДЗАКАЗ К ПРИЕЗДУ одним заказом: топливо (вид и литры), еда/напитки из меню и услуги из прайса "
-                           "станции — команда АЗС подготовится заранее. Нужны имя, гос-номер и время приезда. Оплата на кассе.",
+            "description": "ЗАКАЗ К ВРЕМЕНИ / ПРЕДЗАКАЗ К ПРИЕЗДУ одним заказом из меню и прайса (на АЗС — ещё топливо): "
+                           "персонал подготовится заранее. Нужны имя и время; на АЗС — ещё гос-номер.",
             "parameters": {"type": "object", "properties": {
                 "client_name": {"type": "string"},
                 "car_plate": {"type": "string"},
@@ -211,7 +211,7 @@ TOOL_REGISTRY = {
                 "liters": {"type": "number"},
                 "items": {"type": "array", "description": "позиции из меню и прайса услуг", "items": {"type": "object", "properties": {
                     "name": {"type": "string"}, "qty": {"type": "integer"}}, "required": ["name"]}}},
-                "required": ["client_name", "car_plate"]}}},
+                "required": ["client_name"]}}},
     },
     "update_fuel_stock": {
         "category": "write", "risk": "med", "label": "АЗС: обновить остаток (только оператор)",
@@ -605,8 +605,9 @@ async def _station_order_exec(agent, user_id, args: dict) -> str:
     name = (args.get("client_name") or "").strip()[:80]
     if not name:
         return "Как вас зовут? Имя будет в заказе."
+    is_azs = getattr(agent, "industry", None) == "azs"
     plate = _re.sub(r"[^A-ZА-Я0-9]", "", (args.get("car_plate") or "").upper())
-    if len(plate) < 4:
+    if is_azs and len(plate) < 4:
         return "Назовите гос-номер машины — команда станции узнает вас по нему."
     fuel, lit = "", 0
     if args.get("fuel_type") and "queue" not in mods:
@@ -644,29 +645,38 @@ async def _station_order_exec(agent, user_id, args: dict) -> str:
     what = ", ".join(([f"{fuel} {lit} л" if lit else fuel] if fuel else [])
                      + [f"{p['name']}" + (f" ×{p['qty']}" if p["qty"] > 1 else "") for p in picked])
     t = _fs.hhmm(ready)
-    cap = (f"Предзаказ принят · {name} · {plate} · к {t}: {what}. "
-           f"{('Еда и услуги — ' + str(total) + ' ₽, ') if total else ''}оплата на кассе. Станция ждёт вас — просто назовите имя или номер машины.")
+    pay = cat.get("pay") or {}
+    pay_qr = (not is_azs) and "pay_qr" in mods and total > 0 and bool(pay.get("acc"))
+    if is_azs:
+        cap = (f"Предзаказ принят · {name} · {plate} · к {t}: {what}. "
+               f"{('Еда и услуги — ' + str(total) + ' ₽, ') if total else ''}оплата на кассе. Станция ждёт вас — просто назовите имя или номер машины.")
+    else:
+        cap = (f"Заказ {code} · {name} · к {t}: {what}. Итого {total} ₽. "
+               + ("Оплатить можно сразу по QR — сумма и номер заказа уже внутри, деньги идут напрямую кофейне. "
+                  if pay_qr else "Оплата на месте. ")
+               + "Приходите и назовите имя — заказ будет готов.")
     try:
         if user_id:
             from app.models.message import Message as _Msg
             from app.websocket.manager import manager as _mgr
             room = f"agent-{agent.id}-u{user_id}"
-            qr = None  # обычный режим — без QR: станция узнаёт клиента по имени и гос-номеру
+            qr = f"https://jinntell.ru/api/queue/order/{code}/pay.svg" if pay_qr else None  # платёжный QR (ГОСТ Р 56042)
             async with _as() as s2:
                 m = _Msg(room=room, sender_type="agent", sender_agent_id=agent.id, sender_name=getattr(agent, "name", "Джинн"),
-                         text=cap)
+                         text=cap, media_url=qr, media_type=("image" if qr else None))
                 s2.add(m); await s2.commit(); await s2.refresh(m)
             await _mgr.broadcast(room, {"type": "message", "id": m.id, "room": room, "sender_type": "agent",
                                         "sender_agent_id": agent.id, "sender_name": getattr(agent, "name", "Джинн"), "text": cap,
+                                        "media_url": qr, "media_type": ("image" if qr else None),
                                         "created_at": m.created_at.isoformat(),
                                         "agent_color": getattr(agent, "color", None)})
     except Exception as _ex:  # noqa: BLE001
         print(f"[station_order] media err: {_ex}")
     miss = (" Не нашёл в меню/прайсе: " + ", ".join(map(str, missing)) + ".") if missing else ""
-    await _fs.day_add(user_id, ready, f"☕ Предзаказ: {getattr(agent, 'name', 'АЗС')} — {what}"[:300],
-                      f"Код {code}, {plate}. К {t}, оплата на кассе.")
+    await _fs.day_add(user_id, ready, f"☕ {'Предзаказ' if is_azs else 'Заказ'}: {getattr(agent, 'name', 'АЗС')} — {what}"[:300],
+                      f"Код {code}{(', ' + plate) if plate else ''}. К {t}" + (", оплата по QR." if pay_qr else ", оплата на месте."))
     if not qcode:
-        miss += " Ваш помощник напомнит за 15 минут, что пора выезжать." + (await _guest_tip(user_id))
+        miss += (" Ваш помощник напомнит за 15 минут, что пора выезжать." if is_azs else " Ваш помощник напомнит за 15 минут.") + (await _guest_tip(user_id))
     return f"Готово: {cap}{' Будет готово к вашему времени в очереди.' if qcode else ''}{miss}"
 
 
