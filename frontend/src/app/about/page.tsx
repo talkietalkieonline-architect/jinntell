@@ -164,6 +164,14 @@ export default function AboutPage() {
           </div>
           <div className="ab-kp" style={{ marginTop: 14 }}>
             <div>
+              <div className="ab-eyebrow">Кофейни</div>
+              <h3>Кофе ждёт гостя, а не гость — кофе</h3>
+              <p>Заказ к времени голосом, оплата по QR напрямую кофейне, джинн объявляет заказ бариста и зовёт прохожих рядом.</p>
+            </div>
+            <a className="ab-btn ab-btn-gold" href="/about/kp/cafe">Открыть КП</a>
+          </div>
+          <div className="ab-kp" style={{ marginTop: 14 }}>
+            <div>
               <div className="ab-eyebrow">Для жителей</div>
               <h3>Свой персонаж в Городе JinnTell</h3>
               <p>Создай или возьми готового, заселяй в Город, развивай, следи за его жизнью, помогай.</p>
