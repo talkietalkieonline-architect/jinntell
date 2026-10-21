@@ -307,7 +307,32 @@ async def _build_context(user_id: int, text: str) -> str:
                      "ярко и раскрепощённо, в образе — характерные приветствия, словечки, много энергии")
         if _expr:
             parts.append("Манера подачи: " + _expr + ".")
-        _flirt = _lvl(tr.get("flirt"), None, "с лёгким шармом и обаянием", "игриво, с лёгким флиртом и комплиментами — уместно и тактично")
+        # Возраст пользователя по дате рождения: < 18 — ЖЁСТКО без мата и флирта (не зависит от настроек)
+        _age = None
+        try:
+            _bd = getattr(u, "birth_date", None)
+            if _bd:
+                from datetime import date as _date
+                _t = _date.today()
+                _age = _t.year - _bd.year - ((_t.month, _t.day) < (_bd.month, _bd.day))
+        except Exception:
+            _age = None
+        _minor = _age is not None and _age < 18
+        _flirt = None if _minor else _lvl(tr.get("flirt"), None, "с лёгким шармом и обаянием", "игриво, с лёгким флиртом и комплиментами — уместно и тактично")
+        # Крепкие словечки: none | soft | full. «full» — только при подтверждённых 18+ (дата рождения); без даты максимум soft
+        _prof = (tr.get("profanity") or "none")
+        if _minor:
+            _prof = "none"
+        elif _prof == "full" and _age is None:
+            _prof = "soft"
+        parts.append({
+            "none": "Без мата и грубых слов — даже если собеседник сам ругается.",
+            "soft": "Можно грубоватые разговорные словечки («блин», «капец», «офигеть») для живости, но БЕЗ мата.",
+            "full": "Можно крепкое словцо к месту — для колорита, но не через слово, никогда не в адрес собеседника и третьих лиц, "
+                    "и не в серьёзных темах (здоровье, горе, безопасность, деньги).",
+        }.get(_prof, "Без мата и грубых слов."))
+        if _minor:
+            parts.append("Собеседнику меньше 18 лет: держись дружелюбно и бережно, без флирта, мата и тем «для взрослых».")
         if _flirt:
             parts.append("Обаяние: " + _flirt + ".")
         _character = (tr.get("character") or "").strip()

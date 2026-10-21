@@ -151,6 +151,7 @@ export default function SettingsModal({
   const [trFormal, setTrFormal] = useState(40);
   const [trExpr, setTrExpr] = useState(30);        // раскрепощённость (насколько «в образе»)
   const [trFlirt, setTrFlirt] = useState(0);       // флирт / обаяние
+  const [trProf, setTrProf] = useState<"none" | "soft" | "full">("none"); // крепкие словечки (18+ — только при дате рождения)
   const [trEmotion, setTrEmotion] = useState(50);  // эмоциональность
   const [trCharacter, setTrCharacter] = useState(""); // образ помощника (напр. «Санта», «пират»)
   const [trInit, setTrInit] = useState("reactive");
@@ -222,7 +223,7 @@ const _av = user.assistant_voice || "ermil";
       setAssistantVoice(_av);
       if (typeof window !== "undefined") localStorage.setItem("jinntell_assistant_voice", _av);
       setAssistantAge(user.assistant_age != null ? String(user.assistant_age) : "");
-      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); if (_t.humor_level != null) setTrHumorLvl(_t.humor_level); if (_t.warmth != null) setTrWarmth(_t.warmth); if (_t.directness != null) setTrDirect(_t.directness); if (_t.formality != null) setTrFormal(_t.formality); if (_t.expressiveness != null) setTrExpr(_t.expressiveness); if (_t.flirt != null) setTrFlirt(_t.flirt); if (_t.emotionality != null) setTrEmotion(_t.emotionality); setTrCharacter(_t.character || ""); } catch { /* noop */ } setTrInit(user.assistant_initiative || "reactive");
+      try { const _t = user.assistant_traits ? JSON.parse(user.assistant_traits) : {}; setTrTone(_t.tone || ""); setTrLength(_t.length || ""); setTrHumor(!!_t.humor); setTrEmoji(_t.emoji !== false); if (_t.humor_level != null) setTrHumorLvl(_t.humor_level); if (_t.warmth != null) setTrWarmth(_t.warmth); if (_t.directness != null) setTrDirect(_t.directness); if (_t.formality != null) setTrFormal(_t.formality); if (_t.expressiveness != null) setTrExpr(_t.expressiveness); if (_t.flirt != null) setTrFlirt(_t.flirt); if (_t.emotionality != null) setTrEmotion(_t.emotionality); setTrCharacter(_t.character || ""); setTrProf(_t.profanity === "soft" || _t.profanity === "full" ? _t.profanity : "none"); } catch { /* noop */ } setTrInit(user.assistant_initiative || "reactive");
       setCustomBg(user.custom_bg_url || "");
       setAvatarFrame(user.avatar_frame || "");
     }
@@ -325,7 +326,7 @@ const _av = user.assistant_voice || "ermil";
         assistant_name: assistantName || "Джим",
         assistant_gender: assistantGender,
         assistant_voice: assistantVoice,
-        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji, humor_level: trHumorLvl, warmth: trWarmth, directness: trDirect, formality: trFormal, expressiveness: trExpr, flirt: trFlirt, emotionality: trEmotion, character: trCharacter.trim() || undefined }),
+        assistant_traits: JSON.stringify({ tone: trTone || undefined, length: trLength || undefined, humor: trHumor, emoji: trEmoji, humor_level: trHumorLvl, warmth: trWarmth, directness: trDirect, formality: trFormal, expressiveness: trExpr, flirt: trFlirt, emotionality: trEmotion, character: trCharacter.trim() || undefined, profanity: trProf }),
         assistant_initiative: trInit || undefined,
         assistant_age: assistantAge ? parseInt(assistantAge) : undefined,
       } as Partial<UserProfile>);
@@ -791,6 +792,34 @@ const _av = user.assistant_voice || "ermil";
                     <input type="range" min="0" max="100" value={sl.v} onChange={(e) => sl.set(Number(e.target.value))} className="w-full" style={{ accentColor: "var(--accent)" }} />
                   </div>
                 ))}
+                {(() => {
+                  // Возраст по дате рождения: < 18 — только «нет»; «как есть» — только при подтверждённых 18+
+                  let age: number | null = null;
+                  if (birthDate) { const b = new Date(birthDate); const t = new Date(); age = t.getFullYear() - b.getFullYear() - ((t.getMonth() < b.getMonth() || (t.getMonth() === b.getMonth() && t.getDate() < b.getDate())) ? 1 : 0); }
+                  const minor = age !== null && age < 18;
+                  const opts: { id: "none" | "soft" | "full"; label: string; off: boolean }[] = [
+                    { id: "none", label: "Нет", off: false },
+                    { id: "soft", label: "Смягчённо", off: minor },
+                    { id: "full", label: "Как есть", off: minor || age === null },
+                  ];
+                  return (
+                    <div className="mt-2 mb-1">
+                      <label className="text-[11px] mb-1 block" style={{ color: "var(--text-muted)" }}>Крепкие словечки</label>
+                      <div className="flex gap-1.5">
+                        {opts.map((o) => (
+                          <button key={o.id} type="button" disabled={o.off} onClick={() => setTrProf(o.id)}
+                            className="flex-1 py-1.5 rounded-lg text-[12px] font-medium transition-all disabled:opacity-35"
+                            style={{ background: trProf === o.id ? "var(--accent)" : "var(--bg-glass)", color: trProf === o.id ? "var(--bg-deep)" : "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+                        {minor ? "До 18 лет помощник общается без мата и флирта." : age === null ? "«Как есть» — только 18+: укажите дату рождения в профиле." : "Помощник не ругается в ваш адрес и в серьёзных темах."}
+                      </p>
+                    </div>
+                  );
+                })()}
                 <div className="mt-2">
                   <label className="text-[11px] mb-0.5 block" style={{ color: "var(--text-muted)" }}>Образ (необязательно) — кем «прикидывается» помощник</label>
                   <input
