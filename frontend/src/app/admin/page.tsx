@@ -116,7 +116,9 @@ const AGENT_TYPES = [
   { id: "business", label: "Бизнес" },
   { id: "citizen", label: "Жители" },
   { id: "specialist", label: "Специалисты" },
+  { id: "service", label: "Сервисные" },  // от проекта для всех (Поисковый, Вордстат, Гит, Новости, Погода) — по отделу, не по типу
 ];
+const TYPE_RU: Record<string, string> = { core: "core", system: "системный", business: "бизнес", citizen: "житель", specialist: "специалист", personal: "персонаж", service: "сервисный" };
 
 const PRESET_COLORS = [
   "#FFD700", "#4CAF50", "#E91E63", "#2196F3", "#FF9800",
@@ -364,7 +366,7 @@ export default function AdminPage() {
     try {
       const data = await adminGetAgents({
         search: agentSearch,
-        agent_type: agentTypeFilter,
+        agent_type: agentTypeFilter === "service" ? "" : agentTypeFilter,
         include_inactive: showInactive,
       });
       setAgents(data);
@@ -785,7 +787,7 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {agents.filter((a) => a.agent_type !== "core" && a.visibility !== "core").map((agent) => (
+                    {agents.filter((a) => a.agent_type !== "core" && a.visibility !== "core" && (agentTypeFilter !== "service" || a.department === "service")).map((agent) => (
                       <tr
                         key={agent.id}
                         onClick={() => setSelectedAgent(agent)}
@@ -804,13 +806,14 @@ export default function AdminPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            agent.department === "service" ? "bg-amber-900/50 text-amber-300" :
                             agent.agent_type === "core" ? "bg-red-900/50 text-red-300" :
                             agent.agent_type === "system" ? "bg-purple-900/50 text-purple-300" :
                             agent.agent_type === "business" ? "bg-blue-900/50 text-blue-300" :
                             agent.agent_type === "specialist" ? "bg-cyan-900/50 text-cyan-300" :
                             "bg-green-900/50 text-green-300"
                           }`}>
-                            {agent.agent_type}
+                            {agent.department === "service" ? "сервисный" : (TYPE_RU[agent.agent_type] || agent.agent_type)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-400">{agent.profession}</td>

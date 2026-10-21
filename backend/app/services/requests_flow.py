@@ -2,7 +2,7 @@
 доставка ответа юзеру. НО если нужен Строитель (дописать код/включить инструмент) — авто НЕ решает,
 ждёт админа/владельца. См. design_assistant_escalation_architect, vision_architect_rag_ai_first."""
 
-INTERNAL_AGENT = {"super_assistant": 48, "architect": 47, "admin": 2, "content": 3, "marketing": 37, "hardware": 4, "other": 47}
+INTERNAL_AGENT = {"super_assistant": 48, "architect": 47, "admin": 2, "content": 3, "marketing": 37, "hardware": 4, "treasurer": 66, "other": 47}
 AUTO_TARGETS = {"super_assistant", "architect"}          # кому доверяем авто-обработку
 NEEDS_BUILDER_CATS = {"нужен код", "нет инструмента"}     # требует Строителя → обязателен человек
 _CATS = ["нет инструмента", "нет знаний", "вне зоны", "нужен код", "how-to", "прочее"]
