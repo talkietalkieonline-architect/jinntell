@@ -55,8 +55,8 @@ async def geo_check(
         try:
             if _haversine_m(float(lat), float(lng), gt.lat, gt.lng) > gt.radius_m:
                 continue
-            # Акции/купоны выключены у пользователя — не показываем промо
-            if not acts.get("allow_promo", True):
+            # Акции/купоны или «приглашения на улице» выключены у пользователя — не стучимся
+            if not acts.get("allow_promo", True) or not acts.get("street_invites", True):
                 continue
             # Кулдаун на пользователя
             hit = (await db.execute(select(GeoTriggerHit).where(
@@ -89,13 +89,7 @@ async def geo_check(
                 text = "У нас есть предложение для вас рядом!"
             if gt.promo_code:
                 text = f"{text}\nПромокод: {gt.promo_code} (назовите на месте)"
-            msg = Message(
-                room=room, sender_type="agent", sender_agent_id=agent.id,
-                sender_name=agent.name, text=text,
-                media_url=(gt.media_url if gt.media_url and len(gt.media_url) <= 500 else None),
-                media_type=("image" if gt.media_url else None),
-            )
-            db.add(msg)
+            # Стук = только уведомление; сама презентация звучит, когда человек откроет её в Потоке (/present)
             # Журнал контактов гео-промо (атрибуция трафика)
             db.add(GeoContact(trigger_id=gt.id, agent_id=agent.id, user_id=user.id,
                               promo_code=gt.promo_code, result="shown"))
@@ -142,3 +136,51 @@ async def my_invites(user: User = Depends(get_current_user), db: AsyncSession = 
         if len(items) >= 20:
             break
     return {"items": items}
+
+
+
+@router.post("/present")
+async def geo_present(body: dict = Body(...), user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Человек открыл «стук» зазывалы → джинн в Потоке проговаривает презентацию с обращением по имени.
+    Текст — из кабинета бизнеса (заголовок + текст-призыв + промокод). Сообщение уходит в комнату джинна (WS)."""
+    from datetime import datetime, timedelta, timezone
+    from app.models.geo_trigger import GeoContact, GeoTrigger
+    from fastapi import HTTPException
+    from app.models.agent import Agent
+    from app.models.message import Message
+    from app.websocket.manager import manager
+    try:
+        agent_id = int(body.get("agent_id") or 0)
+    except (TypeError, ValueError):
+        agent_id = 0
+    since = datetime.now(timezone.utc) - timedelta(hours=3)
+    c = (await db.execute(select(GeoContact).where(GeoContact.user_id == user.id, GeoContact.agent_id == agent_id)
+                          .order_by(GeoContact.id.desc()).limit(1))).scalar_one_or_none()
+    if not c or (c.created_at and c.created_at < since):
+        raise HTTPException(404, "Приглашение не найдено или устарело")
+    gt = await db.get(GeoTrigger, c.trigger_id)
+    agent = await db.get(Agent, agent_id)
+    if not gt or not agent:
+        raise HTTPException(404, "Приглашение не найдено")
+    nm = (user.first_name or user.display_name or "").strip()
+    if nm in ("Пользователь", "Гость"):
+        nm = ""
+    head = f"Привет, {nm}!" if nm else "Привет!"
+    title = (gt.title or "").strip().rstrip("!.")
+    body_txt = (gt.message or "").strip() or (getattr(agent, "promo_digest", None) or "").strip()
+    text = " ".join(x for x in [head, (title + "!") if title else "", body_txt] if x).strip()
+    if gt.promo_code:
+        text += f"\nПромокод: {gt.promo_code} — назовите на месте."
+    room = f"agent-{agent.id}-u{user.id}"
+    msg = Message(room=room, sender_type="agent", sender_agent_id=agent.id, sender_name=agent.name, text=text,
+                  media_url=(gt.media_url if gt.media_url and len(gt.media_url) <= 500 else None),
+                  media_type=("image" if gt.media_url else None))
+    db.add(msg)
+    c.result = "opened"
+    await db.commit()
+    await db.refresh(msg)
+    await manager.broadcast(room, {"type": "message", "id": msg.id, "room": room, "sender_type": "agent",
+                                   "sender_agent_id": agent.id, "sender_name": agent.name, "text": text,
+                                   "media_url": msg.media_url, "media_type": msg.media_type,
+                                   "created_at": msg.created_at.isoformat(), "agent_color": agent.color})
+    return {"ok": True, "room": room}

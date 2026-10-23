@@ -24,6 +24,7 @@ DEFAULT_ACTION_SETTINGS = {
     "approaches": "all",       # all = принимать сразу | assistant = только через помощника | off = не беспокоить
     "allow_location": False,   # геотриггер (предложения рядом) — только с явного согласия
     "allow_promo": True,       # акции, купоны, флаеры
+    "street_invites": True,    # «Приглашения на улице» (зазывалы по гео); «не отвлекай» → False
 }
 
 
@@ -59,6 +60,8 @@ async def update_action_settings(
         cur["allow_location"] = bool(body["allow_location"])
     if "allow_promo" in body:
         cur["allow_promo"] = bool(body["allow_promo"])
+    if "street_invites" in body:
+        cur["street_invites"] = bool(body["street_invites"])
     user.action_settings = json.dumps(cur)
     db.add(user)
     await db.commit()

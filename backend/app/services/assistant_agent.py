@@ -77,6 +77,9 @@ TOOLS = [
         "name": "block_topic", "description": "Заблокировать тему — пользователь не хочет её видеть/получать предложения (напр. «не показывай корм для животных»).",
         "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
     {"type": "function", "function": {
+        "name": "street_invites", "description": "Включить или выключить «Приглашения на улице» — когда пользователь гуляет, джинны рядом (кафе, магазины) стучатся с приглашением. «Не хочу, чтобы меня отвлекали / не зови / хватит зазывать» → enabled=false; «снова показывай приглашения» → true.",
+        "parameters": {"type": "object", "properties": {"enabled": {"type": "boolean"}}, "required": ["enabled"]}}},
+    {"type": "function", "function": {
         "name": "unblock_topic", "description": "Разблокировать ранее заблокированную тему.",
         "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}}},
     {"type": "function", "function": {
@@ -526,6 +529,24 @@ async def _save_block(items: list, user_id: int) -> None:
         if u:
             u.assistant_blocklist = json.dumps(items, ensure_ascii=False)
             await db.commit()
+
+
+async def _set_street_invites(user_id: int, enabled: bool) -> str:
+    """Переключатель «Приглашения на улице» в настройках действий пользователя."""
+    import json
+    from app.core.database import async_session
+    from app.models.user import User
+    from app.api.users import _read_action_settings
+    async with async_session() as s:
+        u = await s.get(User, user_id)
+        if not u:
+            return "Не нашла профиль."
+        cur = _read_action_settings(u)
+        cur["street_invites"] = enabled
+        u.action_settings = json.dumps(cur)
+        await s.commit()
+    return ("Готово: снова буду показывать приглашения от заведений рядом." if enabled
+            else "Готово: заведения рядом больше не будут стучаться. Все прошлые приглашения остались в «Приглашениях»; включить можно в любой момент.")
 
 
 async def _block_topic(user_id: int, topic: str) -> str:
@@ -1418,6 +1439,8 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _confirm_interest(user_id, args.get("topic", ""))
             elif name == "block_topic":
                 result = await _block_topic(user_id, args.get("topic", ""))
+            elif name == "street_invites":
+                result = await _set_street_invites(user_id, bool(args.get("enabled")))
             elif name == "unblock_topic":
                 result = await _unblock_topic(user_id, args.get("topic", ""))
             elif name == "list_blocked":

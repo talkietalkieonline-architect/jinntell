@@ -14,7 +14,7 @@ import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
 import FeedModal from "@/components/communicator/FeedModal";
 import FlowFab from "@/components/communicator/FlowFab";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, markChatRead, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, geoCheck, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, markChatRead, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, updateActionSettings, geoCheck, geoPresent, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -905,10 +905,23 @@ export default function Home() {
           const d = (r.deliveries || []).find((x) => !x.quiet) || null;
           if (d) {
             setGeoKnock(d);
-            // Зазывала «зазывает» голосом (best-effort; браузер может блокировать автозвук)
+            // «Стук» = уведомление + короткий «тук-тук» (без речи); презентация звучит, когда человек откроет её в Потоке
             try {
-              const call = `${d.title || ""}. ${d.message || ""}`.trim();
-              if (call) { const u = await ttsBlobUrl(call, d.voice || "zahar", "good"); if (u) { const a = new Audio(u); a.play().catch(() => {}); } }
+              const Ctx = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+                || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+              if (Ctx) {
+                const ac = new Ctx();
+                [0, 0.22].forEach((t0) => {
+                  const o = ac.createOscillator(); const g = ac.createGain();
+                  o.type = "sine"; o.frequency.value = 180;
+                  g.gain.setValueAtTime(0.0001, ac.currentTime + t0);
+                  g.gain.exponentialRampToValueAtTime(0.5, ac.currentTime + t0 + 0.01);
+                  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t0 + 0.14);
+                  o.connect(g).connect(ac.destination); o.start(ac.currentTime + t0); o.stop(ac.currentTime + t0 + 0.16);
+                });
+                setTimeout(() => ac.close().catch(() => {}), 800);
+              }
+              if ("vibrate" in navigator) navigator.vibrate([60, 120, 60]);
             } catch { /* noop */ }
           }
         } catch { /* noop */ } finally { busy = false; }
@@ -1025,7 +1038,13 @@ export default function Home() {
 
       {geoKnock && (
         <div
-          onClick={() => { openAgentChat(geoKnock.agent_id, { name: geoKnock.agent_name, color: geoKnock.color }); setGeoKnock(null); }}
+          onClick={() => {
+            const k = geoKnock;
+            openAgentChat(k.agent_id, { name: k.agent_name, color: k.color }, { flow: true });   // джинн «входит» в Поток
+            setGeoKnock(null);
+            // после того как Поток откроет комнату (история не озвучивается первые 3 с), джинн начинает презентацию
+            setTimeout(() => { geoPresent(k.agent_id).catch(() => {}); }, 3300);
+          }}
           className="fixed left-1/2 -translate-x-1/2 p-3 rounded-2xl text-sm animate-fade-in cursor-pointer flex flex-col gap-2"
           style={{ bottom: 96, zIndex: 80, background: "var(--panel-bg)", border: "1px solid var(--accent)", boxShadow: "0 6px 24px rgba(0,0,0,0.35)", maxWidth: "min(90%, 320px)" }}
         >
@@ -1033,9 +1052,14 @@ export default function Home() {
             <img src={geoKnock.media_url.startsWith("data:") || geoKnock.media_url.startsWith("blob:") ? geoKnock.media_url : mediaUrl(geoKnock.media_url)} alt="" className="rounded-xl w-full" style={{ maxHeight: 140, objectFit: "cover" }} />
           )}
           <div className="flex items-center gap-2">
-            <span style={{ fontSize: 18 }}>🔔</span>
-            <span style={{ color: "var(--text-primary)" }}><b>{geoKnock.agent_name}</b> рядом: {geoKnock.title || geoKnock.message}</span>
-            <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); }} className="ml-auto text-[12px]" style={{ color: "var(--text-muted)" }}>✕</button>
+            <span style={{ fontSize: 18 }}>🚪</span>
+            <span style={{ color: "var(--text-primary)" }}><b>{geoKnock.agent_name}</b> стучится: {geoKnock.title || geoKnock.message}</span>
+            <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); }} aria-label="Закрыть" className="ml-auto text-[12px]" style={{ color: "var(--text-muted)" }}>✕</button>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
+            <span>Нажмите — он расскажет сам</span>
+            <button onClick={(e) => { e.stopPropagation(); setGeoKnock(null); updateActionSettings({ street_invites: false }).catch(() => {}); pushAssistant("Хорошо, заведения рядом больше не будут стучаться. Включить снова — просто скажи мне."); }}
+              className="underline" style={{ color: "var(--text-muted)" }}>Больше не звать</button>
           </div>
         </div>
       )}

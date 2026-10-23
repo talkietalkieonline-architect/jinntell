@@ -166,6 +166,7 @@ export default function SettingsModal({
   const [actApproaches, setActApproaches] = useState("all");
   const [actLocation, setActLocation] = useState(false);
   const [actPromo, setActPromo] = useState(true);
+  const [actStreet, setActStreet] = useState(true);
   const [textScale, setTextScale] = useState(
     typeof window !== "undefined" ? localStorage.getItem("jinntell_text_scale") || "1" : "1"
   );
@@ -186,7 +187,7 @@ export default function SettingsModal({
   useEffect(() => {
     if (!isOpen) return;
     getMyJinn().then((a) => { if (a) { setMyJinn(a); setJName(a.name); setJDesc(a.description || ""); setJGreet(a.greeting || ""); } }).catch(() => {});
-    getActionSettings().then((s) => { setActApproaches(s.approaches); setActLocation(s.allow_location); setActPromo(s.allow_promo); }).catch(() => {});
+    getActionSettings().then((s) => { setActApproaches(s.approaches); setActLocation(s.allow_location); setActPromo(s.allow_promo); setActStreet(s.street_invites !== false); }).catch(() => {});
   }, [isOpen]);
   const createJinn = async () => {
     setJinnSaving(true);
@@ -934,6 +935,15 @@ const _av = user.assistant_voice || "ermil";
                   <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Гео — джинны рядом (кафе, магазины) предложат акции.</span>
                 </span>
                 <Toggle on={actLocation} onToggle={() => { const on = !actLocation; setActLocation(on); updateActionSettings({ allow_location: on }).catch(() => {}); }} />
+              </label>
+              <div style={{ borderTop: "1px solid var(--bg-glass-border)" }} />
+              <label className="flex items-center gap-3 py-2 cursor-pointer">
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: "var(--bg-glass)" }}>🚪</span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-sm font-medium block" style={{ color: "var(--text-primary)" }}>Приглашения на улице</span>
+                  <span className="text-[10px] block" style={{ color: "var(--text-muted)" }}>Когда гуляете, заведения рядом стучатся и зовут в гости. Все приглашения — в подборке «Приглашения».</span>
+                </span>
+                <Toggle on={actStreet} onToggle={() => { const on = !actStreet; setActStreet(on); updateActionSettings({ street_invites: on }).catch(() => {}); }} />
               </label>
               <div style={{ borderTop: "1px solid var(--bg-glass-border)" }} />
               <label className="flex items-center gap-3 py-2 cursor-pointer">

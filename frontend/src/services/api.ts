@@ -766,7 +766,7 @@ export function adminWaitlistSettings(mode: string, limit: number): Promise<{ ok
   return apiFetch(`/api/admin/waitlist-settings?mode=${encodeURIComponent(mode)}&limit=${limit}`, { method: "POST" });
 }
 
-export interface ActionSettings { approaches: "all" | "assistant" | "off"; allow_location: boolean; allow_promo: boolean; }
+export interface ActionSettings { approaches: "all" | "assistant" | "off"; allow_location: boolean; allow_promo: boolean; street_invites?: boolean; }
 export function getActionSettings(): Promise<ActionSettings> {
   return apiFetch("/api/users/action-settings");
 }
@@ -775,6 +775,10 @@ export function updateActionSettings(data: Partial<ActionSettings>): Promise<Act
 }
 
 export interface GeoDelivery { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; room: string; quiet: boolean; voice?: string | null; }
+/** Человек открыл «стук» → джинн проговаривает презентацию в Потоке (с обращением по имени). */
+export function geoPresent(agentId: number): Promise<{ ok: boolean; room: string }> {
+  return apiFetch("/api/geo/present", { method: "POST", body: JSON.stringify({ agent_id: agentId }) });
+}
 export function geoCheck(lat: number, lng: number): Promise<{ deliveries: GeoDelivery[] }> {
   return apiFetch("/api/geo/check", { method: "POST", body: JSON.stringify({ lat, lng }) });
 }
