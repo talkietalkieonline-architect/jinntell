@@ -26,6 +26,7 @@ class GeoTrigger(Base):
     cooldown_hours: Mapped[int] = mapped_column(Integer, default=24)     # не чаще раза в N часов на юзера
     price_kopecks: Mapped[int] = mapped_column(Integer, default=200)     # цена показа контрагенту (2 ₽)
     promo_code: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)  # код для атрибуции трафика («назови на кассе»)
+    promos_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # акции по расписанию (services/promos.py)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 

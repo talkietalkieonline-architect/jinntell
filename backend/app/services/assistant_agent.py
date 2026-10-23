@@ -228,6 +228,34 @@ async def _situation(user_id: int) -> list:
                                + ". Помни, что уже сделано — не предлагай повторно то же самое.")
     except Exception:
         pass
+    # Приглашения от заведений (зазывала на улице или QR «Послушать акцию») за 7 дней — чтобы напомнить к месту
+    try:
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        from app.models.geo_trigger import GeoContact, GeoTrigger
+        from app.services import promos as _pr
+        async with async_session() as db:
+            rows = (await db.execute(select(GeoContact).where(
+                GeoContact.user_id == user_id, GeoContact.created_at >= _dt.now(_tz.utc) - _td(days=7))
+                .order_by(GeoContact.id.desc()).limit(10))).scalars().all()
+            seen, items = set(), []
+            for c in rows:
+                if c.agent_id in seen:
+                    continue
+                seen.add(c.agent_id)
+                ag = await db.get(Agent, c.agent_id)
+                gt = await db.get(GeoTrigger, c.trigger_id)
+                if not ag or not gt:
+                    continue
+                pr = _pr.current(gt)
+                how = {"opened": "слушал", "qr": "по QR у входа", "shown": "стучались"}.get(c.result or "", "")
+                items.append(f"«{ag.name}» ({c.created_at.astimezone(_pr.TZ).strftime('%d.%m')}, {how})"
+                             + (f" — сейчас акция «{pr['title']}»" if pr and pr.get("title") else ""))
+            if items:
+                out.append("Недавние приглашения от заведений: " + "; ".join(items[:5])
+                           + ". Если к месту (человек хочет есть/кофе, гуляет рядом, спрашивает куда сходить) — мягко напомни "
+                             "про приглашение одной фразой и предложи позвать джинна заведения; не навязывай и не повторяй каждый раз.")
+    except Exception:
+        pass
     return out
 
 

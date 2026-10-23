@@ -137,6 +137,8 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [geoMsg, setGeoMsg] = useState(""); const [geoMedia, setGeoMedia] = useState("");
   const [geoActive, setGeoActive] = useState(true); const [geoCooldown, setGeoCooldown] = useState("24");
   const [geoPromo, setGeoPromo] = useState("");
+  const [zazPromos, setZazPromos] = useState<{ title: string; text: string; from: string; to: string; active: boolean }[]>([]);
+  const [zazNow, setZazNow] = useState<string>("");
   const [geoStats, setGeoStats] = useState<GeoStats | null>(null);
   const [geoSaved, setGeoSaved] = useState(false);
 
@@ -417,14 +419,18 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
     if (activeSection === "geo" && selectedAgent) {
       contractorGeoStats(selectedAgent.id).then(setGeoStats).catch(() => setGeoStats(null));
       contractorGetGeoTrigger(selectedAgent.id).then((g) => {
-        if (g) { setGeoLat(String(g.lat)); setGeoLng(String(g.lng)); setGeoRadius(String(g.radius_m)); setGeoTitle(g.title || ""); setGeoMsg(g.message || ""); setGeoMedia(g.media_url || ""); setGeoActive(g.is_active); setGeoCooldown(String(g.cooldown_hours)); setGeoPromo(g.promo_code || ""); }
+        if (g) { setGeoLat(String(g.lat)); setGeoLng(String(g.lng)); setGeoRadius(String(g.radius_m)); setGeoTitle(g.title || ""); setGeoMsg(g.message || ""); setGeoMedia(g.media_url || ""); setGeoActive(g.is_active); setGeoCooldown(String(g.cooldown_hours)); setGeoPromo(g.promo_code || "");
+          setZazPromos(g.promos && g.promos.length ? g.promos : ((g.title || g.message) ? [{ title: g.title || "", text: g.message || "", from: "", to: "", active: true }] : []));
+          setZazNow(g.current ? (g.current.title || g.current.text || "") : ""); }
       }).catch(() => {});
     }
   }, [activeSection, selectedAgent]);
   const saveGeo = async () => {
     if (!selectedAgent) return;
     try {
-      await contractorPutGeoTrigger(selectedAgent.id, { lat: parseFloat(geoLat) || 0, lng: parseFloat(geoLng) || 0, radius_m: parseInt(geoRadius) || 80, title: geoTitle, message: geoMsg, media_url: geoMedia || null, is_active: geoActive, cooldown_hours: parseInt(geoCooldown) || 24, promo_code: geoPromo });
+      const first = zazPromos[0];
+      const saved = await contractorPutGeoTrigger(selectedAgent.id, { lat: parseFloat(geoLat) || 0, lng: parseFloat(geoLng) || 0, radius_m: parseInt(geoRadius) || 80, title: first?.title || geoTitle, message: first?.text || geoMsg, media_url: geoMedia || null, is_active: geoActive, cooldown_hours: parseInt(geoCooldown) || 24, promo_code: geoPromo, promos: zazPromos });
+      setZazNow(saved.current ? (saved.current.title || saved.current.text || "") : "");
       setGeoSaved(true); setTimeout(() => setGeoSaved(false), 1500);
     } catch { /* noop */ }
   };
@@ -647,7 +653,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "outfit" as const, label: "Одежда" },
                   { id: "faces" as const, label: "Образы" },
                   { id: "access" as const, label: "Доступ" },
-                  { id: "geo" as const, label: "Геотриггер" },
+                  { id: "geo" as const, label: "Зазывала" },
                 ]).map((tab) => (
                   <button
                     key={tab.id}
@@ -923,7 +929,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
 
               {activeSection === "geo" && (
                 <div className="flex flex-col gap-3 animate-fade-in">
-                  <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>Гео-реклама: когда пользователь рядом с точкой (и разрешил геолокацию), джинн «стучится» с вашим предложением. Платно — списывается за каждый показ.</p>
+                  <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>Зазывала озвучивает прохожим — пользователям JinnTell — акции, которые уже действуют в вашем заведении. Человек идёт мимо → ваш джинн «стучится» → человек открывает, и джинн голосом рассказывает текущую акцию; дальше гость может спросить что угодно и заказать заранее. Контакт остаётся у гостя в «Приглашениях» и в памяти его помощника. Платно — за каждый показ.</p>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Точка на карте — кликните или перетащите маркер</label>
                     <GeoMapPicker lat={parseFloat(geoLat) || 0} lng={parseFloat(geoLng) || 0} radius={parseInt(geoRadius) || 80} onChange={(la, ln) => { setGeoLat(la.toFixed(6)); setGeoLng(ln.toFixed(6)); }} />
@@ -950,8 +956,35 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                       <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>м</span>
                     </div>
                   </div>
-                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Заголовок призыва</label><input value={geoTitle} onChange={(e) => setGeoTitle(e.target.value)} placeholder="Вторая пицца в подарок!" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
-                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Текст-призыв</label><textarea value={geoMsg} onChange={(e) => setGeoMsg(e.target.value)} rows={2} placeholder="Заходи в Тесто до 20:00" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-baseline justify-between">
+                      <label className="text-[10px] uppercase tracking-wider block" style={{ color: "var(--text-muted)" }}>Акции</label>
+                      <span className="text-[11px]" style={{ color: zazNow ? "var(--accent)" : "var(--text-muted)" }}>{zazNow ? `Сейчас звучит: «${zazNow}»` : "Сейчас ни одна акция не действует — зазывала молчит"}</span>
+                    </div>
+                    {zazPromos.map((p, i) => {
+                      const upd = (patch: Partial<typeof p>) => setZazPromos(zazPromos.map((x, k) => (k === i ? { ...x, ...patch } : x)));
+                      const fieldS = { background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" };
+                      return (
+                        <div key={i} className="rounded-xl p-3 flex flex-col gap-2" style={{ background: "var(--bg-glass)", border: `1px solid ${p.active ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
+                          <div className="flex items-center gap-2">
+                            <input value={p.title} onChange={(e) => upd({ title: e.target.value })} placeholder="Название акции — напр. «Завтраки»" className="flex-1 min-w-0 rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                            <button type="button" onClick={() => upd({ active: !p.active })} className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg" style={{ background: p.active ? "var(--accent)" : "transparent", color: p.active ? "var(--bg-deep)" : "var(--text-muted)", border: "1px solid var(--bg-glass-border)" }}>{p.active ? "ВКЛ" : "ВЫКЛ"}</button>
+                            <button type="button" onClick={() => setZazPromos(zazPromos.filter((_, k) => k !== i))} aria-label="Удалить акцию" className="text-[13px] px-1" style={{ color: "var(--danger)" }}>✕</button>
+                          </div>
+                          <textarea value={p.text} onChange={(e) => upd({ text: e.target.value })} rows={2} placeholder="Текст акции — что скажет зазывала: «С 8 до 12 — сырники и кофе за 290 ₽. Заходите, мы рядом!»" className="w-full rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                          <div className="flex items-center gap-2 text-[11px] flex-wrap" style={{ color: "var(--text-muted)" }}>
+                            <span>Звучит с</span>
+                            <input type="time" value={p.from} onChange={(e) => upd({ from: e.target.value })} className="rounded-lg px-2 py-1 text-sm outline-none" style={fieldS} />
+                            <span>до</span>
+                            <input type="time" value={p.to} onChange={(e) => upd({ to: e.target.value })} className="rounded-lg px-2 py-1 text-sm outline-none" style={fieldS} />
+                            <span>{!p.from && !p.to ? "· весь день" : ""}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button type="button" onClick={() => setZazPromos([...zazPromos, { title: "", text: "", from: "", to: "", active: true }])} className="self-start text-[12px] font-medium" style={{ color: "var(--accent)" }}>＋ Добавить акцию</button>
+                    <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>Пример: «Завтраки» 08:00–12:00, затем «Сытый обед» 12:00–16:00. Зазывала сам озвучит ту, что действует сейчас (время Москвы); выключенные и вне времени — молчат.</p>
+                  </div>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Флаер / QR-код (картинка)</label>
                     {geoMedia ? (
@@ -978,7 +1011,17 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                       </div>
                     </div>
                   )}
-                  <button onClick={saveGeo} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Сохранить геотриггер</button>
+                  {selectedAgent?.jinntell_link && (
+                    <div className="rounded-xl px-3 py-2.5 flex items-center gap-3" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)" }}>
+                      <img src={`/api/agents/link/${selectedAgent.jinntell_link}/qr.svg?promo=1`} alt="QR «Послушать акцию»" style={{ width: 64, height: 64, background: "#fff", borderRadius: 8, padding: 4 }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>QR «Послушать акцию»</div>
+                        <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>Повесьте у входа или на витрине: гость сканирует — джинн рассказывает текущую акцию в JinnTell, контакт остаётся у гостя.</div>
+                      </div>
+                      <a href={`/api/agents/link/${selectedAgent.jinntell_link}/qr.svg?promo=1`} download={`zazyvala-${selectedAgent.jinntell_link}.svg`} className="text-[12px] font-medium shrink-0" style={{ color: "var(--accent)" }}>Скачать</a>
+                    </div>
+                  )}
+                  <button onClick={saveGeo} className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90" style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>Сохранить зазывалу</button>
                   {geoSaved && <p className="text-xs text-center" style={{ color: "#2ecc71" }}>Сохранено!</p>}
                 </div>
               )}

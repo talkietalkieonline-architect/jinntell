@@ -292,7 +292,7 @@ _PUBLIC_BASE = "https://jinntell.ru"
 
 
 @router.get("/link/{slug}/qr.svg")
-async def agent_qr(slug: str, db: AsyncSession = Depends(get_db)):
+async def agent_qr(slug: str, promo: int = 0, db: AsyncSession = Depends(get_db)):
     """QR-код адреса джина в Городе (jinntell.ru/a/{slug}) — SVG, публичный. Для печати/наклейки в ТЦ."""
     import io
     import segno
@@ -303,7 +303,7 @@ async def agent_qr(slug: str, db: AsyncSession = Depends(get_db)):
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(404, "Агент не найден")
-    url = f"{_PUBLIC_BASE}/a/{slug}"
+    url = f"{_PUBLIC_BASE}/a/{slug}" + ("?promo=1" if promo else "")   # promo=1 — QR «Послушать акцию» (зазывала)
     buf = io.BytesIO()
     segno.make(url, error="m").save(buf, kind="svg", scale=6, border=2, dark="#1c2230", light=None)
     return Response(

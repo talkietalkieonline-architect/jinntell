@@ -90,7 +90,13 @@ export default function JinnTellLinkPage() {
 
   // Авто-вход: сразу открываем Прихожую (дом) без промежуточного экрана
   useEffect(() => {
-    if (agent && !didEnter.current) { didEnter.current = true; openAgent("home"); }
+    if (agent && !didEnter.current) {
+      didEnter.current = true;
+      // QR «Послушать акцию» (?promo=1): сразу в Поток — джинн сам расскажет текущую акцию
+      const promo = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("promo") === "1";
+      if (promo) { try { localStorage.setItem("jinntell_open_promo", "1"); } catch { /* noop */ } }
+      openAgent(promo ? "flow" : "home");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent]);
 

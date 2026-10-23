@@ -776,8 +776,8 @@ export function updateActionSettings(data: Partial<ActionSettings>): Promise<Act
 
 export interface GeoDelivery { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; room: string; quiet: boolean; voice?: string | null; }
 /** Человек открыл «стук» → джинн проговаривает презентацию в Потоке (с обращением по имени). */
-export function geoPresent(agentId: number): Promise<{ ok: boolean; room: string }> {
-  return apiFetch("/api/geo/present", { method: "POST", body: JSON.stringify({ agent_id: agentId }) });
+export function geoPresent(agentId: number, source?: "qr"): Promise<{ ok: boolean; room: string }> {
+  return apiFetch("/api/geo/present", { method: "POST", body: JSON.stringify({ agent_id: agentId, source }) });
 }
 export function geoCheck(lat: number, lng: number): Promise<{ deliveries: GeoDelivery[] }> {
   return apiFetch("/api/geo/check", { method: "POST", body: JSON.stringify({ lat, lng }) });
@@ -1099,7 +1099,9 @@ export function contractorGetBilling(): Promise<ContractorBilling> {
   return contractorFetch("/api/contractor/billing");
 }
 
-export interface GeoTriggerData { agent_id?: number; lat: number; lng: number; radius_m: number; title: string; message: string; media_url?: string | null; is_active: boolean; cooldown_hours: number; price_kopecks?: number; promo_code?: string; }
+/** Акция зазывалы: звучит по расписанию (время Москвы); пустые from/to — весь день. */
+export interface ZazPromo { title: string; text: string; from: string; to: string; active: boolean }
+export interface GeoTriggerData { agent_id?: number; lat: number; lng: number; radius_m: number; title: string; message: string; media_url?: string | null; is_active: boolean; cooldown_hours: number; price_kopecks?: number; promo_code?: string; promos?: ZazPromo[]; current?: { title: string; text: string } | null; }
 export interface GeoStats { shown: number; opened: number; converted: number; by_result: Record<string, number>; recent: { user_id: number; result: string; promo_code?: string | null; at: string }[]; }
 export function contractorGetGeoTrigger(agentId: number): Promise<GeoTriggerData | null> {
   return contractorFetch(`/api/contractor/agents/${agentId}/geo-trigger`);

@@ -66,6 +66,10 @@ async def geo_check(
             agent = await db.get(Agent, gt.agent_id)
             if not agent or not agent.is_active:
                 continue
+            from app.services import promos as _pr
+            promo = _pr.current(gt)
+            if not promo:
+                continue  # сейчас ни одна акция не действует — зазывала молчит (и показ не списывается)
             # Списание показа с контрагента (пустой баланс — не рекламируем)
             cid = getattr(agent, "contractor_id", None) or getattr(agent, "owner_id", None)
             contractor = await db.get(Contractor, cid) if cid else None
@@ -95,7 +99,7 @@ async def geo_check(
                               promo_code=gt.promo_code, result="shown"))
             deliveries.append({
                 "agent_id": agent.id, "agent_name": agent.name, "color": agent.color,
-                "title": gt.title or "", "message": gt.message or "",
+                "title": promo["title"] or gt.title or "", "message": promo["text"] or gt.message or "",
                 "media_url": gt.media_url, "room": room,
                 "quiet": acts.get("approaches") == "assistant",
                 "voice": (getattr(agent, "tts_voice_id", None) or getattr(agent, "voice_id", None) or None),
@@ -153,21 +157,31 @@ async def geo_present(body: dict = Body(...), user: User = Depends(get_current_u
         agent_id = int(body.get("agent_id") or 0)
     except (TypeError, ValueError):
         agent_id = 0
+    from app.services import promos as _pr
     since = datetime.now(timezone.utc) - timedelta(hours=3)
     c = (await db.execute(select(GeoContact).where(GeoContact.user_id == user.id, GeoContact.agent_id == agent_id)
                           .order_by(GeoContact.id.desc()).limit(1))).scalar_one_or_none()
-    if not c or (c.created_at and c.created_at < since):
+    agent = await db.get(Agent, agent_id)
+    if (not c or (c.created_at and c.created_at < since)) and (body.get("source") == "qr") and agent:
+        # QR «Послушать акцию» у входа/на витрине: контакт без гео — так же попадает в «Приглашения» и память помощника
+        gt0 = (await db.execute(select(GeoTrigger).where(GeoTrigger.agent_id == agent_id))).scalar_one_or_none()
+        if not gt0:
+            raise HTTPException(404, "У заведения нет акций")
+        c = GeoContact(trigger_id=gt0.id, agent_id=agent_id, user_id=user.id, promo_code=gt0.promo_code, result="qr")
+        db.add(c)
+        await db.flush()
+    if not c or (c.created_at and c.created_at < since and c.result != "qr"):
         raise HTTPException(404, "Приглашение не найдено или устарело")
     gt = await db.get(GeoTrigger, c.trigger_id)
-    agent = await db.get(Agent, agent_id)
     if not gt or not agent:
         raise HTTPException(404, "Приглашение не найдено")
+    promo = _pr.current(gt) or {"title": gt.title or "", "text": gt.message or ""}
     nm = (user.first_name or user.display_name or "").strip()
     if nm in ("Пользователь", "Гость"):
         nm = ""
     head = f"Привет, {nm}!" if nm else "Привет!"
-    title = (gt.title or "").strip().rstrip("!.")
-    body_txt = (gt.message or "").strip() or (getattr(agent, "promo_digest", None) or "").strip()
+    title = (promo["title"] or "").strip().rstrip("!.")
+    body_txt = (promo["text"] or "").strip() or (getattr(agent, "promo_digest", None) or "").strip()
     text = " ".join(x for x in [head, (title + "!") if title else "", body_txt] if x).strip()
     if gt.promo_code:
         text += f"\nПромокод: {gt.promo_code} — назовите на месте."
@@ -176,7 +190,8 @@ async def geo_present(body: dict = Body(...), user: User = Depends(get_current_u
                   media_url=(gt.media_url if gt.media_url and len(gt.media_url) <= 500 else None),
                   media_type=("image" if gt.media_url else None))
     db.add(msg)
-    c.result = "opened"
+    if c.result != "qr":
+        c.result = "opened"
     await db.commit()
     await db.refresh(msg)
     await manager.broadcast(room, {"type": "message", "id": msg.id, "room": room, "sender_type": "agent",

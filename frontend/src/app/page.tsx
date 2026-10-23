@@ -955,7 +955,13 @@ export default function Home() {
         const agentId = parseInt(pendingAgent, 10);
         if (!isNaN(agentId)) {
           if (mode === "home") { setCityPreselect(agentId); setCityOpen(true); }
-          else { openAgentChat(agentId, undefined, { flow: mode === "flow" }); }
+          else {
+            openAgentChat(agentId, undefined, { flow: mode === "flow" });
+            // QR «Послушать акцию»: как только Поток откроет комнату — джинн рассказывает текущую акцию
+            let promo = false;
+            try { promo = localStorage.getItem("jinntell_open_promo") === "1"; localStorage.removeItem("jinntell_open_promo"); } catch { /* noop */ }
+            if (promo) setTimeout(() => { geoPresent(agentId, "qr").catch(() => {}); }, 3300);
+          }
         }
       }
     }

@@ -87,6 +87,7 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS fuel_type VARCHAR(40) DEFAULT ''",
             "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS liters INTEGER DEFAULT 0",
             "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ",
+            "ALTER TABLE geo_triggers ADD COLUMN IF NOT EXISTS promos_json TEXT",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS modules_json TEXT",
             "ALTER TABLE fuel_queue ADD COLUMN IF NOT EXISTS reminded VARCHAR(40) DEFAULT ''",
             "ALTER TABLE station_orders ADD COLUMN IF NOT EXISTS reminded VARCHAR(40) DEFAULT ''",

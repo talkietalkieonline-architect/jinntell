@@ -92,6 +92,7 @@ class GeoTriggerIn(BaseModel):
     is_active: bool = True
     cooldown_hours: int = 24
     promo_code: Optional[str] = None
+    promos: Optional[list] = None   # акции зазывалы по расписанию [{title,text,from,to,active}]
 
 
 def _geo_out(gt) -> dict:
@@ -100,6 +101,8 @@ def _geo_out(gt) -> dict:
         "title": gt.title or "", "message": gt.message or "", "media_url": gt.media_url,
         "is_active": gt.is_active, "cooldown_hours": gt.cooldown_hours,
         "price_kopecks": gt.price_kopecks, "promo_code": gt.promo_code or "",
+        "promos": __import__("app.services.promos", fromlist=["x"]).get_promos(gt),
+        "current": __import__("app.services.promos", fromlist=["x"]).current(gt),
     }
 
 
@@ -130,6 +133,10 @@ async def put_geo_trigger(agent_id: int, body: GeoTriggerIn, contractor: Contrac
     gt.is_active = bool(body.is_active)
     gt.cooldown_hours = max(1, int(body.cooldown_hours))
     gt.promo_code = (body.promo_code or "").strip()[:40] or None
+    if body.promos is not None:
+        import json as _json
+        from app.services import promos as _pr
+        gt.promos_json = _json.dumps(_pr.clean(body.promos), ensure_ascii=False)
     gt.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(gt)
