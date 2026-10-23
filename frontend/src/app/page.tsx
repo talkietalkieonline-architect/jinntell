@@ -880,17 +880,28 @@ export default function Home() {
   // Токен протух (AuthContext поймал 401 и разлогинил) — уводим на экран входа, а не держим зомби-сессию
   useEffect(() => { if (isLoggedIn === false && screen === "communicator") setScreen("login"); }, [isLoggedIn, screen]);
 
-  // Геотриггер: опрос позиции при открытом приложении (если пользователь разрешил геолокацию)
+  // Геотриггер «Приглашения рядом»: следим за ДВИЖЕНИЕМ (watchPosition), сервер спрашиваем не чаще раза в 5 с
+  // и только если сдвинулись на ≥20 м (или прошла минута) — пока идёшь, почти мгновенно; стоишь — батарея не тратится.
   const [geoKnock, setGeoKnock] = useState<GeoDelivery | null>(null);
   useEffect(() => {
     let stop = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const tick = () => {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(async (p) => {
-        if (stop) return;
+    let watchId: number | null = null;
+    let last: { lat: number; lng: number; t: number } | null = null;
+    let busy = false;
+    const dist = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+      const R = 6371000, toR = Math.PI / 180;
+      const dLat = (b.lat - a.lat) * toR, dLng = (b.lng - a.lng) * toR;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(h));
+    };
+    const onPos = (p: GeolocationPosition) => {
+        if (stop || busy) return;
+        const cur = { lat: p.coords.latitude, lng: p.coords.longitude, t: Date.now() };
+        if (last && (cur.t - last.t < 5000 || (dist(last, cur) < 20 && cur.t - last.t < 60000))) return;
+        last = cur; busy = true;
+        (async () => {
         try {
-          const r = await geoCheck(p.coords.latitude, p.coords.longitude);
+          const r = await geoCheck(cur.lat, cur.lng);
           const d = (r.deliveries || []).find((x) => !x.quiet) || null;
           if (d) {
             setGeoKnock(d);
@@ -900,15 +911,14 @@ export default function Home() {
               if (call) { const u = await ttsBlobUrl(call, d.voice || "zahar", "good"); if (u) { const a = new Audio(u); a.play().catch(() => {}); } }
             } catch { /* noop */ }
           }
-        } catch { /* noop */ }
-      }, () => {}, { maximumAge: 60000, timeout: 10000 });
+        } catch { /* noop */ } finally { busy = false; }
+        })();
     };
     getActionSettings().then((s) => {
-      if (stop || !s.allow_location) return;
-      tick();
-      timer = setInterval(tick, 90000);
+      if (stop || !s.allow_location || !navigator.geolocation) return;
+      watchId = navigator.geolocation.watchPosition(onPos, () => {}, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
     }).catch(() => {});
-    return () => { stop = true; if (timer) clearInterval(timer); };
+    return () => { stop = true; if (watchId !== null) navigator.geolocation.clearWatch(watchId); };
   }, []);
   useEffect(() => {
     if (!commandHint) return;

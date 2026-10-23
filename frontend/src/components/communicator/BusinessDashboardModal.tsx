@@ -926,7 +926,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>Гео-реклама: когда пользователь рядом с точкой (и разрешил геолокацию), джинн «стучится» с вашим предложением. Платно — списывается за каждый показ.</p>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Точка на карте — кликните или перетащите маркер</label>
-                    <GeoMapPicker lat={parseFloat(geoLat) || 0} lng={parseFloat(geoLng) || 0} radius={parseInt(geoRadius) || 200} onChange={(la, ln) => { setGeoLat(la.toFixed(6)); setGeoLng(ln.toFixed(6)); }} />
+                    <GeoMapPicker lat={parseFloat(geoLat) || 0} lng={parseFloat(geoLng) || 0} radius={parseInt(geoRadius) || 80} onChange={(la, ln) => { setGeoLat(la.toFixed(6)); setGeoLng(ln.toFixed(6)); }} />
                   </div>
                   <button onClick={() => setGeoActive(!geoActive)} className="flex items-center justify-between px-4 py-3 rounded-xl transition-all" style={{ background: "var(--bg-glass)", border: `1px solid ${geoActive ? "var(--accent)" : "var(--bg-glass-border)"}` }}>
                     <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>Активен</span>
@@ -937,7 +937,19 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                     <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Долгота</label><input value={geoLng} onChange={(e) => setGeoLng(e.target.value)} placeholder="30.3141" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
                   </div>
                   <button onClick={() => { if (navigator.geolocation) navigator.geolocation.getCurrentPosition((p) => { setGeoLat(p.coords.latitude.toFixed(6)); setGeoLng(p.coords.longitude.toFixed(6)); }); }} className="text-[11px] self-start" style={{ color: "var(--accent)" }}>📍 Взять мои координаты</button>
-                  <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Радиус действия, м</label><input value={geoRadius} onChange={(e) => setGeoRadius(e.target.value)} placeholder="200" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Радиус действия</label>
+                    <div className="flex gap-2 items-center flex-wrap">
+                      {["80", "150", "250"].map((r) => (
+                        <button key={r} type="button" onClick={() => setGeoRadius(r)} className="px-3 py-1.5 rounded-full text-[12px] font-medium"
+                          style={{ background: geoRadius === r ? "var(--accent)" : "var(--bg-glass)", color: geoRadius === r ? "var(--bg-deep)" : "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>
+                          {r} м{r === "80" ? " · у двери" : r === "150" ? " · квартал" : " · район"}
+                        </button>
+                      ))}
+                      <input value={geoRadius} onChange={(e) => setGeoRadius(e.target.value.replace(/\D/g, ""))} aria-label="Свой радиус, м" className="w-20 rounded-xl px-3 py-1.5 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} />
+                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>м</span>
+                    </div>
+                  </div>
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Заголовок призыва</label><input value={geoTitle} onChange={(e) => setGeoTitle(e.target.value)} placeholder="Вторая пицца в подарок!" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
                   <div><label className="text-[10px] uppercase tracking-wider mb-1 block" style={{ color: "var(--text-muted)" }}>Текст-призыв</label><textarea value={geoMsg} onChange={(e) => setGeoMsg(e.target.value)} rows={2} placeholder="Заходи в Тесто до 20:00" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={{ background: "var(--bg-glass)", border: "1px solid var(--bg-glass-border)", color: "var(--text-primary)" }} /></div>
                   <div>
