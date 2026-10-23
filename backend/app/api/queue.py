@@ -89,7 +89,7 @@ async def queue_station(agent_id: int, db: AsyncSession = Depends(get_db), user:
                         "queue": "queue" in _mods,
                         "announce": "staff_voice" in _mods,   # реестр объявляет заказы голосом джинна
                         "voice": a.tts_voice_id or a.voice_id or "alena",
-                        "pay_qr": "pay_qr" in _mods},
+                        "pay_qr": "pay_qr" in _mods and bool((_ip.get_catalog(a).get("pay") or {}).get("sbp_link"))},
             "availability": await fuel_station.availability(db, a),
             "queue": [_row(e) for e in rows]}
 
@@ -144,7 +144,7 @@ def _order_row(o: StationOrder) -> dict:
         items = []
     if o.fuel_type:  # топливо — первой строкой предзаказа
         items = [{"name": f"{o.fuel_type}" + (f" {o.liters} л" if o.liters else ""), "qty": 1, "price": 0, "fuel": True}] + items
-    return {"code": o.code, "kind": o.kind, "kind_ru": {"cafe": "Кафе", "services": "Услуга"}.get(o.kind, "Предзаказ"), "items": items,
+    return {"code": o.code, "number": o.code[-4:], "kind": o.kind, "kind_ru": {"cafe": "Кафе", "services": "Услуга"}.get(o.kind, "Предзаказ"), "items": items,
             "total": o.total, "client_name": o.client_name or "", "car_plate": o.car_plate or "",
             "ready_at": _iso(o.ready_at), "ready_hhmm": fuel_station.hhmm(o.ready_at) if o.ready_at else "",
             "queue_code": o.queue_code, "status": o.status, "status_ru": _ORDER_RU.get(o.status, o.status),

@@ -85,9 +85,9 @@ INDUSTRIES: dict = {
                 "default": True,
             },
             "pay_qr": {
-                "label": "Оплата по QR",
-                "desc": "Джинн присылает платёжный QR по банковскому стандарту: сумма и номер заказа уже внутри, "
-                        "деньги идут напрямую кофейне. Нужны реквизиты.",
+                "label": "Оплата через СБП",
+                "desc": "К талону заказа джинн прикладывает кнопку «Оплатить N ₽ через СБП» — открывается приложение банка гостя, "
+                        "деньги идут напрямую кофейне. Нужна платёжная ссылка СБП из вашего банка.",
                 "tools": [],
                 "catalog": "pay",
                 "default": False,
@@ -203,11 +203,11 @@ def context_note(agent) -> str:
     if getattr(agent, "industry", None) == "coffee":
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        pay_on = "pay_qr" in mods and (cat.get("pay") or {}).get("acc")
+        pay_on = "pay_qr" in mods and (cat.get("pay") or {}).get("sbp_link")
         p = ["ЗАКАЗ К ВРЕМЕНИ — твоя главная операция: узнай, что приготовить из меню, ИМЯ гостя и к какому времени он придёт "
              "(можно «через 20 минут») → station_order. Гос-номер не нужен. Гость приходит, называет имя и забирает. "
-             + ("После заказа джинн сам пришлёт платёжный QR с суммой — скажи, что оплатить можно сразу, а бариста увидит оплату."
-                if pay_on else "Оплата на месте.")
+             + ("После заказа в чат придёт талон с кнопкой «Оплатить через СБП» — скажи, что оплатить можно сразу "
+                "(назови сумму), а бариста увидит оплату." if pay_on else "Оплата на месте.")
              + " Предлагай дополнить к месту («к капучино круассан?»), без навязывания."]
         if "cafe" in mods and cat.get("cafe"):
             p.append("МЕНЮ: " + _fmt_items(cat["cafe"]))
@@ -291,6 +291,8 @@ def _clean_catalog(cat) -> dict:
     pay = cat.get("pay")
     if isinstance(pay, dict):  # реквизиты для платёжного QR (ГОСТ Р 56042)
         out["pay"] = {k: str(pay.get(k) or "").strip()[:160] for k in ("name", "inn", "acc", "bank", "bic", "corr")}
+        link = str(pay.get("sbp_link") or "").strip()[:500]
+        out["pay"]["sbp_link"] = link if link.startswith("https://") else ""
     return out
 
 

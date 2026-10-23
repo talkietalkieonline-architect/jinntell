@@ -29,7 +29,7 @@ const tok = () => (typeof window !== "undefined" ? localStorage.getItem("jinntel
 const authH = (): Record<string, string> => { const t = tok(); return t ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" }; };
 const fmtTime = (iso: string | null) => { try { return iso ? new Date(iso).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" }) : ""; } catch { return ""; } };
 const codeFrom = (raw: string) => { const m = raw.toUpperCase().match(/[QZ]-[0-9A-F]{6,12}/); return m ? m[0] : ""; };
-interface ORow { code: string; kind: string; kind_ru: string; items: { name: string; qty: number; price: number }[]; total: number;
+interface ORow { code: string; number?: string; kind: string; kind_ru: string; items: { name: string; qty: number; price: number }[]; total: number;
   client_name: string; car_plate: string; ready_hhmm: string; queue_code: string | null; status: string; status_ru: string; paid?: boolean; verdict?: { ok: boolean; text: string }; can_operate?: boolean }
 
 type Detector = { detect: (src: CanvasImageSource) => Promise<{ rawValue: string }[]> };
@@ -146,7 +146,7 @@ export default function OperatorPage() {
   };
   const announce = (o: ORow) => {
     const what = o.items.map((i) => `${i.name}${i.qty > 1 ? ` — ${i.qty} шт.` : ""}`).join(", ");
-    say(`Новый заказ${o.ready_hhmm ? ` к ${o.ready_hhmm}` : ""}: ${what}. Для ${o.client_name || "гостя"}.${o.paid ? " Уже оплачен." : ""}`);
+    say(`Новый заказ${o.number ? ` номер ${o.number.split("").join(" ")}` : ""}${o.ready_hhmm ? `, к ${o.ready_hhmm}` : ""}: ${what}. На имя ${o.client_name || "гостя"}.${o.paid ? " Уже оплачен." : ""}`);
   };
   const toggleVoice = () => {
     const v = !voiceOn; setVoiceOn(v); voiceOnRef.current = v;
@@ -169,13 +169,14 @@ export default function OperatorPage() {
       {o.verdict && <div className="text-sm font-semibold" style={{ color: o.verdict.ok ? C.green : C.red }}>{o.verdict.ok ? "✓ " : "⚠ "}{o.verdict.text}</div>}
       <div className="flex items-baseline gap-2 flex-wrap">
         <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: "rgba(224,179,74,0.15)", color: C.gold }}>{o.kind_ru}</span>
+        {o.number && <span className="text-[18px] font-extrabold tracking-wide" style={{ color: C.text }}>№ {o.number}</span>}
         <span className="text-sm font-semibold" style={{ color: C.text }}>{o.client_name}{o.car_plate ? ` · ${o.car_plate}` : ""}</span>
         {o.ready_hhmm && <span className="text-[13px] font-semibold" style={{ color: C.gold }}>к {o.ready_hhmm}</span>}
       </div>
       <div className="text-[13px]" style={{ color: C.text }}>{o.items.map((i) => `${i.name}${i.qty > 1 ? ` ×${i.qty}` : ""}`).join(", ")}</div>
       <div className="text-[11px]" style={{ color: C.muted }}>{o.code} · {o.status_ru}{o.total ? (isCafe ? ` · ${o.total} ₽` : ` · еда/услуги ${o.total} ₽ на кассе`) : ""}{o.queue_code ? ` · талон ${o.queue_code}` : ""}</div>
       {o.total > 0 && isCafe && (
-        <div className="text-[12px] font-semibold" style={{ color: o.paid ? C.green : C.gold }}>{o.paid ? "✓ Оплачен" : (data?.station.pay_qr ? "Ждёт оплаты по QR" : "Оплата на месте")}</div>
+        <div className="text-[12px] font-semibold" style={{ color: o.paid ? C.green : C.gold }}>{o.paid ? "✓ Оплачен" : (data?.station.pay_qr ? "Ждёт оплаты через СБП" : "Оплата на месте")}</div>
       )}
       {(o.status === "new" || o.status === "ready") && (
         <div className="flex gap-2">

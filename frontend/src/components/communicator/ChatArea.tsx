@@ -29,6 +29,36 @@ const WAVE_BARS = Array.from({ length: 20 }, (_, i) => {
 let _ttsAudio: HTMLAudioElement | null = null;
 let _playingMsgId: string | number | null = null;  // какое сообщение сейчас озвучивается (для кнопки Стоп у облачка)
 const SPEEDS = [1, 1.5, 2];
+
+/** Текст сообщения: ссылки кликабельны; строка «Оплатить … → https://…» — кнопкой (оплата СБП в банке гостя). */
+function RichText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <>
+      {lines.map((line, li) => {
+        const pay = line.match(/^(Оплатить[^→]*?)\s*→\s*(https:\/\/\S+)\s*$/);
+        if (pay) {
+          return (
+            <a key={li} href={pay[2]} target="_blank" rel="noopener noreferrer"
+              className="mt-2 flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-semibold no-underline"
+              style={{ background: "var(--accent)", color: "var(--bg-deep)" }}>
+              💳 {pay[1].trim()}
+            </a>
+          );
+        }
+        const parts = line.split(/(https?:\/\/[^\s]+)/g);
+        return (
+          <span key={li}>
+            {parts.map((p, pi) => /^https?:\/\//.test(p)
+              ? <a key={pi} href={p} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "underline", wordBreak: "break-all" }}>{p}</a>
+              : <span key={pi}>{p}</span>)}
+            {li < lines.length - 1 ? "\n" : null}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 function getPlaySpeed(): number { try { return parseFloat(localStorage.getItem("jinntell_play_speed") || "1") || 1; } catch { return 1; } }
 function setPlaySpeed(v: number) { try { localStorage.setItem("jinntell_play_speed", String(v)); } catch { /* noop */ } }
 /** Озвучка через сервер (Yandex SpeechKit) с анти-эхо событиями и фолбэком */
@@ -402,7 +432,7 @@ function MessageBubble({ msg, userSide, privateChat, highlight, activeHighlight,
         {showAsVoice && msg.text ? (
           <VoiceBubble text={msg.text} accent={!userSide} />
         ) : (
-          <>{msg.text}</>
+          <RichText text={msg.text || ""} />
         )}
 
         {/* Кнопки: прослушать + голосовое/текст */}

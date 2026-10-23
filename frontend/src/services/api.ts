@@ -1909,7 +1909,7 @@ export function adminCabinetAdopt(id: number, body: { brief?: string; visibility
 // ── Отраслевая заготовка джина + модули (бизнес включает сам; заготовку назначаем мы) ──
 export type ModuleItem = { name: string; price: number };
 /** Реквизиты бизнеса для платёжного QR (ГОСТ Р 56042): деньги идут напрямую бизнесу. */
-export type PayRequisites = { name?: string; inn?: string; acc?: string; bank?: string; bic?: string; corr?: string };
+export type PayRequisites = { sbp_link?: string; name?: string; inn?: string; acc?: string; bank?: string; bic?: string; corr?: string };
 export interface ModulesState {
   industry: string | null; industry_label: string | null;
   industries: { id: string; label: string; desc: string }[];

@@ -44,7 +44,9 @@ async def synthesize(body: TTSRequest, user: User = Depends(get_current_user)):
     folder = await get_setting("YANDEX_SPEECHKIT_FOLDER_ID")
     if not api_key:
         raise HTTPException(503, "TTS не настроен")
-    text = (body.text or "").strip()
+    import re as _re
+    # ссылки вслух не читаем («эйч-ти-ти-пи-эс…»): кнопки/ссылки видны в чате
+    text = _re.sub(r"\s*(?:→|:)?\s*https?://\S+", "", (body.text or "")).strip()
     if not text:
         raise HTTPException(400, "Пустой текст")
 

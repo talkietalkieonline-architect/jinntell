@@ -646,21 +646,21 @@ async def _station_order_exec(agent, user_id, args: dict) -> str:
                      + [f"{p['name']}" + (f" ×{p['qty']}" if p["qty"] > 1 else "") for p in picked])
     t = _fs.hhmm(ready)
     pay = cat.get("pay") or {}
-    pay_qr = (not is_azs) and "pay_qr" in mods and total > 0 and bool(pay.get("acc"))
+    sbp = (pay.get("sbp_link") or "") if ((not is_azs) and "pay_qr" in mods and total > 0) else ""
+    num = code[-4:]  # короткий номер талона — его называют бариста
     if is_azs:
         cap = (f"Предзаказ принят · {name} · {plate} · к {t}: {what}. "
                f"{('Еда и услуги — ' + str(total) + ' ₽, ') if total else ''}оплата на кассе. Станция ждёт вас — просто назовите имя или номер машины.")
     else:
-        cap = (f"Заказ {code} · {name} · к {t}: {what}. Итого {total} ₽. "
-               + ("Оплатить можно сразу по QR — сумма и номер заказа уже внутри, деньги идут напрямую кофейне. "
-                  if pay_qr else "Оплата на месте. ")
-               + "Приходите и назовите имя — заказ будет готов.")
+        cap = (f"🎫 Заказ № {num}\n{what}\nК {t} · на имя {name} · итого {total} ₽\n"
+               + ("Приходите и назовите номер или имя — заказ будет готов."
+                  + (f"\nОплатить {total} ₽ через СБП → {sbp}" if sbp else "\nОплата на месте.")))
     try:
         if user_id:
             from app.models.message import Message as _Msg
             from app.websocket.manager import manager as _mgr
             room = f"agent-{agent.id}-u{user_id}"
-            qr = f"https://jinntell.ru/api/queue/order/{code}/pay.svg" if pay_qr else None  # платёжный QR (ГОСТ Р 56042)
+            qr = None  # гость платит с того же телефона — QR не нужен; кнопка СБП в тексте талона
             async with _as() as s2:
                 m = _Msg(room=room, sender_type="agent", sender_agent_id=agent.id, sender_name=getattr(agent, "name", "Джинн"),
                          text=cap, media_url=qr, media_type=("image" if qr else None))
@@ -674,7 +674,7 @@ async def _station_order_exec(agent, user_id, args: dict) -> str:
         print(f"[station_order] media err: {_ex}")
     miss = (" Не нашёл в меню/прайсе: " + ", ".join(map(str, missing)) + ".") if missing else ""
     await _fs.day_add(user_id, ready, f"☕ {'Предзаказ' if is_azs else 'Заказ'}: {getattr(agent, 'name', 'АЗС')} — {what}"[:300],
-                      f"Код {code}{(', ' + plate) if plate else ''}. К {t}" + (", оплата по QR." if pay_qr else ", оплата на месте."))
+                      f"Заказ № {num} (код {code}){(', ' + plate) if plate else ''}. К {t}" + (", оплата через СБП." if sbp else ", оплата на месте."))
     if not qcode:
         miss += (" Ваш помощник напомнит за 15 минут, что пора выезжать." if is_azs else " Ваш помощник напомнит за 15 минут.") + (await _guest_tip(user_id))
     return f"Готово: {cap}{' Будет готово к вашему времени в очереди.' if qcode else ''}{miss}"

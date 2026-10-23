@@ -133,16 +133,22 @@ export default function ModulesEditor({ api, admin = false }: { api: ModulesApi;
             );
             return (
               <div className="rounded-xl p-3 flex flex-col gap-2" style={box}>
-                <div className="text-[12px] font-semibold" style={{ color: T.text }}>Реквизиты для оплаты по QR</div>
-                <div className="text-[11px]" style={{ color: T.muted }}>Гость сканирует QR — банк сам подставит получателя, сумму и номер заказа. Деньги идут напрямую вам, JinnTell в платеже не участвует.</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {field("name", "Получатель", "ООО «Кофейня»")}
-                  {field("inn", "ИНН", "7800000000")}
-                  {field("acc", "Расчётный счёт", "40702810…")}
-                  {field("bank", "Банк", "ПАО Сбербанк")}
-                  {field("bic", "БИК", "044525225")}
-                  {field("corr", "Корр. счёт", "30101810…")}
-                </div>
+                <div className="text-[12px] font-semibold" style={{ color: T.text }}>Оплата через СБП</div>
+                <div className="text-[11px]" style={{ color: T.muted }}>Вставьте платёжную ссылку СБП из вашего банка (Сбер, Т-Банк, Точка, Альфа и др. выдают её бизнесу). Гость получит талон с кнопкой «Оплатить N ₽ через СБП» — откроется его банк, деньги придут напрямую вам. JinnTell в платеже не участвует.</div>
+                <label className="flex flex-col gap-1 text-[11px]" style={{ color: T.muted }}>Ссылка на оплату СБП
+                  <input className={inp} style={inpS} placeholder="https://qr.nspk.ru/…" value={pay.sbp_link || ""} onChange={(e) => setPay("sbp_link", e.target.value.trim())} />
+                </label>
+                <details>
+                  <summary className="text-[11px] cursor-pointer" style={{ color: T.accent }}>QR для экрана на кассе (необязательно): реквизиты</summary>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                    {field("name", "Получатель", "ООО «Кофейня»")}
+                    {field("inn", "ИНН", "7800000000")}
+                    {field("acc", "Расчётный счёт", "40702810…")}
+                    {field("bank", "Банк", "ПАО Сбербанк")}
+                    {field("bic", "БИК", "044525225")}
+                    {field("corr", "Корр. счёт", "30101810…")}
+                  </div>
+                </details>
               </div>
             );
           })()}
