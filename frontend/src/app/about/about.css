@@ -98,3 +98,11 @@
   .ab-kp { background: #fff !important; color: #000 !important; border: 1px solid #ccc; }
   .ab-sec { padding: 20px 0; break-inside: avoid; }
 }
+
+/* диалог «как это звучит» */
+.ab-dialog { display: flex; flex-direction: column; gap: 10px; max-width: 640px; }
+.ab-say { align-self: flex-end; max-width: 82%; background: var(--ab-card); border: 1px solid var(--ab-line); border-radius: 18px 18px 4px 18px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.ab-say-jinn { align-self: flex-start; background: var(--ab-night); color: var(--ab-night-ink); border-color: var(--ab-night); border-radius: 18px 18px 18px 4px; }
+.ab-say-who { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ab-muted); }
+.ab-say-jinn .ab-say-who { color: var(--ab-gold); }
+@media print { .ab-say-jinn { background: #fff !important; color: #000 !important; border: 1px solid #ccc; } }
