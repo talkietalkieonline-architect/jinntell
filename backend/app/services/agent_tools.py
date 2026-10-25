@@ -161,15 +161,14 @@ TOOL_REGISTRY = {
                 "required": ["title", "content"]}}},
     },
     "send_presentation": {
-        "category": "write", "risk": "low", "label": "Отправить презентацию (PDF)",
+        "category": "write", "risk": "low", "label": "Промоутер: презентации",
         "schema": {"type": "function", "function": {
             "name": "send_presentation",
-            "description": "Отправить клиенту PDF-презентацию: кладёт файл в его «Портфель» и даёт ссылку. Вызывай, когда клиент "
-                           "просит презентацию/КП/«пришлите почитать», или при продаже — чтобы у клиента остался материал. "
-                           "topic: city (о Городе), business (джин-сотрудник для бизнеса), azs (сети АЗС), coffee (кофейня), "
-                           "user (свой персонаж для человека).",
+            "description": "Отправить клиенту PDF-презентацию готового решения: кладёт файл в его «Портфель» и даёт ссылку. "
+                           "Вызывай, когда клиент просит презентацию/КП/«пришлите почитать», или при продаже — чтобы у клиента "
+                           "остался материал. topic — id решения из списка «Готовые решения» (роль промоутера).",
             "parameters": {"type": "object", "properties": {
-                "topic": {"type": "string", "enum": ["city", "business", "azs", "coffee", "user"]}},
+                "topic": {"type": "string", "description": "id готового решения"}},
                 "required": ["topic"]}}},
     },
     "escalate": {
@@ -286,9 +285,9 @@ TOOL_REGISTRY = {
 
 # --- Профессия = пресет способностей ---
 PROFESSION_PRESETS = {
-    "consultant": {"label": "Консультант", "tools": ["search_knowledge", "web_search", "lookup", "calc", "escalate", "save_to_portfolio"]},
-    "seller":     {"label": "Продавец",    "tools": ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "save_to_portfolio", "issue_invoice"]},
-    "manager":    {"label": "Менеджер",    "tools": ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "save_to_portfolio", "issue_invoice"]},
+    "consultant": {"label": "Консультант", "tools": ["search_knowledge", "web_search", "lookup", "calc", "escalate", "save_to_portfolio", "send_presentation"]},
+    "seller":     {"label": "Продавец",    "tools": ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "send_presentation"]},
+    "manager":    {"label": "Менеджер",    "tools": ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "save_to_portfolio", "issue_invoice", "send_presentation"]},
     "support":    {"label": "Поддержка",   "tools": ["search_knowledge", "lookup", "create_lead", "remember_client", "escalate", "save_to_portfolio"]},
 }
 
@@ -474,17 +473,19 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
             return "Не удалось сохранить документ."
         if name == "send_presentation":
             from app.services import presentations as _pr
-            topic = _pr.resolve_topic(args.get("topic", ""))
-            if not topic:
-                return "Такой презентации нет: есть city, business, azs, coffee, user."
+            it, items = _pr.find(agent, args.get("topic", ""))
+            if not it:
+                if not items:
+                    return "Готовых решений для презентации пока нет — расскажи своими словами и предложи заявку."
+                return "Такой презентации нет. Есть: " + ", ".join(f"{x['id']} ({x['title']})" for x in items)
             import asyncio as _aio
-            url = await _aio.to_thread(_pr.pdf_url, topic)
-            title = _pr.PRESENTATIONS[topic]["title"]
+            url = await _aio.to_thread(_pr.item_pdf_url, agent, it)
+            title = it["title"]
             if user_id:
                 try:
                     from app.services import digest as _dg
                     await _dg.save_deliverable(user_id, f"Презентация: {title}", kind="file", media_url=url,
-                                               text=_pr.PRESENTATIONS[topic]["subtitle"],
+                                               text=it.get("subtitle") or "",
                                                source_agent_id=getattr(agent, "id", None),
                                                source_agent_name=getattr(agent, "name", "") or "")
                     from app.websocket.manager import manager
@@ -545,6 +546,12 @@ async def reply_with_tools(db, agent, agent_kwargs: dict, enabled: list, max_ite
     if _notes:
         system += ("\n\nЧТО ТЫ УЖЕ ЗНАЕШЬ ОБ ЭТОМ КЛИЕНТЕ (используй, не переспрашивай зря):\n- "
                    + "\n- ".join(_notes[:6]))
+    if "send_presentation" in (enabled or []):
+        try:  # связанная роль «промоутер»: тот же джин сам представляет готовые решения
+            from app.services import presentations as _pr
+            system += _pr.role_note(agent)
+        except Exception as _e:  # noqa: BLE001
+            print(f"[agent_tools] promoter role skip: {_e}")
     try:  # город собеседника — джин говорит про местные точки и пилоты
         _uid = agent_kwargs.get("user_id") or 0
         if _uid:

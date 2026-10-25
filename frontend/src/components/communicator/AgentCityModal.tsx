@@ -68,7 +68,7 @@ export default function AgentCityModal({
   const [cityTab, setCityTab] = useState<"city" | "federal">("city");
   const [geoLoading, setGeoLoading] = useState(false);
   useEffect(() => { if (user?.city) setUserCity(user.city); }, [user?.city]);
-  // Промоутер Города (Марк, отдел продаж) — закреплён сверху: проведёт экскурсию новичку
+  // Марк (подключение к JinnTell, отдел продаж) — закреплён сверху: проведёт экскурсию новичку
   const [promoterId, setPromoterId] = useState<number | null>(null);
   useEffect(() => {
     if (!isOpen || promoterId) return;
@@ -241,7 +241,7 @@ export default function AgentCityModal({
               <span className="text-xl leading-none">🧭</span>
               <span className="flex-1 min-w-0">
                 <span className="block text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Впервые в Городе?</span>
-                <span className="block text-[11px]" style={{ color: "var(--text-muted)" }}>Марк, промоутер Города, расскажет, кто здесь живёт и зачем это вам</span>
+                <span className="block text-[11px]" style={{ color: "var(--text-muted)" }}>Марк расскажет, кто здесь живёт, зачем это вам и как подключиться</span>
               </span>
               <span className="text-[12px] font-semibold shrink-0" style={{ color: "var(--accent)" }}>Поговорить</span>
             </button>

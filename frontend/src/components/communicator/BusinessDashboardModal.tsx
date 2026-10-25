@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import ModulesEditor from "@/components/station/ModulesEditor";
+import PresentationsEditor from "@/components/station/PresentationsEditor";
 import GeoMapPicker from "@/components/communicator/GeoMapPicker";
 import {
   contractorLogin,
@@ -96,12 +97,13 @@ const TOOL_CATALOG: { id: string; label: string; desc: string; kind: "read" | "w
   { id: "remember_client", label: "Запомнить о клиенте", desc: "Помнит клиента между разговорами (бюджет, предпочтения)", kind: "write" },
   { id: "make_document", label: "Составить документ", desc: "Счёт / КП / договор / справка — клиенту в «Портфель»", kind: "write" },
   { id: "escalate", label: "Позвать человека", desc: "Передаёт разговор живому специалисту компании", kind: "write" },
+  { id: "send_presentation", label: "Промоутер: презентации", desc: "Сам представляет ваши готовые решения новому клиенту (Зазывала, QR, первый контакт) и присылает PDF", kind: "write" },
   { id: "book_slot", label: "Запись на время", desc: "Записывает на приём / время", kind: "write", soon: true },
 ];
 const TOOL_PRESETS: { id: string; label: string; tools: string[] }[] = [
-  { id: "consultant", label: "Консультант", tools: ["search_knowledge", "web_search", "lookup", "calc", "escalate"] },
-  { id: "seller", label: "Продавец", tools: ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate"] },
-  { id: "manager", label: "Менеджер", tools: ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot"] },
+  { id: "consultant", label: "Консультант", tools: ["search_knowledge", "web_search", "lookup", "calc", "escalate", "send_presentation"] },
+  { id: "seller", label: "Продавец", tools: ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "send_presentation"] },
+  { id: "manager", label: "Менеджер", tools: ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "send_presentation"] },
   { id: "support", label: "Поддержка", tools: ["search_knowledge", "lookup", "create_lead", "remember_client", "escalate"] },
 ];
 
@@ -1073,6 +1075,9 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                     </div>
                     <p className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>«Оформить заявку» уже работает — собранные заявки смотри во вкладке «Заявки». «Запись на время» — скоро.</p>
                   </div>
+                  {selectedAgent && tools.includes("send_presentation") && (
+                    <PresentationsEditor agentId={selectedAgent.id} enabled={(() => { try { return (JSON.parse(selectedAgent.tools_json || "[]") as string[]).includes("send_presentation"); } catch { return false; } })()} />
+                  )}
                 </div>
               )}
 

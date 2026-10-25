@@ -149,6 +149,7 @@ class Agent(Base):
     # Отраслевая заготовка (аренда) + подключённые админом модули — services/industry_presets.py
     industry: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)      # "azs" | None
     modules_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)        # ["queue","cafe",...]
+    presentations_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # функция «Промоутер»: [{id,title,subtitle,text}]
     station_catalog_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # {"cafe":[{name,price}],"services":[...]}
 
     created_at: Mapped[datetime] = mapped_column(

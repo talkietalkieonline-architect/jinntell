@@ -1,11 +1,15 @@
-"""Презентации Промоутера Города (отдел продаж): тексты + сборка PDF.
+"""Презентации: функция «Промоутер» у джина-продавца/консультанта/менеджера + системные презентации Марка.
 
-Промоутер (core, sales) отправляет PDF по запросу или при продаже инструментом send_presentation.
+Бизнес включает функцию «Промоутер: презентации» (инструмент send_presentation) и заполняет в кабинете свои
+готовые решения (agents.presentations_json). Джин в связанной роли промоутера сам их представляет (role_note)
+и присылает PDF в Портфель. У Марка (promoter, отдел продаж) — системные: Город, бизнес, АЗС, кофейня, персонаж.
 Тексты — здесь (источник правды для PDF и для базы знаний промоутера). PDF кэшируется по хэшу
 содержимого в storage/presentations и отдаётся по /api/storage/presentations/…
 """
 import hashlib
+import json
 import os
+import re
 from datetime import date
 
 OUT_DIR = "/app/storage/presentations"
@@ -174,6 +178,7 @@ PRESENTATIONS: dict = {
 TOPIC_ALIASES = {"азс": "azs", "заправка": "azs", "кофейня": "coffee", "кафе": "coffee", "cafe": "coffee",
                  "город": "city", "бизнес": "business", "аренда": "business", "rent": "business",
                  "персонаж": "user", "пользователь": "user", "persona": "user"}
+MAX_ITEMS = 8
 
 
 def resolve_topic(topic: str) -> str | None:
@@ -181,16 +186,120 @@ def resolve_topic(topic: str) -> str | None:
     return t if t in PRESENTATIONS else TOPIC_ALIASES.get(t)
 
 
-def as_text(topic: str) -> str:
-    """Плоский текст презентации — для базы знаний промоутера."""
+def _system_item(topic: str) -> dict:
     p = PRESENTATIONS[topic]
-    out = [f"# {p['title']}", p["subtitle"], f"Страница: {PUBLIC_BASE}{p['link']}"]
-    for head, paras in p["sections"]:
-        out.append(f"\n## {head}")
+    return {"id": topic, "title": p["title"], "subtitle": p["subtitle"], "sections": p["sections"],
+            "link": f"{PUBLIC_BASE}{p['link']}"}
+
+
+def as_text(topic: str) -> str:
+    """Плоский текст системной презентации — для базы знаний промоутера."""
+    return item_text(_system_item(topic))
+
+
+def item_text(it: dict) -> str:
+    out = [f"# {it['title']}", it.get("subtitle") or ""]
+    if it.get("link"):
+        out.append(f"Страница: {it['link']}")
+    for head, paras in it["sections"]:
+        if head:
+            out.append(f"\n## {head}")
         out.extend(paras)
-    return "\n".join(out)
+    return "\n".join(x for x in out if x is not None)
 
 
+# ───────────── презентации бизнеса (функция «Промоутер» у продавца/консультанта/менеджера) ─────────────
+def _slug(s: str, taken: set) -> str:
+    tr = str.maketrans("абвгдеёжзийклмнопрстуфхцчшщъыьэюя", "abvgdeejziiklmnoprstufhccss_y_eua")
+    base = re.sub(r"[^a-z0-9]+", "-", (s or "").lower().translate(tr)).strip("-")[:24] or "item"
+    sid, n = base, 2
+    while sid in taken:
+        sid, n = f"{base}-{n}", n + 1
+    return sid
+
+
+def clean(items) -> list:
+    """Нормализовать список презентаций из кабинета: [{id,title,subtitle,text}], не больше MAX_ITEMS."""
+    out, taken = [], set()
+    for it in (items or [])[:MAX_ITEMS]:
+        if not isinstance(it, dict):
+            continue
+        title = str(it.get("title") or "").strip()[:120]
+        text = str(it.get("text") or "").strip()[:4000]
+        if not title or not text:
+            continue
+        sid = str(it.get("id") or "").strip()[:30]
+        if not sid or sid in taken:
+            sid = _slug(title, taken)
+        taken.add(sid)
+        out.append({"id": sid, "title": title, "subtitle": str(it.get("subtitle") or "").strip()[:200], "text": text})
+    return out
+
+
+def _from_text(text: str) -> list:
+    """Текст из кабинета → разделы: строка «## Заголовок» начинает раздел; «— »/«- » — пункт списка."""
+    sections, head, paras = [], "", []
+    for ln in (text or "").replace("\r", "").split("\n"):
+        ln = ln.strip()
+        if not ln:
+            continue
+        if ln.startswith("#"):
+            if paras or head:
+                sections.append((head, paras))
+            head, paras = ln.lstrip("#").strip(), []
+        else:
+            paras.append("— " + ln[2:].strip() if ln.startswith("- ") else ln)
+    if paras or head:
+        sections.append((head, paras))
+    return sections
+
+
+def agent_items(agent) -> list:
+    """Готовые решения джина. У промоутера Города без своих — системные (Город, бизнес, АЗС, кофейня, персонаж)."""
+    try:
+        raw = json.loads(getattr(agent, "presentations_json", None) or "[]")
+    except (ValueError, TypeError):
+        raw = []
+    slug = getattr(agent, "jinntell_link", None) or ""
+    items = [{"id": it["id"], "title": it["title"], "subtitle": it["subtitle"], "sections": _from_text(it["text"]),
+              "link": f"{PUBLIC_BASE}/a/{slug}" if slug else ""} for it in clean(raw)]
+    if not items and slug == "promoter":
+        items = [_system_item(t) for t in PRESENTATIONS]
+    return items
+
+
+def find(agent, key: str):
+    items = agent_items(agent)
+    k = (key or "").strip().lower()
+    if not items:
+        return None, items
+    if getattr(agent, "jinntell_link", None) == "promoter" and resolve_topic(k):
+        k = resolve_topic(k)
+    for it in items:
+        if it["id"] == k:
+            return it, items
+    for it in items:
+        if k and (k in it["title"].lower() or it["title"].lower() in k):
+            return it, items
+    return (items[0] if len(items) == 1 else None), items
+
+
+def role_note(agent) -> str:
+    """Связанная роль «промоутер»: тот же джин (лицо, голос, характер) сам представляет готовые решения."""
+    items = agent_items(agent)
+    if not items:
+        return ""
+    lst = "\n".join(f"- {it['id']}: {it['title']}" + (f" — {it['subtitle']}" if it.get("subtitle") else "") for it in items)
+    return ("\n\n=== РОЛЬ ПРОМОУТЕРА ===\n"
+            "Ты умеешь представлять готовые решения. Когда разговор начал ТЫ (приглашение Зазывалы, QR «послушать акцию», "
+            "первый контакт, звонок) или собеседник не знает, что здесь предлагают, — переходи в роль промоутера, оставаясь собой: "
+            "1) одна живая фраза-зацепка; 2) один вопрос о потребности; 3) подходящее решение в 2–3 предложениях; "
+            "4) предложи прислать презентацию (send_presentation, topic = id) или оформить заявку. "
+            "Не дави и не повторяй предложение; на «нет» — вежливо попрощайся.\n"
+            f"Готовые решения:\n{lst}")
+
+
+# ───────────── PDF ─────────────
 def _register_fonts():
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
@@ -199,7 +308,7 @@ def _register_fonts():
         pdfmetrics.registerFont(TTFont("JT-Bold", os.path.join(_FONT_DIR, "DejaVuSans-Bold.ttf")))
 
 
-def _build(topic: str, path: str) -> None:
+def _build(it: dict, footer: str, brand: str, path: str) -> None:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
@@ -219,34 +328,48 @@ def _build(topic: str, path: str) -> None:
                              leftIndent=12, bulletIndent=0),
         "foot": ParagraphStyle("f", fontName="JT", fontSize=9, textColor=muted, leading=13, spaceBefore=16),
     }
-    p = PRESENTATIONS[topic]
-    story = [Paragraph("JINNTELL · ПРЕЗЕНТАЦИЯ", st["eyebrow"]),
-             Paragraph(escape(p["title"]), st["title"]),
-             Paragraph(escape(p["subtitle"]), st["sub"])]
-    for head, paras in p["sections"]:
-        story.append(Paragraph(escape(head), st["h"]))
+    story = [Paragraph(escape(f"{brand.upper()} · ПРЕЗЕНТАЦИЯ"), st["eyebrow"]),
+             Paragraph(escape(it["title"]), st["title"])]
+    if it.get("subtitle"):
+        story.append(Paragraph(escape(it["subtitle"]), st["sub"]))
+    for head, paras in it["sections"]:
+        if head:
+            story.append(Paragraph(escape(head), st["h"]))
         for para in paras:
             if para.startswith("— "):
                 story.append(Paragraph(escape(para[2:]), st["li"], bulletText="•"))
             else:
                 story.append(Paragraph(escape(para), st["p"]))
     story.append(Spacer(1, 6))
-    story.append(Paragraph(escape(f"Подробнее: {PUBLIC_BASE}{p['link']} · Поговорить с Промоутером Города: "
-                                  f"{PUBLIC_BASE}/promoter · {date.today().strftime('%d.%m.%Y')}"), st["foot"]))
-    story.append(Paragraph("JinnTell · разработчик — WCDI, We Can Do It", st["foot"]))
+    story.append(Paragraph(escape(f"{footer} · {date.today().strftime('%d.%m.%Y')}"), st["foot"]))
+    story.append(Paragraph("Сделано в JinnTell · jinntell.ru", st["foot"]))
     doc = SimpleDocTemplate(path, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
-                            topMargin=18 * mm, bottomMargin=18 * mm, title=p["title"], author="JinnTell")
+                            topMargin=18 * mm, bottomMargin=18 * mm, title=it["title"], author=brand)
     doc.build(story)
 
 
-def pdf_url(topic: str) -> str:
-    """Собрать (или взять из кэша) PDF презентации; вернуть публичную ссылку."""
-    key = hashlib.sha1(as_text(topic).encode("utf-8")).hexdigest()[:10]
-    name = f"{topic}-{key}.pdf"
+def _cached(name_prefix: str, it: dict, footer: str, brand: str) -> str:
+    key = hashlib.sha1((item_text(it) + footer + brand).encode("utf-8")).hexdigest()[:10]
+    name = f"{name_prefix}-{key}.pdf"
     path = os.path.join(OUT_DIR, name)
     if not os.path.exists(path):
         os.makedirs(OUT_DIR, exist_ok=True)
         tmp = path + ".tmp"
-        _build(topic, tmp)
+        _build(it, footer, brand, tmp)
         os.replace(tmp, path)
     return f"{PUBLIC_BASE}/api/storage/presentations/{name}"
+
+
+def pdf_url(topic: str) -> str:
+    """Системная презентация Промоутера Города."""
+    it = _system_item(topic)
+    return _cached(topic, it, f"Подробнее: {it['link']} · Подключение к JinnTell — Марк: {PUBLIC_BASE}/promoter", "JinnTell")
+
+
+def item_pdf_url(agent, it: dict) -> str:
+    """PDF готового решения джина (системные у промоутера — как раньше)."""
+    if getattr(agent, "jinntell_link", None) == "promoter" and it["id"] in PRESENTATIONS:
+        return pdf_url(it["id"])
+    brand = (getattr(agent, "brand", None) or getattr(agent, "name", None) or "JinnTell").strip()
+    footer = f"Поговорить с {getattr(agent, 'name', 'джином')}: {it['link']}" if it.get("link") else brand
+    return _cached(f"a{getattr(agent, 'id', 0)}-{it['id']}", it, footer, brand)

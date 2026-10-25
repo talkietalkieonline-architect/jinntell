@@ -1055,6 +1055,18 @@ async function contractorFetch<T>(path: string, options: RequestInit = {}): Prom
   return res.json();
 }
 
+/** Функция «Промоутер»: готовые решения джина для презентаций */
+export interface PresentationItem { id?: string; title: string; subtitle: string; text: string }
+export function contractorGetPresentations(agentId: number): Promise<{ items: PresentationItem[]; enabled: boolean; max: number }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/presentations`);
+}
+export function contractorPutPresentations(agentId: number, items: PresentationItem[]): Promise<{ items: PresentationItem[] }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/presentations`, { method: "PUT", body: JSON.stringify({ items }) });
+}
+export function contractorPresentationPdf(agentId: number, pid: string): Promise<{ url: string }> {
+  return contractorFetch(`/api/contractor/agents/${agentId}/presentations/${encodeURIComponent(pid)}/pdf`);
+}
+
 /** Контрагент: вход по логину/паролю */
 export async function contractorLogin(login: string, password: string): Promise<ContractorTokenResponse> {
   const data = await apiFetch<ContractorTokenResponse>("/api/contractor/login", {

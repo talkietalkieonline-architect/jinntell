@@ -143,6 +143,43 @@ async def put_geo_trigger(agent_id: int, body: GeoTriggerIn, contractor: Contrac
     return _geo_out(gt)
 
 
+@router.get("/agents/{agent_id}/presentations")
+async def get_presentations(agent_id: int, contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
+    """Функция «Промоутер»: готовые решения джина для презентаций (и включена ли функция)."""
+    import json as _json
+    from app.services import presentations as _pr
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    try:
+        items = _pr.clean(_json.loads(agent.presentations_json or "[]"))
+        tools = _json.loads(agent.tools_json or "[]")
+    except (ValueError, TypeError):
+        items, tools = [], []
+    return {"items": items, "enabled": "send_presentation" in tools, "max": _pr.MAX_ITEMS}
+
+
+@router.put("/agents/{agent_id}/presentations")
+async def put_presentations(agent_id: int, body: dict = Body(...), contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
+    import json as _json
+    from app.services import presentations as _pr
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    items = _pr.clean(body.get("items"))
+    agent.presentations_json = _json.dumps(items, ensure_ascii=False)
+    await db.commit()
+    return {"items": items}
+
+
+@router.get("/agents/{agent_id}/presentations/{pid}/pdf")
+async def presentation_pdf(agent_id: int, pid: str, contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
+    """Посмотреть PDF так, как его получит клиент."""
+    import asyncio as _aio
+    from app.services import presentations as _pr
+    agent = await _get_owned_agent(agent_id, contractor, db)
+    it = next((x for x in _pr.agent_items(agent) if x["id"] == pid), None)
+    if not it:
+        raise HTTPException(404, "Презентация не найдена — сохраните её")
+    return {"url": await _aio.to_thread(_pr.item_pdf_url, agent, it)}
+
+
 @router.get("/agents/{agent_id}/geo-stats")
 async def geo_stats(agent_id: int, contractor: Contractor = Depends(_require_contractor), db: AsyncSession = Depends(get_db)):
     """Статистика гео-промо джинна: сколько показов/открытий/конверсий (атрибуция трафика)."""

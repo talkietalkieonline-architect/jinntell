@@ -180,7 +180,7 @@ export default function KpRentPage() {
         <div className="ab-wrap">
           <h2>Следующий шаг</h2>
           <p className="ab-intro">Опишите задачу — подберём роль и покажем живого джинна на ваших данных.</p>
-          <p className="ab-noprint"><a className="ab-btn ab-btn-gold" href="/promoter/spb?src=kp-rent">Задать вопрос промоутеру</a></p>
+          <p className="ab-noprint"><a className="ab-btn ab-btn-gold" href="/promoter/spb?src=kp-rent">Задать вопрос Марку</a></p>
           <p>JinnTell · разработчик — WCDI, We Can Do It · <a href="https://wcdi.tech" rel="noopener">wcdi.tech</a></p>
         </div>
       </section>
