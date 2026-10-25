@@ -545,6 +545,17 @@ async def reply_with_tools(db, agent, agent_kwargs: dict, enabled: list, max_ite
     if _notes:
         system += ("\n\nЧТО ТЫ УЖЕ ЗНАЕШЬ ОБ ЭТОМ КЛИЕНТЕ (используй, не переспрашивай зря):\n- "
                    + "\n- ".join(_notes[:6]))
+    try:  # город собеседника — джин говорит про местные точки и пилоты
+        _uid = agent_kwargs.get("user_id") or 0
+        if _uid:
+            from app.core.database import async_session as _as
+            from app.models.user import User as _User
+            async with _as() as _s:
+                _u = await _s.get(_User, _uid)
+            if _u and getattr(_u, "city", None):
+                system += f"\n\nСобеседник из города: {_u.city}."
+    except Exception as _e:  # noqa: BLE001
+        print(f"[agent_tools] user city skip: {_e}")
     tools = build_tools(enabled)
     if not tools:
         # инструментов на деле нет — пусть обычный путь отработает

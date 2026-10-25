@@ -162,6 +162,7 @@ export default function KpCafePage() {
         <div className="ab-wrap">
           <h2>Следующий шаг</h2>
           <p className="ab-intro">Встреча на 30 минут: покажем демо на телефоне, загрузим ваше меню и подготовим QR для двери и стойки.</p>
+          <p className="ab-noprint"><a className="ab-btn ab-btn-gold" href="/promoter/spb?src=kp-cafe">Задать вопрос промоутеру</a></p>
           <p>JinnTell · разработчик — WCDI, We Can Do It · <a href="https://wcdi.tech" rel="noopener">wcdi.tech</a></p>
         </div>
       </section>

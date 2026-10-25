@@ -64,7 +64,12 @@ export default function JinnTellLinkPage() {
       const loc = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("loc") : null;
       if (loc) localStorage.setItem("jinntell_open_loc", loc);
       else localStorage.removeItem("jinntell_open_loc");
+      const src = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("src") : null;
+      if (src) localStorage.setItem("jinntell_src", src.slice(0, 40));
     }
+    // ?city=spb — ссылка под город запуска: новому гостю сразу ставим город (Справочник покажет местных джинов)
+    const cityCode = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("city") : null;
+    const cityName = ({ spb: "Санкт-Петербург", msk: "Москва" } as Record<string, string>)[cityCode || ""] || null;
     // Гость: если не вошёл — заводим временный доступ (только Город + бесплатные джинны), чтобы сразу пообщаться
     try {
       if (!localStorage.getItem("jinntell_token")) {
@@ -79,6 +84,12 @@ export default function JinnTellLinkPage() {
               loggedIn: true, userId: d.user?.id ?? d.user_id ?? 0, displayName: "Гость",
               isAdmin: false, expires: Date.now() + 30 * 24 * 60 * 60 * 1000,
             }));
+            if (cityName) {
+              await fetch(`${API_BASE}/api/users/me`, {
+                method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${d.access_token}` },
+                body: JSON.stringify({ city: cityName }),
+              }).catch(() => {});
+            }
           }
         }
       }

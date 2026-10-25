@@ -220,7 +220,7 @@ def _build(topic: str, path: str) -> None:
                 story.append(Paragraph(escape(para), st["p"]))
     story.append(Spacer(1, 6))
     story.append(Paragraph(escape(f"Подробнее: {PUBLIC_BASE}{p['link']} · Поговорить с Промоутером Города: "
-                                  f"{PUBLIC_BASE}/a/promoter · {date.today().strftime('%d.%m.%Y')}"), st["foot"]))
+                                  f"{PUBLIC_BASE}/promoter · {date.today().strftime('%d.%m.%Y')}"), st["foot"]))
     story.append(Paragraph("JinnTell · разработчик — WCDI, We Can Do It", st["foot"]))
     doc = SimpleDocTemplate(path, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
                             topMargin=18 * mm, bottomMargin=18 * mm, title=p["title"], author="JinnTell")

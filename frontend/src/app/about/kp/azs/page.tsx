@@ -296,6 +296,7 @@ export default function KpAzsPage() {
             Встреча на 30 минут: покажем живой заказ голосом с телефона, вместе выберем АЗС для пилота и соберём данные
             станций.
           </p>
+          <p className="ab-noprint"><a className="ab-btn ab-btn-gold" href="/promoter/spb?src=kp-azs">Задать вопрос промоутеру</a></p>
           <p>JinnTell · разработчик — WCDI, We Can Do It · <a href="https://wcdi.tech" rel="noopener">wcdi.tech</a></p>
         </div>
       </section>
