@@ -16,6 +16,7 @@ export default function AboutPage() {
           <div className="ab-actions">
             <a className="ab-btn ab-btn-gold" href="/">Попробовать — можно гостем</a>
             <a className="ab-btn ab-btn-ghost" href="#business">Я — бизнес</a>
+            <a className="ab-btn ab-btn-ghost" href="/a/promoter">Расспросить промоутера</a>
           </div>
         </div>
       </header>

@@ -132,6 +132,14 @@ TOOLS = [
 
 TOOLS += [
     {"type": "function", "function": {
+        "name": "call_promoter",
+        "description": "Передать разговор ПРОМОУТЕРУ ГОРОДА (Марк, отдел продаж JinnTell), когда спрашивают о самом JinnTell: "
+                       "что это за Город, зачем он, кто тут живёт, как завести своего персонажа, чем джины помогут бизнесу, "
+                       "как разместить бизнес/джина, сколько стоит, презентация или КП. Сам об этом подробно НЕ рассказывай — "
+                       "подключи Марка и скажи коротко: «А о Городе вам расскажет Марк, наш промоутер».",
+        "parameters": {"type": "object", "properties": {
+            "topic": {"type": "string", "description": "О чём спрашивает пользователь (коротко)"}}, "required": []}}},
+    {"type": "function", "function": {
         "name": "invite_to_flow",
         "description": "Пригласить в голосовой ПОТОК одного или НЕСКОЛЬКИХ джиннов Города (до 3 сразу), чтобы говорить с ними "
                        "вместе: «позови заправки 1 и 3», «собери заправки рядом», «добавь представителя сети». Если в Потоке уже есть "
@@ -1412,6 +1420,17 @@ async def run(user_id: int, text: str, assistant_name: str = "Джим", max_ite
                 result = await _wallet_info(user_id)
             elif name == "jinn_cost":
                 result = await _jinn_cost(args.get("name", ""))
+            elif name == "call_promoter":
+                async with async_session() as _db:
+                    _pm = (await _db.execute(select(Agent).where(Agent.jinntell_link == "promoter",
+                                                                 Agent.is_active == True))).scalar_one_or_none()  # noqa: E712
+                if _pm:
+                    _mode = "flow" if view == "flow" else "chat"
+                    directives.append({"action": "open_chat", "name": _pm.name, "agent_id": _pm.id, "mode": _mode})
+                    result = (f"Подключаю «{_pm.name}». Скажи пользователю ОДНОЙ короткой фразой: "
+                              f"«А о Городе вам расскажет Марк, наш промоутер» — дальше говорит он.")
+                else:
+                    result = "Промоутер сейчас недоступен — коротко ответь сам."
             elif name == "escalate_internal":
                 result = await _escalate_internal(user_id, args.get("task", ""), args.get("reason", ""))
             elif name == "read_day":

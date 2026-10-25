@@ -160,6 +160,18 @@ TOOL_REGISTRY = {
                 "content": {"type": "string", "description": "Полный текст документа"}},
                 "required": ["title", "content"]}}},
     },
+    "send_presentation": {
+        "category": "write", "risk": "low", "label": "Отправить презентацию (PDF)",
+        "schema": {"type": "function", "function": {
+            "name": "send_presentation",
+            "description": "Отправить клиенту PDF-презентацию: кладёт файл в его «Портфель» и даёт ссылку. Вызывай, когда клиент "
+                           "просит презентацию/КП/«пришлите почитать», или при продаже — чтобы у клиента остался материал. "
+                           "topic: city (о Городе), business (джин-сотрудник для бизнеса), azs (сети АЗС), coffee (кофейня), "
+                           "user (свой персонаж для человека).",
+            "parameters": {"type": "object", "properties": {
+                "topic": {"type": "string", "enum": ["city", "business", "azs", "coffee", "user"]}},
+                "required": ["topic"]}}},
+    },
     "escalate": {
         "category": "write", "risk": "low", "label": "Позвать человека",
         "schema": {"type": "function", "function": {
@@ -281,7 +293,7 @@ PROFESSION_PRESETS = {
 }
 
 # Реально исполняемые. book_slot пока заглушка.
-_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register", "fuel_status", "update_fuel_stock", "station_order", "draft_jinn", "list_templates", "adopt_template"}
+_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register", "fuel_status", "update_fuel_stock", "station_order", "draft_jinn", "list_templates", "adopt_template", "send_presentation"}
 
 
 def build_tools(enabled: list) -> list:
@@ -460,6 +472,27 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
             except Exception as e:
                 print(f"[agent_tools] make_document err: {e}")
             return "Не удалось сохранить документ."
+        if name == "send_presentation":
+            from app.services import presentations as _pr
+            topic = _pr.resolve_topic(args.get("topic", ""))
+            if not topic:
+                return "Такой презентации нет: есть city, business, azs, coffee, user."
+            import asyncio as _aio
+            url = await _aio.to_thread(_pr.pdf_url, topic)
+            title = _pr.PRESENTATIONS[topic]["title"]
+            if user_id:
+                try:
+                    from app.services import digest as _dg
+                    await _dg.save_deliverable(user_id, f"Презентация: {title}", kind="file", media_url=url,
+                                               text=_pr.PRESENTATIONS[topic]["subtitle"],
+                                               source_agent_id=getattr(agent, "id", None),
+                                               source_agent_name=getattr(agent, "name", "") or "")
+                    from app.websocket.manager import manager
+                    await manager.broadcast(f"user-{user_id}", {"type": "feed_ping"})
+                except Exception as e:
+                    print(f"[agent_tools] presentation save err: {e}")
+                return f"PDF «{title}» сохранён клиенту в «Портфель». Ссылка: {url}"
+            return f"PDF «{title}»: {url}"
         if name == "escalate":
             reason = (args.get("reason") or "").strip()
             try:
