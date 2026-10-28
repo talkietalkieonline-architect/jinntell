@@ -14,11 +14,13 @@ from app.core.config import settings
 _log = logging.getLogger("email")
 
 
-def _send_sync(to: str, subject: str, body: str) -> None:
+def _send_sync(to: str, subject: str, body: str, reply_to: str | None = None) -> None:
     msg = EmailMessage()
     msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
     msg["To"] = to
     msg["Subject"] = subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(body)
 
     ctx = ssl.create_default_context()
@@ -33,13 +35,13 @@ def _send_sync(to: str, subject: str, body: str) -> None:
             s.send_message(msg)
 
 
-async def send_email(to: str, subject: str, body: str) -> bool:
+async def send_email(to: str, subject: str, body: str, reply_to: str | None = None) -> bool:
     """Отправляет письмо. Возвращает True при успехе, False если SMTP не настроен/ошибка."""
     if not settings.SMTP_HOST or not settings.SMTP_USER:
         _log.warning("SMTP не сконфигурирован — письмо %s не отправлено", to)
         return False
     try:
-        await asyncio.to_thread(_send_sync, to, subject, body)
+        await asyncio.to_thread(_send_sync, to, subject, body, reply_to)
         _log.info("Письмо отправлено на %s", to)
         return True
     except Exception as e:

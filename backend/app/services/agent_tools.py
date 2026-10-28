@@ -383,6 +383,25 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
                                    detail=f"Имя: {nm or '—'}\nКонтакт: {contact}\nЗапрос: {note or '—'}")
             except Exception as e:
                 print(f"[agent_tools] lead log err: {e}")
+            if getattr(agent, "department", None) == "sales" and not getattr(agent, "contractor_id", None):
+                try:  # джин отдела продаж JinnTell (Марк) → новая заявка в CRM
+                    from app.core.database import async_session as _as
+                    from app.models.crm import CrmCompany, CrmEvent
+                    from app.models.user import User as _User
+                    async with _as() as _s:
+                        _u = await _s.get(_User, user_id) if user_id else None
+                        is_mail = "@" in contact
+                        co = CrmCompany(name=(nm or contact)[:200], email=contact.lower() if is_mail else None,
+                                        phone=None if is_mail else contact[:40], contact_name=nm or None,
+                                        city=getattr(_u, "city", None), notes=note or None, stage="new",
+                                        source=f"Джин {agent.name}"[:120], is_new=True)
+                        _s.add(co)
+                        await _s.flush()
+                        _s.add(CrmEvent(company_id=co.id, kind="lead", author_name=agent.name[:120],
+                                        text=f"Заявка из разговора с джином. Имя: {nm or '—'}. Контакт: {contact}. Запрос: {note or '—'}"))
+                        await _s.commit()
+                except Exception as e:
+                    print(f"[agent_tools] crm lead err: {e}")
             return "Заявка записана — компания свяжется с клиентом."
         if name == "queue_register":
             return await _queue_register_exec(agent, user_id, args.get("car_plate"), args.get("fuel_type"), args.get("liters"),

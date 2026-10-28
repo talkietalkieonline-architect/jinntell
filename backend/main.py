@@ -42,6 +42,7 @@ from app.api.day import router as day_router
 from app.api.video import router as video_router
 from app.api.library import router as library_router
 from app.api.wallet import router as wallet_router
+from app.api.crm import router as crm_router
 from app.api.store import router as store_router
 from app.websocket.chat_ws import router as ws_router
 from app.services.seed import seed_agents, seed_core_agents
@@ -95,6 +96,7 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS department VARCHAR(30)",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS channel_config TEXT",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS presentations_json TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS crm_role VARCHAR(20)",
         ]:
             try:
                 await conn.execute(_sqltext(_stmt))
@@ -176,6 +178,7 @@ app.include_router(day_router)
 app.include_router(video_router)
 app.include_router(library_router)
 app.include_router(wallet_router)
+app.include_router(crm_router)
 app.include_router(store_router)
 app.include_router(ws_router)
 

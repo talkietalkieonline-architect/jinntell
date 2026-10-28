@@ -57,6 +57,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    crm_role: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # CRM отдела продаж: owner|rop|marketer|manager
     tariff_code: Mapped[str] = mapped_column(String(40), default="", server_default="")  # пусто = полный доступ
     token_balance: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     welcome_gift_claimed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
