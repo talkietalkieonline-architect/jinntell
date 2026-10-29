@@ -97,6 +97,7 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS channel_config TEXT",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS presentations_json TEXT",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS crm_role VARCHAR(20)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS src VARCHAR(40)",
         ]:
             try:
                 await conn.execute(_sqltext(_stmt))

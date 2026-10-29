@@ -394,7 +394,7 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
                         co = CrmCompany(name=(nm or contact)[:200], email=contact.lower() if is_mail else None,
                                         phone=None if is_mail else contact[:40], contact_name=nm or None,
                                         city=getattr(_u, "city", None), notes=note or None, stage="new",
-                                        source=f"Джин {agent.name}"[:120], is_new=True)
+                                        source=(f"Джин {agent.name}" + (f" · {_u.src}" if _u is not None and getattr(_u, "src", None) else ""))[:120], is_new=True)
                         _s.add(co)
                         await _s.flush()
                         _s.add(CrmEvent(company_id=co.id, kind="lead", author_name=agent.name[:120],

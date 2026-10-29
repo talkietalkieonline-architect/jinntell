@@ -109,6 +109,7 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     birth_date: Optional[str] = None
     city: Optional[str] = None
+    src: Optional[str] = None  # метка источника из ссылки; сохраняется только первая
     about: Optional[str] = None
     birthday: Optional[str] = None
     gender: Optional[str] = None

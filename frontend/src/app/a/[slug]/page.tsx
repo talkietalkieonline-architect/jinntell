@@ -94,6 +94,15 @@ export default function JinnTellLinkPage() {
         }
       }
     } catch { /* оффлайн — уйдём на обычный вход */ }
+    // ?src=… (листовка, КП, QR) — запоминаем, откуда пришёл человек: заявка в CRM покажет источник
+    const srcTag = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("src") : null;
+    const tk = localStorage.getItem("jinntell_token");
+    if (srcTag && tk) {
+      await fetch(`${API_BASE}/api/users/me`, {
+        method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tk}` },
+        body: JSON.stringify({ src: srcTag.slice(0, 40) }),
+      }).catch(() => {});
+    }
     // ПОЛНАЯ загрузка главной (не router.push): авторизация читает сессию только при старте приложения,
     // а гостевая сессия только что создана — иначе новый человек по QR попадает на экран входа, а не к джину.
     window.location.assign("/");

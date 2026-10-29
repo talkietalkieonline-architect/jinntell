@@ -130,6 +130,10 @@ async def update_me(
         user.birth_date = date.fromisoformat(body.birth_date) if body.birth_date else None
     if body.city is not None:
         user.city = body.city
+    if body.src and not user.src:  # первое касание: с какой листовки/КП/QR пришёл человек
+        import re as _re
+        tag = _re.sub(r"[^0-9A-Za-zА-Яа-яЁё_-]+", "", body.src)[:40]
+        user.src = tag or None
     if body.gender is not None:
         user.gender = body.gender
     if body.persona_gender is not None:
