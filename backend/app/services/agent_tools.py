@@ -171,6 +171,19 @@ TOOL_REGISTRY = {
                 "topic": {"type": "string", "description": "id готового решения"}},
                 "required": ["topic"]}}},
     },
+    "crm_add_company": {
+        "category": "write", "risk": "low", "label": "CRM: занести компанию (отдел продаж JinnTell)",
+        "schema": {"type": "function", "function": {
+            "name": "crm_add_company",
+            "description": "Занести найденную компанию-цель в CRM отдела продаж JinnTell (этап «Новая»). Минимум — название и "
+                           "почта; почту бери только реальную, найденную на сайте/в справочнике, не выдумывай. По одной компании за вызов.",
+            "parameters": {"type": "object", "properties": {
+                "name": {"type": "string"}, "email": {"type": "string"},
+                "phone": {"type": "string"}, "city": {"type": "string"}, "industry": {"type": "string"},
+                "website": {"type": "string"},
+                "notes": {"type": "string", "description": "Почему подходит, сколько точек, какая боль, откуда данные"}},
+                "required": ["name", "email"]}}},
+    },
     "escalate": {
         "category": "write", "risk": "low", "label": "Позвать человека",
         "schema": {"type": "function", "function": {
@@ -292,7 +305,7 @@ PROFESSION_PRESETS = {
 }
 
 # Реально исполняемые. book_slot пока заглушка.
-_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register", "fuel_status", "update_fuel_stock", "station_order", "draft_jinn", "list_templates", "adopt_template", "send_presentation"}
+_IMPLEMENTED = {"search_knowledge", "lookup", "web_search", "calc", "remember_client", "create_lead", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "queue_register", "fuel_status", "update_fuel_stock", "station_order", "draft_jinn", "list_templates", "adopt_template", "send_presentation", "crm_add_company"}
 
 
 def build_tools(enabled: list) -> list:
@@ -490,6 +503,30 @@ async def _exec(db, agent, user_id: int, name: str, args: dict) -> str:
             except Exception as e:
                 print(f"[agent_tools] make_document err: {e}")
             return "Не удалось сохранить документ."
+        if name == "crm_add_company":
+            if getattr(agent, "department", None) != "sales" or getattr(agent, "contractor_id", None):
+                return "Эта функция только для отдела продаж JinnTell."
+            import re as _re
+            nm = (args.get("name") or "").strip()[:200]
+            email = (args.get("email") or "").strip().lower()
+            if not nm or not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                return "Нужны название и настоящая почта компании — без почты не заношу."
+            from sqlalchemy import func as _f, select as _sel
+            from app.core.database import async_session as _as
+            from app.models.crm import CrmCompany, CrmEvent
+            async with _as() as _s:
+                dup = (await _s.execute(_sel(CrmCompany).where(_f.lower(CrmCompany.email) == email))).scalar_one_or_none()
+                if dup:
+                    return f"Уже есть в CRM: {dup.name} ({email}), этап «{dup.stage}». Не дублирую."
+                co = CrmCompany(name=nm, email=email, stage="new", is_new=True, source=f"Джин {agent.name}"[:120],
+                                **{k: (str(args.get(k) or "").strip()[:2000 if k == "notes" else 300] or None)
+                                   for k in ("phone", "city", "industry", "website", "notes")})
+                _s.add(co)
+                await _s.flush()
+                _s.add(CrmEvent(company_id=co.id, kind="lead", author_name=agent.name[:120],
+                                text=f"Найдена джином {agent.name}. {(args.get('notes') or '').strip()}"[:2000]))
+                await _s.commit()
+            return f"Занёс в CRM: {nm} ({email}) — этап «Новая»."
         if name == "send_presentation":
             from app.services import presentations as _pr
             it, items = _pr.find(agent, args.get("topic", ""))

@@ -2,7 +2,8 @@
 
 Кто работает: владелец (is_admin) и сотрудники с users.crm_role — owner | rop | marketer | manager.
 Порядок работы: нашли компанию → занесли (название + почта) → Кирилл (#63) пишет КП → отправили письмом →
-звонок → переговоры → клиент / отказ. Заявки от джинов отдела продаж (Марк) падают сюда сами (services.crm_leads).
+звонок → переговоры → клиент / отказ. Заявки Марка и компании, найденные Тимуром, падают сюда сами (agent_tools).
+«Мой день» — личное пространство пользователя: CRM туда НИЧЕГО не пишет; следующие шаги — в самой CRM («Шаги на сегодня»).
 """
 import json
 import re
@@ -77,18 +78,6 @@ async def _names(db: AsyncSession, ids) -> dict:
 async def _event(db, company_id: int, kind: str, text: str, user: Optional[User] = None, author: str = ""):
     db.add(CrmEvent(company_id=company_id, kind=kind, text=text,
                     author_user_id=user.id if user else None, author_name=(_who(user) if user else author)[:120]))
-
-
-async def _remind(user_id: int, at: datetime, title: str, note: str = ""):
-    """Следующий шаг по сделке — в «Мой день» ответственного (время по Москве)."""
-    from datetime import timedelta
-    from app.core.database import async_session
-    from app.models.day_entry import DayEntry
-    msk = at.astimezone(timezone(timedelta(hours=3)))
-    async with async_session() as s:
-        s.add(DayEntry(user_id=user_id, day=msk.strftime("%Y-%m-%d"), time=msk.strftime("%H:%M"), title=title[:300],
-                       note=note or None, kind="reminder", author="assistant", important=True))
-        await s.commit()
 
 
 async def _get(db, cid: int) -> CrmCompany:
@@ -180,9 +169,6 @@ async def update_company(cid: int, body: dict = Body(...), user: User = Depends(
     if "next_action_at" in body or "next_action_note" in body:
         c.next_action_at = _dt(body.get("next_action_at"))
         c.next_action_note = (body.get("next_action_note") or "").strip()[:300] or None
-        if c.next_action_at:
-            await _remind(c.responsible_user_id or user.id, c.next_action_at,
-                          f"CRM · {c.name}: {c.next_action_note or 'следующий шаг'}", f"/crm?c={c.id}")
     st = body.get("stage")
     if st and st != c.stage:
         if st not in STAGE_LABEL:
@@ -215,8 +201,6 @@ async def add_event(cid: int, body: dict = Body(...), user: User = Depends(crm_u
     if body.get("next_action_at"):
         c.next_action_at = _dt(body["next_action_at"])
         c.next_action_note = (body.get("next_action_note") or "").strip()[:300] or None
-        await _remind(c.responsible_user_id or user.id, c.next_action_at,
-                      f"CRM · {c.name}: {c.next_action_note or 'следующий шаг'}", f"/crm?c={c.id}")
     c.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return {"ok": True}

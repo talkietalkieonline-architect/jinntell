@@ -46,6 +46,7 @@ export default function CrmPage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [newCount, setNewCount] = useState(0);
   const [stage, setStage] = useState<string>("");
+  const [todayOnly, setTodayOnly] = useState(false);  // «Шаги на сегодня»: следующий шаг до конца дня (и просроченные)
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<Company | null>(null);
   const [adding, setAdding] = useState(false);
@@ -97,6 +98,12 @@ export default function CrmPage() {
   if (!me) return <div style={page} />;
 
   const active = ["new", "kp", "call", "talks"].reduce((s, k) => s + (counts[k] || 0), 0);
+  const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+  const isDue = (c: Company) => !!c.next_action_at && new Date(c.next_action_at) <= endOfDay && !["won", "lost"].includes(c.stage);
+  const dueCount = items.filter(isDue).length;
+  const shown = todayOnly
+    ? items.filter(isDue).sort((a, b) => (a.next_action_at || "").localeCompare(b.next_action_at || ""))
+    : items.filter((c) => stage || !["won", "lost"].includes(c.stage));
   return (
     <div style={page}>
       <header style={{ position: "sticky", top: 0, zIndex: 5, background: C.bg, borderBottom: `1px solid ${C.line}` }}>
@@ -112,8 +119,9 @@ export default function CrmPage() {
             <button style={btn(true)} onClick={() => setAdding(true)}>+ Компания</button>
           </div>
           <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+            <button onClick={() => { setTodayOnly(true); setStage(""); }} style={{ ...btn(todayOnly), padding: "6px 12px", fontWeight: 600, ...(!todayOnly && dueCount ? { borderColor: C.gold, color: C.gold } : {}) }}>Шаги на сегодня · {dueCount}</button>
             {[{ id: "", label: `В работе · ${active}` }, ...me.stages.map((s) => ({ id: s.id, label: `${s.label} · ${counts[s.id] || 0}` }))].map((s) => (
-              <button key={s.id || "all"} onClick={() => setStage(s.id)} style={{ ...btn(stage === s.id), padding: "6px 12px", fontWeight: 500,
+              <button key={s.id || "all"} onClick={() => { setStage(s.id); setTodayOnly(false); }} style={{ ...btn(!todayOnly && stage === s.id), padding: "6px 12px", fontWeight: 500,
                 ...(stage !== s.id && s.id ? { borderColor: STAGE_COLOR[s.id] + "55" } : {}) }}>{s.label}</button>
             ))}
           </div>
@@ -122,7 +130,7 @@ export default function CrmPage() {
       </header>
 
       <main style={{ maxWidth: 1100, margin: "0 auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-        {items.filter((c) => stage || !["won", "lost"].includes(c.stage)).map((c) => (
+        {shown.map((c) => (
           <button key={c.id} onClick={() => openCompany(c.id)} style={{ textAlign: "left", background: c.is_new ? C.newBg : C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: "12px 14px", cursor: "pointer", display: "flex", gap: 12, alignItems: "center", color: C.ink }}>
             <span style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: STAGE_COLOR[c.stage] }} />
             <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -130,12 +138,13 @@ export default function CrmPage() {
               <span style={{ fontSize: 12, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {[c.email || c.phone, c.city, c.industry, c.source].filter(Boolean).join(" · ")}
               </span>
-              {c.next_action_at && <span style={{ fontSize: 12, color: C.accent }}>→ {fmt(c.next_action_at)} {c.next_action_note || ""}</span>}
+              {c.next_action_at && <span style={{ fontSize: 12, color: new Date(c.next_action_at) < new Date() ? C.red : C.accent }}>→ {fmt(c.next_action_at)} {c.next_action_note || ""}</span>}
             </span>
             <span style={{ fontSize: 12, color: STAGE_COLOR[c.stage], fontWeight: 600, whiteSpace: "nowrap" }}>{c.stage_label}</span>
           </button>
         ))}
-        {items.length === 0 && (
+        {todayOnly && shown.length === 0 && <div style={{ padding: 32, textAlign: "center", color: C.muted, fontSize: 14 }}>На сегодня шагов нет.</div>}
+        {!todayOnly && items.length === 0 && (
           <div style={{ padding: 32, textAlign: "center", color: C.muted, fontSize: 14 }}>
             Здесь пусто. Нашли компанию — нажмите «+ Компания»: достаточно названия и почты.
           </div>
@@ -290,7 +299,7 @@ function CompanyCard({ c, stages, onClose, onChanged }: { c: Company; stages: { 
           ))}
         </div>
         <textarea style={{ ...input, minHeight: 70 }} placeholder="Итог: с кем говорили, что решили" value={ev.text} onChange={(e) => setEv({ ...ev, text: e.target.value })} />
-        <Label>Следующий шаг — напомню в «Мой день»</Label>
+        <Label>Следующий шаг — будет в «Шаги на сегодня»</Label>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input type="datetime-local" style={{ ...input, width: "auto", flex: "1 1 180px" }} value={ev.next_at} onChange={(e) => setEv({ ...ev, next_at: e.target.value })} />
           <input style={{ ...input, flex: "2 1 200px" }} placeholder="Что сделать: перезвонить, отправить договор…" value={ev.next_note} onChange={(e) => setEv({ ...ev, next_note: e.target.value })} />
