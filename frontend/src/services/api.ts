@@ -782,7 +782,8 @@ export function geoPresent(agentId: number, source?: "qr"): Promise<{ ok: boolea
 export function geoCheck(lat: number, lng: number): Promise<{ deliveries: GeoDelivery[] }> {
   return apiFetch("/api/geo/check", { method: "POST", body: JSON.stringify({ lat, lng }) });
 }
-export interface GeoInvite { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; promo_code?: string | null; at: string; room: string }
+export interface ZazAttach { kind: "coupon" | "voucher" | "card"; title?: string; code?: string; terms?: string; until?: string; address?: string; hours?: string; phone?: string; site?: string }
+export interface GeoInvite { agent_id: number; agent_name: string; color?: string; title: string; message: string; media_url?: string | null; promo_code?: string | null; attach?: ZazAttach | null; at: string; room: string }
 export function getMyInvites(): Promise<{ items: GeoInvite[] }> {
   return apiFetch("/api/geo/my-invites");
 }
@@ -1112,7 +1113,7 @@ export function contractorGetBilling(): Promise<ContractorBilling> {
 }
 
 /** Акция зазывалы: звучит по расписанию (время Москвы); пустые from/to — весь день. */
-export interface ZazPromo { title: string; text: string; from: string; to: string; active: boolean }
+export interface ZazPromo { title: string; text: string; from: string; to: string; active: boolean; attach?: ZazAttach | null }
 export interface GeoTriggerData { agent_id?: number; lat: number; lng: number; radius_m: number; title: string; message: string; media_url?: string | null; is_active: boolean; cooldown_hours: number; price_kopecks?: number; promo_code?: string; promos?: ZazPromo[]; current?: { title: string; text: string } | null; }
 export interface GeoStats { shown: number; opened: number; converted: number; by_result: Record<string, number>; recent: { user_id: number; result: string; promo_code?: string | null; at: string }[]; }
 export function contractorGetGeoTrigger(agentId: number): Promise<GeoTriggerData | null> {

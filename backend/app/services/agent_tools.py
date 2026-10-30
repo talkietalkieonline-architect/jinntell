@@ -298,8 +298,8 @@ TOOL_REGISTRY = {
 
 # --- Профессия = пресет способностей ---
 PROFESSION_PRESETS = {
-    "consultant": {"label": "Консультант", "tools": ["search_knowledge", "web_search", "lookup", "calc", "escalate", "save_to_portfolio", "send_presentation"]},
-    "seller":     {"label": "Продавец",    "tools": ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "send_presentation"]},
+    "consultant": {"label": "Консультант", "tools": ["search_knowledge", "web_search", "lookup", "calc", "escalate", "save_to_portfolio", "send_presentation", "zazyvala"]},
+    "seller":     {"label": "Продавец",    "tools": ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "save_to_portfolio", "issue_invoice", "send_presentation", "zazyvala"]},
     "manager":    {"label": "Менеджер",    "tools": ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "save_to_portfolio", "issue_invoice", "send_presentation"]},
     "support":    {"label": "Поддержка",   "tools": ["search_knowledge", "lookup", "create_lead", "remember_client", "escalate", "save_to_portfolio"]},
 }

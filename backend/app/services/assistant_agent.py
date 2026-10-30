@@ -256,12 +256,19 @@ async def _situation(user_id: int) -> list:
                     continue
                 pr = _pr.current(gt)
                 how = {"opened": "слушал", "qr": "по QR у входа", "shown": "стучались"}.get(c.result or "", "")
+                try:
+                    att = json.loads(c.attach_json) if getattr(c, "attach_json", None) else None
+                except ValueError:
+                    att = None
                 items.append(f"«{ag.name}» ({c.created_at.astimezone(_pr.TZ).strftime('%d.%m')}, {how})"
+                             + (f" — звал на «{c.promo_title}»" if getattr(c, "promo_title", None) else "")
+                             + (f"; у человека {_pr.attach_line(att)}" if att else "")
                              + (f" — сейчас акция «{pr['title']}»" if pr and pr.get("title") else ""))
             if items:
                 out.append("Недавние приглашения от заведений: " + "; ".join(items[:5])
                            + ". Если к месту (человек хочет есть/кофе, гуляет рядом, спрашивает куда сходить) — мягко напомни "
-                             "про приглашение одной фразой и предложи позвать джинна заведения; не навязывай и не повторяй каждый раз.")
+                             "про приглашение одной фразой и предложи позвать джинна заведения; не навязывай и не повторяй каждый раз. "
+                             "Если у человека купон или ваучер и срок истекает сегодня-завтра — напомни один раз сам, коротко.")
     except Exception:
         pass
     return out

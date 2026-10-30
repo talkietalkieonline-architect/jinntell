@@ -51,5 +51,8 @@ class GeoContact(Base):
     agent_id: Mapped[int] = mapped_column(Integer, index=True)
     user_id: Mapped[int] = mapped_column(Integer, index=True)
     promo_code: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    promo_title: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)   # какую акцию человек услышал
+    promo_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attach_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)          # купон / ваучер / визитка
     result: Mapped[str] = mapped_column(String(20), default="shown")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

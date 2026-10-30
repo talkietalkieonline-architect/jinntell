@@ -2,6 +2,7 @@
 Учитывает настройки действий пользователя (геолокация/обращения/акции), кулдаун,
 и списывает показ с баланса контрагента (block-at-zero). См. модель GeoTrigger."""
 import math
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends
@@ -67,6 +68,8 @@ async def geo_check(
             if not agent or not agent.is_active:
                 continue
             from app.services import promos as _pr
+            if not _pr.zazyvala_on(agent):
+                continue  # функция «Зазывала» выключена в «Функциях» джина
             promo = _pr.current(gt)
             if not promo:
                 continue  # сейчас ни одна акция не действует — зазывала молчит (и показ не списывается)
@@ -96,7 +99,9 @@ async def geo_check(
             # Стук = только уведомление; сама презентация звучит, когда человек откроет её в Потоке (/present)
             # Журнал контактов гео-промо (атрибуция трафика)
             db.add(GeoContact(trigger_id=gt.id, agent_id=agent.id, user_id=user.id,
-                              promo_code=gt.promo_code, result="shown"))
+                              promo_code=gt.promo_code, result="shown",
+                              promo_title=(promo["title"] or "")[:100] or None, promo_text=promo["text"] or None,
+                              attach_json=json.dumps(promo["attach"], ensure_ascii=False) if promo.get("attach") else None))
             deliveries.append({
                 "agent_id": agent.id, "agent_name": agent.name, "color": agent.color,
                 "title": promo["title"] or gt.title or "", "message": promo["text"] or gt.message or "",
@@ -104,6 +109,7 @@ async def geo_check(
                 "quiet": acts.get("approaches") == "assistant",
                 "voice": (getattr(agent, "tts_voice_id", None) or getattr(agent, "voice_id", None) or None),
                 "promo_code": gt.promo_code or None,
+                "attach": promo.get("attach"),
             })
         except Exception as e:
             print(f"[geo] trigger {gt.id} error: {e}")
@@ -130,9 +136,15 @@ async def my_invites(user: User = Depends(get_current_user), db: AsyncSession = 
         if not a or not a.is_active:
             continue
         gt = (await db.execute(select(GeoTrigger).where(GeoTrigger.agent_id == c.agent_id))).scalar_one_or_none()
+        try:
+            att = json.loads(c.attach_json) if c.attach_json else None
+        except ValueError:
+            att = None
         items.append({
             "agent_id": a.id, "agent_name": a.name, "color": a.color,
-            "title": (gt.title if gt else "") or "", "message": (gt.message if gt else "") or "",
+            "title": c.promo_title or (gt.title if gt else "") or "",
+            "message": c.promo_text or (gt.message if gt else "") or "",
+            "attach": att,
             "media_url": (gt.media_url if gt else None),
             "promo_code": c.promo_code or (gt.promo_code if gt else None),
             "at": c.created_at.isoformat(), "room": f"agent-{a.id}-u{user.id}",
@@ -162,6 +174,8 @@ async def geo_present(body: dict = Body(...), user: User = Depends(get_current_u
     c = (await db.execute(select(GeoContact).where(GeoContact.user_id == user.id, GeoContact.agent_id == agent_id)
                           .order_by(GeoContact.id.desc()).limit(1))).scalar_one_or_none()
     agent = await db.get(Agent, agent_id)
+    if agent and not _pr.zazyvala_on(agent):
+        raise HTTPException(404, "Зазывала у заведения выключена")
     if (not c or (c.created_at and c.created_at < since)) and (body.get("source") == "qr") and agent:
         # QR «Послушать акцию» у входа/на витрине: контакт без гео — так же попадает в «Приглашения» и память помощника
         gt0 = (await db.execute(select(GeoTrigger).where(GeoTrigger.agent_id == agent_id))).scalar_one_or_none()
@@ -175,7 +189,12 @@ async def geo_present(body: dict = Body(...), user: User = Depends(get_current_u
     gt = await db.get(GeoTrigger, c.trigger_id)
     if not gt or not agent:
         raise HTTPException(404, "Приглашение не найдено")
-    promo = _pr.current(gt) or {"title": gt.title or "", "text": gt.message or ""}
+    promo = _pr.current(gt) or {"title": c.promo_title or gt.title or "", "text": c.promo_text or gt.message or "",
+                                "attach": json.loads(c.attach_json) if c.attach_json else None}
+    if not c.promo_title and not c.promo_text:  # QR-контакт: запомнить, что человек услышал
+        c.promo_title = (promo["title"] or "")[:100] or None
+        c.promo_text = promo["text"] or None
+        c.attach_json = json.dumps(promo["attach"], ensure_ascii=False) if promo.get("attach") else None
     nm = (user.first_name or user.display_name or "").strip()
     if nm in ("Пользователь", "Гость"):
         nm = ""
@@ -185,6 +204,8 @@ async def geo_present(body: dict = Body(...), user: User = Depends(get_current_u
     text = " ".join(x for x in [head, (title + "!") if title else "", body_txt] if x).strip()
     if gt.promo_code:
         text += f"\nПромокод: {gt.promo_code} — назовите на месте."
+    if promo.get("attach"):
+        text += "\n" + _pr.attach_line(promo["attach"]) + " — лежит в «Приглашениях»."
     room = f"agent-{agent.id}-u{user.id}"
     msg = Message(room=room, sender_type="agent", sender_agent_id=agent.id, sender_name=agent.name, text=text,
                   media_url=(gt.media_url if gt.media_url and len(gt.media_url) <= 500 else None),

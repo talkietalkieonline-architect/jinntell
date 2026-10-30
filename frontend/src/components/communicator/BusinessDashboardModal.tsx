@@ -42,6 +42,7 @@ import {
   type WardrobeItem,
   type StorageUsage,
   contractorGetGeoTrigger,
+  type ZazPromo,
   contractorPutGeoTrigger,
   contractorUploadGeoFlyer,
   contractorGeoStats,
@@ -97,12 +98,13 @@ const TOOL_CATALOG: { id: string; label: string; desc: string; kind: "read" | "w
   { id: "remember_client", label: "Запомнить о клиенте", desc: "Помнит клиента между разговорами (бюджет, предпочтения)", kind: "write" },
   { id: "make_document", label: "Составить документ", desc: "Счёт / КП / договор / справка — клиенту в «Портфель»", kind: "write" },
   { id: "escalate", label: "Позвать человека", desc: "Передаёт разговор живому специалисту компании", kind: "write" },
+  { id: "zazyvala", label: "Зазывала", desc: "Для точек, куда приходят с улицы: стучится прохожим рядом, рассказывает акцию, дарит купон, ваучер или визитку", kind: "write" },
   { id: "send_presentation", label: "Промоутер: презентации", desc: "Сам представляет ваши готовые решения новому клиенту (Зазывала, QR, первый контакт) и присылает PDF", kind: "write" },
   { id: "book_slot", label: "Запись на время", desc: "Записывает на приём / время", kind: "write", soon: true },
 ];
 const TOOL_PRESETS: { id: string; label: string; tools: string[] }[] = [
-  { id: "consultant", label: "Консультант", tools: ["search_knowledge", "web_search", "lookup", "calc", "escalate", "send_presentation"] },
-  { id: "seller", label: "Продавец", tools: ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "send_presentation"] },
+  { id: "consultant", label: "Консультант", tools: ["search_knowledge", "web_search", "lookup", "calc", "escalate", "send_presentation", "zazyvala"] },
+  { id: "seller", label: "Продавец", tools: ["search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client", "make_document", "escalate", "send_presentation", "zazyvala"] },
   { id: "manager", label: "Менеджер", tools: ["search_knowledge", "lookup", "calc", "create_lead", "remember_client", "make_document", "escalate", "book_slot", "send_presentation"] },
   { id: "support", label: "Поддержка", tools: ["search_knowledge", "lookup", "create_lead", "remember_client", "escalate"] },
 ];
@@ -139,7 +141,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [geoMsg, setGeoMsg] = useState(""); const [geoMedia, setGeoMedia] = useState("");
   const [geoActive, setGeoActive] = useState(true); const [geoCooldown, setGeoCooldown] = useState("24");
   const [geoPromo, setGeoPromo] = useState("");
-  const [zazPromos, setZazPromos] = useState<{ title: string; text: string; from: string; to: string; active: boolean }[]>([]);
+  const [zazPromos, setZazPromos] = useState<ZazPromo[]>([]);
   const [zazNow, setZazNow] = useState<string>("");
   const [geoStats, setGeoStats] = useState<GeoStats | null>(null);
   const [geoSaved, setGeoSaved] = useState(false);
@@ -655,7 +657,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                   { id: "outfit" as const, label: "Одежда" },
                   { id: "faces" as const, label: "Образы" },
                   { id: "access" as const, label: "Доступ" },
-                  { id: "geo" as const, label: "Зазывала" },
+                  ...(tools.includes("zazyvala") ? [{ id: "geo" as const, label: "Зазывала" }] : []),
                 ]).map((tab) => (
                   <button
                     key={tab.id}
@@ -981,6 +983,29 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                             <input type="time" value={p.to} onChange={(e) => upd({ to: e.target.value })} className="rounded-lg px-2 py-1 text-sm outline-none" style={fieldS} />
                             <span>{!p.from && !p.to ? "· весь день" : ""}</span>
                           </div>
+                          <div className="flex items-center gap-1.5 text-[11px] flex-wrap" style={{ color: "var(--text-muted)" }}>
+                            <span>Подарок со стуком:</span>
+                            {([["", "нет"], ["coupon", "🎟 купон"], ["voucher", "🎁 ваучер"], ["card", "📇 визитка"]] as const).map(([k, l]) => {
+                              const on = (p.attach?.kind || "") === k;
+                              return <button key={k || "none"} type="button" onClick={() => upd({ attach: k ? { ...(p.attach || {}), kind: k } : null })} className="px-2 py-1 rounded-lg" style={{ background: on ? "var(--accent)" : "transparent", color: on ? "var(--bg-deep)" : "var(--text-secondary)", border: "1px solid var(--bg-glass-border)" }}>{l}</button>;
+                            })}
+                          </div>
+                          {p.attach && p.attach.kind !== "card" && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <input value={p.attach.title || ""} onChange={(e) => upd({ attach: { ...p.attach!, title: e.target.value } })} placeholder={p.attach.kind === "coupon" ? "Что даёт — «−20% на кофе»" : "Подарок — «Десерт к заказу»"} className="col-span-2 rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                              {p.attach.kind === "coupon" && <input value={p.attach.code || ""} onChange={(e) => upd({ attach: { ...p.attach!, code: e.target.value } })} placeholder="Код на кассе — PIZZA2" className="rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />}
+                              <input type="date" value={p.attach.until || ""} onChange={(e) => upd({ attach: { ...p.attach!, until: e.target.value } })} title="Действует до" className="rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                              <input value={p.attach.terms || ""} onChange={(e) => upd({ attach: { ...p.attach!, terms: e.target.value } })} placeholder="Условия — «при заказе от 500 ₽»" className="col-span-2 rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                            </div>
+                          )}
+                          {p.attach?.kind === "card" && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <input value={p.attach.address || ""} onChange={(e) => upd({ attach: { ...p.attach!, address: e.target.value } })} placeholder="Адрес" className="col-span-2 rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                              <input value={p.attach.hours || ""} onChange={(e) => upd({ attach: { ...p.attach!, hours: e.target.value } })} placeholder="Часы — 8:00–23:00" className="rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                              <input value={p.attach.phone || ""} onChange={(e) => upd({ attach: { ...p.attach!, phone: e.target.value } })} placeholder="Телефон" className="rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                              <input value={p.attach.site || ""} onChange={(e) => upd({ attach: { ...p.attach!, site: e.target.value } })} placeholder="Сайт" className="col-span-2 rounded-lg px-3 py-2 text-sm outline-none" style={fieldS} />
+                            </div>
+                          )}
                         </div>
                       );
                     })}

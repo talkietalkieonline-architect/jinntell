@@ -16,7 +16,7 @@ from typing import Optional
 # Инструменты, которые бизнес включает сам в ЛК «Функции» (всё прочее — только админ: модули, фабрика и т.п.)
 SELF_SERVICE_TOOLS = {"search_knowledge", "lookup", "web_search", "calc", "create_lead", "remember_client",
                       "make_document", "escalate", "book_slot", "save_to_portfolio", "issue_invoice",
-                      "send_presentation"}
+                      "send_presentation", "zazyvala"}
 
 INDUSTRIES: dict = {
     "azs": {
