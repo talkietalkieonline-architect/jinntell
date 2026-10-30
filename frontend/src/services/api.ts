@@ -1068,6 +1068,34 @@ export function contractorPresentationPdf(agentId: number, pid: string): Promise
   return contractorFetch(`/api/contractor/agents/${agentId}/presentations/${encodeURIComponent(pid)}/pdf`);
 }
 
+/** Планёрка бизнеса: разговор руководителя с несколькими своими джинами (комната room-{id}, продолжается в Потоке по QR) */
+export interface MeetingMember { id: number; name: string; profession: string; color: string; photo_url?: string | null }
+export interface MeetingMessage { id: number; sender_type: string; sender_name: string; text: string; media_url?: string | null; created_at: string | null }
+export interface MeetingFull { id: number; room: string; title: string; members: MeetingMember[]; messages: MeetingMessage[]; on_phone: boolean }
+export interface MeetingShort { id: number; title: string; created_at: string | null; members: string[]; last: string }
+export function contractorMeetings(): Promise<{ items: MeetingShort[] }> {
+  return contractorFetch("/api/contractor/meetings");
+}
+export function contractorMeetingCreate(agentIds: number[]): Promise<MeetingFull> {
+  return contractorFetch("/api/contractor/meetings", { method: "POST", body: JSON.stringify({ agent_ids: agentIds }) });
+}
+export function contractorMeeting(id: number, after = 0): Promise<MeetingFull> {
+  return contractorFetch(`/api/contractor/meetings/${id}${after ? `?after=${after}` : ""}`);
+}
+export function contractorMeetingSay(id: number, text: string): Promise<MeetingMessage> {
+  return contractorFetch(`/api/contractor/meetings/${id}/say`, { method: "POST", body: JSON.stringify({ text }) });
+}
+export function contractorMeetingPhone(id: number): Promise<{ url: string; svg: string; minutes: number }> {
+  return contractorFetch(`/api/contractor/meetings/${id}/phone`, { method: "POST" });
+}
+/** Телефон: что за планёрка по QR (до входа) и вход в неё — комната появляется в Потоке */
+export function meetingPeek(token: string): Promise<{ company: string; title: string; needs_link: boolean }> {
+  return apiFetch("/api/meetings/peek", { method: "POST", body: JSON.stringify({ token }) });
+}
+export function meetingJoin(token: string): Promise<{ room: string; title: string; members: MeetingMember[] }> {
+  return apiFetch("/api/meetings/join", { method: "POST", body: JSON.stringify({ token }) });
+}
+
 /** Контрагент: вход по логину/паролю */
 export async function contractorLogin(login: string, password: string): Promise<ContractorTokenResponse> {
   const data = await apiFetch<ContractorTokenResponse>("/api/contractor/login", {

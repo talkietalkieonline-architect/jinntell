@@ -227,6 +227,16 @@ async def _load_room_members(room_id: int) -> list:
         return list(result.scalars().all())
 
 
+async def _room_is_meeting(room: str) -> bool:
+    """room-{id} — планёрка бизнеса (собрана в кабинете), а не личная комната пользователя."""
+    from app.models.room import Room
+    m = _ROOM_RE.match(room or "")
+    if not m:
+        return False
+    async with async_session() as db:
+        return bool((await db.execute(select(Room.contractor_id).where(Room.id == int(m.group(1))))).scalar_one_or_none())
+
+
 def _pick_addressed_agent(room: str, text: str, members: list) -> Agent:
     """Кому адресован вопрос в комнате: по имени/профессии в тексте; иначе — последний адресат; иначе — первый."""
     low = (text or "").lower()
@@ -295,6 +305,10 @@ def _room_brevity(agent, members: list, roundtable: bool) -> str:
             + ". Отвечай коротко — до 3 предложений.")
 
 
+_MEETING_NOTE = ("\n\nЭТО ПЛАНЁРКА ТВОЕЙ КОМПАНИИ: с тобой говорит руководитель (твой работодатель), а не клиент. "
+                 "Отвечай как сотрудник — по делу, о своей работе; не продавай ему, не предлагай записаться и не собирай контакты.")
+
+
 async def _room_reply(room: str, text: str, members: list, user_id: int = 0, assistant_name: str = DEFAULT_ASSISTANT_NAME) -> None:
     """Маршрутизация ответа в комнате:
     - обратились к ПОМОЩНИКУ (по имени/«помощник») → отвечает фоновый помощник (персона+память+диспетчеризация);
@@ -316,13 +330,28 @@ async def _room_reply(room: str, text: str, members: list, user_id: int = 0, ass
         return
     import time as _time
     addressed = _addressed_agent(text, members)
+    meeting = await _room_is_meeting(room)
+
+    def _note(a, group, roundtable):
+        return _room_brevity(a, group, roundtable) + (_MEETING_NOTE if meeting else "")
+
+    # Планёрка бизнеса: «доложите / отчёт / итоги» → доклады по фактам системы (адресату — он один, иначе все по кругу)
+    from app.services import meeting_facts as _mf
+    if meeting and _mf.REPORT_RE.search(text or ""):
+        days = _mf.period_days(text)
+        speakers = [addressed] if addressed else members[:6]
+        for a in speakers:
+            await _agent_reply(room, a, text, extra_system=_note(a, speakers, len(speakers) > 1) + await _mf.agent_facts(a, days))
+        if len(speakers) > 1:
+            await _room_summary(room, text, speakers, user_id, assistant_name)
+        return
     if addressed:
         _room_last_agent[room] = addressed.id
         _room_last_at[room] = _time.time()
-        await _agent_reply(room, addressed, text, extra_system=_room_brevity(addressed, members, False))
+        await _agent_reply(room, addressed, text, extra_system=_note(addressed, members, False))
         return
     if len(members) == 1:
-        await _agent_reply(room, members[0], text, extra_system=_room_brevity(members[0], members, False))
+        await _agent_reply(room, members[0], text, extra_system=_note(members[0], members, False))
         return
     # короткое продолжение («да, запишите», «а сколько стоит?») — тому, кто говорил последним (в пределах 2 мин)
     last_id = _room_last_agent.get(room)
@@ -331,13 +360,14 @@ async def _room_reply(room: str, text: str, members: list, user_id: int = 0, ass
         for a in members:
             if a.id == last_id:
                 _room_last_at[room] = _time.time()
-                await _agent_reply(room, a, text, extra_system=_room_brevity(a, members, False))
+                await _agent_reply(room, a, text, extra_system=_note(a, members, False))
                 return
-    # вопрос ВСЕМ: каждый коротко (до 3, по очереди — видят предыдущих), затем итог помощника
+    # вопрос ВСЕМ: каждый коротко (до 3, на планёрке — вся команда до 6; по очереди — видят предыдущих), затем итог
     _room_last_agent.pop(room, None)
-    for a in members[:3]:
-        await _agent_reply(room, a, text, extra_system=_room_brevity(a, members[:3], True))
-    await _room_summary(room, text, members[:3], user_id, assistant_name)
+    circle = members[:6] if meeting else members[:3]
+    for a in circle:
+        await _agent_reply(room, a, text, extra_system=_note(a, circle, True))
+    await _room_summary(room, text, circle, user_id, assistant_name)
 
 
 async def _room_summary(room: str, question: str, members: list, user_id: int, assistant_name: str) -> None:
@@ -354,6 +384,7 @@ async def _room_summary(room: str, question: str, members: list, user_id: int, a
         summary = (await get_llm_reply(user_message=prompt,
                                        system_prompt=f"Ты — {assistant_name}, личный помощник пользователя, ведущий круглого стола в голосовом Потоке. Говоришь коротко и по делу.",
                                        max_tokens=200, user_id=user_id, payer_type="free")).strip()
+        summary = re.sub(r"[\u3040-\u30ff\u3400-\u9fff]+", "", summary).strip()  # DeepSeek иногда вставляет иероглифы
         if not summary:
             return
         async with async_session() as db:
@@ -908,6 +939,9 @@ async def _agent_reply(room: str, agent: Agent, user_message: str, extra_system:
                 except Exception as e:
                     print(f"[qa_cache] store skip: {e}")
 
+    # в комнате модель видит историю как «[Имя]: текст» и иногда повторяет этот префикс — срезаем
+    reply_text = re.sub(r"^\s*\[[^\]\n]{1,80}\]:\s*", "", reply_text or "") or reply_text
+
     async with async_session() as db:
         agent_msg = Message(
             room=room,
@@ -1007,6 +1041,13 @@ async def chat_websocket(websocket: WebSocket, room: str):
     if _um and user_id != int(_um.group(1)):
         await websocket.close(code=4003, reason="Нет доступа")
         return
+
+    # чужой личный чат (jim-/agent-…-u) или чужая комната/планёрка — нет доступа
+    from app.services.room_access import can_use_room
+    async with async_session() as _adb:
+        if not await can_use_room(_adb, user_id, room):
+            await websocket.close(code=4003, reason="Нет доступа")
+            return
 
     await manager.connect(websocket, room, user_id)
     if manager.user_conns.get(user_id, 0) == 1:

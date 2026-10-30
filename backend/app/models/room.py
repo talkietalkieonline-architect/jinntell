@@ -1,4 +1,5 @@
-"""Модель комнаты с несколькими джиннами (room-{id}) — приватная, владелец = пользователь."""
+"""Модель комнаты с несколькими джиннами (room-{id}) — приватная, владелец = пользователь.
+Планёрка бизнеса — та же комната с contractor_id: собрана в кабинете, продолжается в Потоке по QR."""
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -12,8 +13,10 @@ class Room(Base):
     __tablename__ = "rooms"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    owner_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    # у планёрки бизнеса без привязанного аккаунта владельца пока нет — появится при входе по QR
+    owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), index=True, nullable=True)
     title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    contractor_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("contractors.id"), index=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

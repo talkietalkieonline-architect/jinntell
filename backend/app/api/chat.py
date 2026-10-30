@@ -23,6 +23,7 @@ from app.models.message import Message
 from app.models.room import Room, RoomMember
 from app.models.user import User
 from app.schemas.message import MessageOut, SendMessageRequest
+from app.services.room_access import can_use_room
 from app.websocket.manager import manager
 from app.services.llm import get_llm_reply
 
@@ -37,8 +38,7 @@ async def get_history(
     user: User = Depends(get_current_user),
 ):
     """История сообщений. Для чата джинна (agent-{id}) агрегируем 1:1 + комнаты с этим джинном."""
-    _dm = re.match(r"^dm-(\d+)-(\d+)$", room)
-    if _dm and user.id not in (int(_dm.group(1)), int(_dm.group(2))):
+    if not await can_use_room(db, user.id, room):
         raise HTTPException(403, "Нет доступа")
     m = re.match(r"^agent-(\d+)(?:-u\d+)?$", room)
     rooms = [room]
@@ -129,6 +129,8 @@ async def my_chats(user: User = Depends(get_current_user), db: AsyncSession = De
         )
         members = mres.all()
         name = " + ".join(mm[0] for mm in members) if members else (r.title or "Комната")
+        if r.contractor_id and r.title:  # планёрка бизнеса — по её названию («Тест-АЗС · планёрка»): рабочее не путается с личным
+            name = r.title
         color = members[0][1] if members else "#6c7bff"
         unread = await _room_unread(db, user.id, f"room-{r.id}")
         out.append(MyChatOut(room=f"room-{r.id}", kind="room", name=name, color=color, count=unread))
@@ -194,6 +196,8 @@ async def send_message(
     user: User = Depends(get_current_user),
 ):
     """Отправить сообщение (HTTP fallback, основной путь — WebSocket)"""
+    if not await can_use_room(db, user.id, body.room):
+        raise HTTPException(403, "Нет доступа к чату")
     msg = Message(
         room=body.room,
         sender_type="user",
@@ -423,13 +427,7 @@ async def forward_message(
     if not (body.text or body.media_url):
         raise HTTPException(400, "Нечего пересылать")
     dm = re.match(r"^dm-(\d+)-(\d+)$", room)
-    ag = re.match(r"^agent-\d+-u(\d+)$", room)
-    jm = re.match(r"^jim-(\d+)$", room)
-    if dm and user.id not in (int(dm.group(1)), int(dm.group(2))):
-        raise HTTPException(403, "Нет доступа к чату")
-    if ag and int(ag.group(1)) != user.id:
-        raise HTTPException(403, "Нет доступа к чату")
-    if jm and int(jm.group(1)) != user.id:
+    if not await can_use_room(db, user.id, room):
         raise HTTPException(403, "Нет доступа к чату")
     msg = Message(room=room, sender_type="user", sender_user_id=user.id, sender_name=user.display_name,
                   text=body.text or "", media_url=body.media_url, media_type=body.media_type)

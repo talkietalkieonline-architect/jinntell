@@ -14,7 +14,7 @@ import DigestModal from "@/components/communicator/DigestModal";
 import InvitesModal from "@/components/communicator/InvitesModal";
 import FeedModal from "@/components/communicator/FeedModal";
 import FlowFab from "@/components/communicator/FlowFab";
-import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, markChatRead, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, updateActionSettings, geoCheck, geoPresent, updateMe, ttsBlobUrl, createMyJinn, getPresence, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
+import { contractorLogout, createRoom, inviteToRoom, dmRoom, getMyChats, markChatRead, connectChat, getContacts, clearHistory, dmSend, addFavoriteAgent, removeFavoriteAgent, getFavoriteAgents, getAgents, discoverAgents, classifyIntent, webSearch, assistantAct, forwardMessage, getChannelPosts, markChannelRead, mediaUrl, getActionSettings, updateActionSettings, geoCheck, geoPresent, updateMe, ttsBlobUrl, createMyJinn, getPresence, meetingPeek, meetingJoin, type ContactOut, type ChannelPost, type GeoDelivery, type Presence } from "@/services/api";
 import FlowScreen from "@/components/communicator/FlowScreen";
 import HomeRoom from "@/components/communicator/HomeRoom";
 import ChatJournal from "@/components/communicator/ChatJournal";
@@ -876,6 +876,36 @@ export default function Home() {
     if (user.display_name || user.first_name) { setRoom(assistantRoom); setView("flow"); }
     setBooting(false); // решение принято — можно показывать (Поток или ленту для новичка)
   }, [screen, user, assistantRoom, setRoom]);
+  // QR «Продолжить на телефоне» из планёрки в кабинете: /?meet=… → та же комната в Потоке, со всеми участниками и историей
+  const meetDoneRef = useRef(false);
+  useEffect(() => {
+    if (booting || screen !== "communicator" || !user || meetDoneRef.current) return;
+    let tok = "";
+    try { tok = new URLSearchParams(window.location.search).get("meet") || ""; } catch { /* noop */ }
+    if (!tok) return;
+    meetDoneRef.current = true;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("meet");
+      const q = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (q ? "?" + q : ""));
+    } catch { /* noop */ }
+    (async () => {
+      try {
+        const pk = await meetingPeek(tok);
+        if (pk.needs_link && !window.confirm(`Привязать кабинет «${pk.company}» к вашему аккаунту?\n\nПланёрки компании будут открываться у вас в Потоке.`)) return;
+        const rd = await meetingJoin(tok);
+        const first = rd.members[0];
+        const entry = { room: rd.room, agentId: first?.id ?? 0, name: rd.title, color: first?.color || "#6c7bff", photo: first?.photo_url ?? null, count: rd.members.length };
+        setOpenChats((prev) => (prev.some((c) => c.room === rd.room) ? prev.map((c) => (c.room === rd.room ? entry : c)) : [...prev, entry]));
+        flowReturnRef.current = { view: "feed", room: "" };
+        setRoom(rd.room);
+        setView("flow");
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : "Не удалось открыть планёрку");
+      }
+    })();
+  }, [booting, screen, user, setRoom]);
   useEffect(() => { if (user?.custom_bg_url) { try { localStorage.setItem("jinntell_custom_bg", user.custom_bg_url); } catch { /* noop */ } } }, [user?.custom_bg_url]);
   // Токен протух (AuthContext поймал 401 и разлогинил) — уводим на экран входа, а не держим зомби-сессию
   useEffect(() => { if (isLoggedIn === false && screen === "communicator") setScreen("login"); }, [isLoggedIn, screen]);

@@ -27,9 +27,13 @@ def create_access_token(user_id: int, expires_delta: Optional[timedelta] = None,
 
 
 def decode_access_token(token: str) -> Optional[int]:
-    """Возвращает user_id или None если токен невалидный"""
+    """Возвращает user_id или None если токен невалидный.
+    Только пользовательский токен: токен кабинета (type=contractor, sub=contractor_id) или QR-пропуск
+    на планёрку не должны работать как вход пользователя с тем же номером."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type", "user") != "user":
+            return None
         user_id = payload.get("sub")
         return int(user_id) if user_id else None
     except (JWTError, ValueError):

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import ModulesEditor from "@/components/station/ModulesEditor";
 import PresentationsEditor from "@/components/station/PresentationsEditor";
+import MeetingPanel from "@/components/communicator/MeetingPanel";
 import GeoMapPicker from "@/components/communicator/GeoMapPicker";
 import {
   contractorLogin,
@@ -124,6 +125,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
   const [companyName, setCompanyName] = useState("");
 
   const [myAgents, setMyAgents] = useState<AgentFullOut[]>([]);
+  const [meetingOpen, setMeetingOpen] = useState(false);  // планёрка с командой джинов
   const [billing, setBilling] = useState<ContractorBilling | null>(null);
   const [calcPrepay, setCalcPrepay] = useState(100000);  // калькулятор «предоплата → ответы»
   const [loading, setLoading] = useState(true);
@@ -1562,6 +1564,19 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
                 );
               })()}
 
+              {/* ── Планёрка: разговор сразу с несколькими своими джинами ── */}
+              {myAgents.length > 0 && (
+                <button onClick={() => setMeetingOpen(true)} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl mb-5 text-left transition-all hover:opacity-95"
+                  style={{ background: "var(--bg-glass)", border: "1px solid var(--accent)" }}>
+                  <span className="text-xl shrink-0">🗣</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Планёрка с командой</span>
+                    <span className="block text-[11px]" style={{ color: "var(--text-muted)" }}>Спросите всех джинов сразу или попросите доклад. Продолжить можно на телефоне.</span>
+                  </span>
+                  <span style={{ color: "var(--accent)", fontSize: "14px" }}>›</span>
+                </button>
+              )}
+
               <p className="text-[10px] uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
                 Ваши агенты ({myAgents.length})
               </p>
@@ -1630,6 +1645,7 @@ export default function BusinessDashboardModal({ isOpen, onClose }: Props) {
           )}
         </div>
       </div>
+      {meetingOpen && <MeetingPanel agents={myAgents} onClose={() => setMeetingOpen(false)} />}
     </div>
   );
 }

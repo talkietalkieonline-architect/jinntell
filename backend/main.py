@@ -43,6 +43,7 @@ from app.api.video import router as video_router
 from app.api.library import router as library_router
 from app.api.wallet import router as wallet_router
 from app.api.crm import router as crm_router
+from app.api.meetings import router as meetings_router
 from app.api.store import router as store_router
 from app.websocket.chat_ws import router as ws_router
 from app.services.seed import seed_agents, seed_core_agents
@@ -101,6 +102,8 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE geo_contacts ADD COLUMN IF NOT EXISTS promo_title VARCHAR(100)",
             "ALTER TABLE geo_contacts ADD COLUMN IF NOT EXISTS promo_text TEXT",
             "ALTER TABLE geo_contacts ADD COLUMN IF NOT EXISTS attach_json TEXT",
+            "ALTER TABLE rooms ADD COLUMN IF NOT EXISTS contractor_id INTEGER REFERENCES contractors(id)",
+            "ALTER TABLE rooms ALTER COLUMN owner_user_id DROP NOT NULL",
         ]:
             try:
                 await conn.execute(_sqltext(_stmt))
@@ -183,6 +186,7 @@ app.include_router(video_router)
 app.include_router(library_router)
 app.include_router(wallet_router)
 app.include_router(crm_router)
+app.include_router(meetings_router)
 app.include_router(store_router)
 app.include_router(ws_router)
 
